@@ -1,0 +1,56 @@
+# Dependencies and package managers
+node_modules/
+*.lock
+*.log
+
+# Backup files
+*.backup
+*.bak
+*~
+.backup-*/
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.netrwhist
+
+# Nvim specific
+config/nvim/.netrwhist
+config/nvim/plugin/
+config/nvim/lazy-lock.json
+
+# Tmux
+config/tmux/.tmux/resurrect/
+config/tmux/.tmux/plugins/
+config/tmux/.tmux/sessions/
+
+# Local overrides
+*.local
+local-config.sh
+install.local
+
+# Secrets
+.env
+.env.local
+secrets/
+*.key
+*.pem
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.cache/
