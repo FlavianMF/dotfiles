@@ -82,8 +82,10 @@ if ! command -v docker &> /dev/null; then
     log_info "Installing Docker..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
     $SUDO_CMD sh /tmp/get-docker.sh
-    $SUDO_CMD usermod -aG docker "$USER" 2>/dev/null || true
-    log_warn "You may need to log out and back in for Docker group membership to take effect"
+    if [[ -n "${USER:-}" ]]; then
+        $SUDO_CMD usermod -aG docker "$USER" 2>/dev/null || true
+        log_warn "You may need to log out and back in for Docker group membership to take effect"
+    fi
     rm /tmp/get-docker.sh
 fi
 
