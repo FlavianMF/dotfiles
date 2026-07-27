@@ -95,7 +95,12 @@ if ! command -v gh &> /dev/null; then
     $SUDO_CMD mkdir -p -m 755 /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | $SUDO_CMD dd of=/etc/apt/keyrings/githubcli-archive-keyring.gpg
     $SUDO_CMD chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages focal main" | $SUDO_CMD tee /etc/apt/sources.list.d/github-cli.sources > /dev/null
+    # Use DEB822 format for sources.list.d on Ubuntu 24.04+
+    echo "Types: deb
+URIs: https://cli.github.com/packages
+Suites: stable
+Signed-By: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+Components: main" | $SUDO_CMD tee /etc/apt/sources.list.d/github-cli.sources > /dev/null
     $SUDO_CMD apt-get update
     $SUDO_CMD apt-get install -y gh
 fi
