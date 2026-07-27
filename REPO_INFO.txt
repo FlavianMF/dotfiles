@@ -1,0 +1,67 @@
+=====================================
+DEV ENVIRONMENT SETUP - REPOSITORY
+=====================================
+
+📁 Localização: /tmp/dev-setup-repo
+
+📋 Conteúdo:
+✅ Zsh com Oh-My-Zsh + Spaceship Prompt
+✅ Neovim com LazyVim + Monokai-Pro + Lualine
+✅ Tmux com integração seamless
+✅ FiraCode Nerd Font (instalador)
+✅ Scripts de instalação completos
+✅ Documentação detalhada
+
+🚀 Como usar:
+
+1. Clonar/Copiar:
+   git clone /tmp/dev-setup-repo ~/meu-dotfiles
+   cd ~/meu-dotfiles
+
+2. Instalar:
+   sudo ./install.sh
+   (ou: make install)
+
+3. Reabrir terminal:
+   exec zsh
+
+4. Configurar terminal:
+   - GNOME Terminal: FiraCode Nerd Font
+   - VS Code: FiraCode Nerd Font
+   - iTerm2: FiraCode Nerd Font
+
+5. Sincronizar plugins:
+   nvim -> :Lazy sync
+   tmux -> Ctrl+Space + I
+
+📚 Documentação:
+- README.md        - Documentação completa
+- QUICKSTART.md    - Instalação rápida
+- USAGE.md         - Como usar e modificar
+- Makefile         - Atalhos úteis
+
+🔧 Atalhos Úteis:
+make install       - Instalar tudo
+make update        - Atualizar configs
+make backup        - Backup das atuais
+make help          - Mostrar ajuda
+
+🎮 Atalhos do Sistema:
+Tmux:
+  Ctrl+Space + n   - próxima aba
+  Ctrl+Space + p   - aba anterior
+  Ctrl+Space + c   - nova janela
+  Ctrl+Space + %   - split vertical
+  Ctrl+Space + "   - split horizontal
+
+Nvim:
+  Ctrl+h/j/k/l     - navega entre Vim e Tmux
+  <Tab>/<S-Tab>    - próxima/anterior tab
+
+🔗 Próximos Passos:
+1. Copiar para GitHub: git push origin main
+2. Compartilhar com seu time
+3. Customizar conforme necessário
+4. Sincronizar entre máquinas
+
+=====================================
