@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "import": [
+    "cspell-dict-pt-br"
+  ],
+  "language": "en,pt-br",
+  "dictionaryDefinitions": [
+    {
+      "name": "global-words",
+      "path": "./spell/en.utf-8.add",
+      "addWords": true
+    }
+  ],
+  "dictionaries": [
+    "pt-br",
+    "global-words",
+  ],
+  "ignorePaths": [
+    "node_modules",
+  ],
+}
