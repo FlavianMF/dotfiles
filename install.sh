@@ -30,6 +30,12 @@ is_interactive() {
 
 log_info "Starting dotfiles installation from $REPO_DIR"
 
+# Check if running as root or with sudo
+SUDO_CMD=""
+if [[ $EUID -ne 0 ]]; then
+    SUDO_CMD="sudo"
+fi
+
 # ===== Install system dependencies =====
 log_info "Checking and installing system dependencies..."
 
@@ -51,8 +57,8 @@ done
 
 if [[ ${#MISSING_PACKAGES[@]} -gt 0 ]]; then
     log_info "Installing missing packages: ${MISSING_PACKAGES[*]}"
-    sudo apt-get update
-    sudo apt-get install -y "${MISSING_PACKAGES[@]}"
+    $SUDO_CMD apt-get update
+    $SUDO_CMD apt-get install -y "${MISSING_PACKAGES[@]}"
 fi
 
 # Install Neovim if not present
@@ -62,21 +68,21 @@ if ! command -v nvim &> /dev/null; then
     NVIM_URL="https://github.com/neovim/neovim/releases/download/$NVIM_VERSION/nvim-linux-x86_64.tar.gz"
 
     if [[ ! -d /opt/nvim-linux-x86_64 ]]; then
-        sudo mkdir -p /opt/nvim-linux-x86_64
-        sudo curl -sL "$NVIM_URL" | sudo tar xzf - -C /opt/ --strip-components=1 -C /opt/nvim-linux-x86_64 2>/dev/null || \
-        (curl -sL "$NVIM_URL" | tar xzf - && sudo mv nvim-linux-x86_64/* /opt/nvim-linux-x86_64/ && rm -rf nvim-linux-x86_64)
+        $SUDO_CMD mkdir -p /opt/nvim-linux-x86_64
+        curl -sL "$NVIM_URL" | $SUDO_CMD tar xzf - -C /opt/ --strip-components=1 -C /opt/nvim-linux-x86_64 2>/dev/null || \
+        (curl -sL "$NVIM_URL" | tar xzf - && $SUDO_CMD mv nvim-linux-x86_64/* /opt/nvim-linux-x86_64/ && rm -rf nvim-linux-x86_64)
     fi
 
     # Symlink to PATH
-    sudo ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim 2>/dev/null || true
+    $SUDO_CMD ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim 2>/dev/null || true
 fi
 
 # Install Docker if not present
 if ! command -v docker &> /dev/null; then
     log_info "Installing Docker..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sudo sh /tmp/get-docker.sh
-    sudo usermod -aG docker "$USER" 2>/dev/null || true
+    $SUDO_CMD sh /tmp/get-docker.sh
+    $SUDO_CMD usermod -aG docker "$USER" 2>/dev/null || true
     log_warn "You may need to log out and back in for Docker group membership to take effect"
     rm /tmp/get-docker.sh
 fi
@@ -84,12 +90,12 @@ fi
 # Install GitHub CLI if not present
 if ! command -v gh &> /dev/null; then
     log_info "Installing GitHub CLI (gh)..."
-    sudo mkdir -p -m 755 /etc/apt/keyrings
-    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/etc/apt/keyrings/githubcli-archive-keyring.gpg
-    sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages focal main" | sudo tee /etc/apt/sources.list.d/github-cli.sources > /dev/null
-    sudo apt-get update
-    sudo apt-get install -y gh
+    $SUDO_CMD mkdir -p -m 755 /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | $SUDO_CMD dd of=/etc/apt/keyrings/githubcli-archive-keyring.gpg
+    $SUDO_CMD chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages focal main" | $SUDO_CMD tee /etc/apt/sources.list.d/github-cli.sources > /dev/null
+    $SUDO_CMD apt-get update
+    $SUDO_CMD apt-get install -y gh
 fi
 
 # ===== Install Oh My Zsh =====
