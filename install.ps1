@@ -282,7 +282,8 @@ Write-Host "✓ Config files symlinked from $RepoDir"
 Write-Host '✓ Git identity configured'
 Write-Host '✓ Neovim plugins installed'
 Write-Host ''
-Write-Host "Backup location: $BackupDir"
+Write-Host "Backup location: " -NoNewline
+Write-Host $BackupDir
 Write-Host ''
 Write-Host 'Next steps:'
 Write-Host '1. Start a new PowerShell session or run: . $PROFILE'
