@@ -265,29 +265,28 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # ===== Summary =====
-Write-Host ''
+Write-Host ""
 Write-Info "Installation complete!"
-Write-Host ''
-Write-Host 'Summary:'
-Write-Host '=========='
-Write-Host '✓ System packages installed'
-Write-Host '✓ Neovim installed'
-if ($SelectedComponents['node']) { Write-Host '✓ Node.js and npm installed' }
-if ($SelectedComponents['python']) { Write-Host '✓ Python 3.12 installed' }
-if ($SelectedComponents['docker']) { Write-Host '✓ Docker Desktop installed' }
-if ($SelectedComponents['gh']) { Write-Host '✓ GitHub CLI (gh) installed' }
-Write-Host '✓ Oh My Posh configured'
-Write-Host '✓ PSReadLine configured'
-Write-Host "✓ Config files symlinked from $RepoDir"
-Write-Host '✓ Git identity configured'
-Write-Host '✓ Neovim plugins installed'
-Write-Host ''
-Write-Host "Backup location: " -NoNewline
-Write-Host $BackupDir
-Write-Host ''
-Write-Host 'Next steps:'
-Write-Host '1. Start a new PowerShell session or run: . $PROFILE'
-Write-Host '2. Set FiraCode Nerd Font in Windows Terminal preferences'
-if ($SelectedComponents['gh']) { Write-Host '3. Authenticate with GitHub: gh auth login' }
-Write-Host '4. Add your SSH keys to $HOME/.ssh if needed'
-Write-Host ''
+Write-Host ""
+Write-Host "Summary:"
+Write-Host "=========="
+Write-Host "✓ System packages installed"
+Write-Host "✓ Neovim installed"
+if ($SelectedComponents['node']) { Write-Host "✓ Node.js and npm installed" }
+if ($SelectedComponents['python']) { Write-Host "✓ Python 3.12 installed" }
+if ($SelectedComponents['docker']) { Write-Host "✓ Docker Desktop installed" }
+if ($SelectedComponents['gh']) { Write-Host "✓ GitHub CLI (gh) installed" }
+Write-Host "✓ Oh My Posh configured"
+Write-Host "✓ PSReadLine configured"
+Write-Host "✓ Config files symlinked"
+Write-Host "✓ Git identity configured"
+Write-Host "✓ Neovim plugins installed"
+Write-Host ""
+Write-Host "Backup location: $BackupDir"
+Write-Host ""
+Write-Host "Next steps:"
+Write-Host "1. Start a new PowerShell session"
+Write-Host "2. Set FiraCode Nerd Font in Windows Terminal"
+if ($SelectedComponents['gh']) { Write-Host "3. Run: gh auth login" }
+Write-Host "4. Add SSH keys to .ssh folder"
+Write-Host ""
