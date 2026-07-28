@@ -81,8 +81,11 @@ select_components() {
     local -a options=(node python docker gh)
     local current=0
     local done=0
+    local old_stty
 
-    # Hide cursor
+    # Save terminal settings and set raw mode
+    old_stty=$(stty -g)
+    stty -echo -icanon 2>/dev/null || true
     tput civis 2>/dev/null || true
 
     while [[ $done -eq 0 ]]; do
@@ -104,36 +107,39 @@ select_components() {
             local checked=" "
             [[ ${SELECTED_COMPONENTS[$comp]} -eq 1 ]] && checked="✓"
 
-            echo -e "${highlight}  ${marker} [$checked] ${comp:0:1}${comp:1} - ${OPTIONAL_COMPONENTS[$comp]}\033[0m"
+            echo -e "${highlight}  ${marker} [$checked] ${comp} - ${OPTIONAL_COMPONENTS[$comp]}\033[0m"
         done
 
         echo ""
         echo "  Press ENTER to confirm selection"
         echo ""
 
-        # Read single character
+        # Read one byte
         local input
-        read -r -s -n 1 input
+        IFS= read -r -s -n 1 input
 
-        # Check for escape sequence (arrow keys)
-        if [[ "$input" == $'\x1b' ]]; then
-            read -r -s -n 2 input
-            case "$input" in
-                '[A') current=$(( (current - 1 + ${#options[@]}) % ${#options[@]} )) ;;
-                '[B') current=$(( (current + 1) % ${#options[@]} )) ;;
-            esac
-        # Space to toggle
-        elif [[ "$input" == ' ' ]]; then
-            local comp="${options[$current]}"
-            SELECTED_COMPONENTS[$comp]=$((1 - SELECTED_COMPONENTS[$comp]))
-        # Enter to confirm (newline = empty or actual newline)
-        elif [[ -z "$input" || "$input" == $'\n' ]]; then
-            done=1
-        fi
+        case "$input" in
+            $'\x1b')  # Escape sequence (arrow keys)
+                IFS= read -r -s -n 1 input  # Read [
+                IFS= read -r -s -n 1 input  # Read A or B
+                case "$input" in
+                    'A') current=$(( (current - 1 + ${#options[@]}) % ${#options[@]} )) ;;
+                    'B') current=$(( (current + 1) % ${#options[@]} )) ;;
+                esac
+                ;;
+            ' ')  # Space
+                local comp="${options[$current]}"
+                SELECTED_COMPONENTS[$comp]=$((1 - SELECTED_COMPONENTS[$comp]))
+                ;;
+            '')  # Enter
+                done=1
+                ;;
+        esac
     done
 
-    # Show cursor
+    # Restore terminal
     tput cnorm 2>/dev/null || true
+    stty "$old_stty" 2>/dev/null || true
     clear
 }
 
