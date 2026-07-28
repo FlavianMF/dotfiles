@@ -61,8 +61,10 @@ declare -A COMPONENT_PACKAGES=(
     [python]="python3.12 python3.12-venv python3.12-dev python3-pip"
 )
 
-# Track selected components
+# Track selected components (default: node and python selected)
 declare -A SELECTED_COMPONENTS=(
+    [node]=1
+    [python]=1
     [docker]=0
     [gh]=0
 )
