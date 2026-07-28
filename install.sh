@@ -44,13 +44,93 @@ if ! command -v apt-get &> /dev/null; then
     exit 1
 fi
 
-# Packages to check
+# Base packages (always required)
 REQUIRED_PACKAGES=(git curl zsh tmux build-essential)
+
+# Optional components
+declare -A OPTIONAL_COMPONENTS=(
+    [node]="Node.js (required for nvim treesitter)"
+    [python]="Python 3.12 (dev environment)"
+    [docker]="Docker (containerization)"
+    [gh]="GitHub CLI (gh)"
+)
+
+# Packages for each optional component
+declare -A COMPONENT_PACKAGES=(
+    [node]="nodejs npm"
+    [python]="python3.12 python3.12-venv python3.12-dev python3-pip"
+)
+
+# Track selected components
+declare -A SELECTED_COMPONENTS=(
+    [docker]=0
+    [gh]=0
+)
+
+# Interactive selection
+select_components() {
+    if ! is_interactive; then
+        log_info "Running non-interactively. Installing default components: node, python"
+        SELECTED_COMPONENTS[node]=1
+        SELECTED_COMPONENTS[python]=1
+        return
+    fi
+
+    echo ""
+    echo "Select components to install (use space to select/deselect, enter to confirm):"
+    echo ""
+
+    local options=()
+    local defaults=()
+    for comp in "${!OPTIONAL_COMPONENTS[@]}"; do
+        options+=("$comp")
+    done
+
+    # Simple menu loop for selection
+    while true; do
+        echo "Available components:"
+        for i in "${!options[@]}"; do
+            local comp="${options[$i]}"
+            local checked=" "
+            [[ ${SELECTED_COMPONENTS[$comp]} -eq 1 ]] && checked="✓"
+            echo "  [$checked] $comp - ${OPTIONAL_COMPONENTS[$comp]}"
+        done
+        echo "  [done] Proceed with installation"
+        echo ""
+        read -p "Toggle component (node/python/docker/gh) or 'done': " choice
+
+        case "$choice" in
+            done) break ;;
+            node|python|docker|gh)
+                SELECTED_COMPONENTS[$choice]=$((1 - SELECTED_COMPONENTS[$choice]))
+                ;;
+            *)
+                echo "Invalid choice"
+                ;;
+        esac
+        echo ""
+    done
+}
+
+select_components
+
+# Build package list based on selections
+ALL_PACKAGES=("${REQUIRED_PACKAGES[@]}")
+
+if [[ ${SELECTED_COMPONENTS[node]} -eq 1 ]]; then
+    log_info "Node.js selected"
+    ALL_PACKAGES+=(${COMPONENT_PACKAGES[node]})
+fi
+
+if [[ ${SELECTED_COMPONENTS[python]} -eq 1 ]]; then
+    log_info "Python 3.12 selected"
+    ALL_PACKAGES+=(${COMPONENT_PACKAGES[python]})
+fi
 
 # Check if packages are installed
 MISSING_PACKAGES=()
-for pkg in "${REQUIRED_PACKAGES[@]}"; do
-    if ! dpkg -l | grep -q "^ii  $pkg"; then
+for pkg in "${ALL_PACKAGES[@]}"; do
+    if ! dpkg -l 2>/dev/null | grep -q "^ii  $pkg"; then
         MISSING_PACKAGES+=("$pkg")
     fi
 done
@@ -77,8 +157,8 @@ if ! command -v nvim &> /dev/null; then
     $SUDO_CMD ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim 2>/dev/null || true
 fi
 
-# Install Docker if not present
-if ! command -v docker &> /dev/null; then
+# Install Docker if selected and not present
+if [[ ${SELECTED_COMPONENTS[docker]} -eq 1 ]] && ! command -v docker &> /dev/null; then
     log_info "Installing Docker..."
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
     $SUDO_CMD sh /tmp/get-docker.sh
@@ -89,8 +169,8 @@ if ! command -v docker &> /dev/null; then
     rm /tmp/get-docker.sh
 fi
 
-# Install GitHub CLI if not present
-if ! command -v gh &> /dev/null; then
+# Install GitHub CLI if selected and not present
+if [[ ${SELECTED_COMPONENTS[gh]} -eq 1 ]] && ! command -v gh &> /dev/null; then
     log_info "Installing GitHub CLI (gh)..."
     $SUDO_CMD mkdir -p -m 755 /etc/apt/keyrings
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | $SUDO_CMD dd of=/etc/apt/keyrings/githubcli-archive-keyring.gpg
@@ -265,8 +345,10 @@ echo "Summary:"
 echo "=========="
 echo "✓ System dependencies installed"
 echo "✓ Neovim installed"
-echo "✓ Docker installed"
-echo "✓ GitHub CLI (gh) installed"
+[[ ${SELECTED_COMPONENTS[node]} -eq 1 ]] && echo "✓ Node.js and npm installed"
+[[ ${SELECTED_COMPONENTS[python]} -eq 1 ]] && echo "✓ Python 3.12 installed"
+[[ ${SELECTED_COMPONENTS[docker]} -eq 1 ]] && echo "✓ Docker installed"
+[[ ${SELECTED_COMPONENTS[gh]} -eq 1 ]] && echo "✓ GitHub CLI (gh) installed"
 echo "✓ Oh My Zsh configured"
 echo "✓ Zsh plugins installed (autosuggestions, syntax-highlighting)"
 echo "✓ Spaceship prompt theme installed"
@@ -280,7 +362,7 @@ echo "Backup location: $BACKUP_DIR"
 echo ""
 echo "Next steps:"
 echo "1. Start a new shell or run: exec \$SHELL"
-echo "2. For Docker, run: newgrp docker (to avoid needing sudo)"
-echo "3. Authenticate with GitHub: gh auth login"
+[[ ${SELECTED_COMPONENTS[docker]} -eq 1 ]] && echo "2. For Docker, run: newgrp docker (to avoid needing sudo)"
+[[ ${SELECTED_COMPONENTS[gh]} -eq 1 ]] && echo "3. Authenticate with GitHub: gh auth login"
 echo "4. Add your SSH keys to ~/.ssh/ if needed"
 echo ""
