@@ -23,9 +23,9 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $*"
 }
 
-# Detect if running interactively
+# Detect if running interactively (stdin is terminal)
 is_interactive() {
-    [[ $- == *i* ]]
+    [[ -t 0 ]]
 }
 
 log_info "Starting dotfiles installation from $REPO_DIR"
