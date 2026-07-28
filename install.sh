@@ -69,7 +69,7 @@ declare -A SELECTED_COMPONENTS=(
     [gh]=0
 )
 
-# Interactive selection
+# Interactive selection with keyboard navigation
 select_components() {
     if ! is_interactive; then
         log_info "Running non-interactively. Installing default components: node, python"
@@ -78,40 +78,66 @@ select_components() {
         return
     fi
 
-    echo ""
-    echo "Select components to install (use space to select/deselect, enter to confirm):"
-    echo ""
+    local -a options=(node python docker gh)
+    local current=0
+    local done=0
 
-    local options=()
-    local defaults=()
-    for comp in "${!OPTIONAL_COMPONENTS[@]}"; do
-        options+=("$comp")
-    done
+    # Hide cursor
+    tput civis 2>/dev/null || true
 
-    # Simple menu loop for selection
-    while true; do
-        echo "Available components:"
+    while [[ $done -eq 0 ]]; do
+        clear
+        echo ""
+        echo "Select components to install (↑↓ to navigate, SPACE to toggle, ENTER to confirm):"
+        echo ""
+
         for i in "${!options[@]}"; do
             local comp="${options[$i]}"
+            local marker=" "
+            local highlight=""
+
+            if [[ $i -eq $current ]]; then
+                highlight="\033[1;36m"  # Cyan bold
+                marker="→"
+            fi
+
             local checked=" "
             [[ ${SELECTED_COMPONENTS[$comp]} -eq 1 ]] && checked="✓"
-            echo "  [$checked] $comp - ${OPTIONAL_COMPONENTS[$comp]}"
-        done
-        echo "  [done] Proceed with installation"
-        echo ""
-        read -p "Toggle component (node/python/docker/gh) or 'done': " choice
 
-        case "$choice" in
-            done) break ;;
-            node|python|docker|gh)
-                SELECTED_COMPONENTS[$choice]=$((1 - SELECTED_COMPONENTS[$choice]))
+            echo -e "${highlight}  ${marker} [$checked] ${comp:0:1}${comp:1} - ${OPTIONAL_COMPONENTS[$comp]}\033[0m"
+        done
+
+        echo ""
+        echo "  Press ENTER to confirm selection"
+        echo ""
+
+        # Read single character
+        read -rsn1 input
+
+        case "$input" in
+            # Arrow up
+            $'\x1b')
+                read -rsn2 input  # Read [ and next char
+                case "$input" in
+                    '[A') current=$(( (current - 1 + ${#options[@]}) % ${#options[@]} )) ;;
+                    '[B') current=$(( (current + 1) % ${#options[@]} )) ;;
+                esac
                 ;;
-            *)
-                echo "Invalid choice"
+            # Space to toggle
+            ' ')
+                local comp="${options[$current]}"
+                SELECTED_COMPONENTS[$comp]=$((1 - SELECTED_COMPONENTS[$comp]))
+                ;;
+            # Enter to confirm
+            '')
+                done=1
                 ;;
         esac
-        echo ""
     done
+
+    # Show cursor
+    tput cnorm 2>/dev/null || true
+    clear
 }
 
 select_components
