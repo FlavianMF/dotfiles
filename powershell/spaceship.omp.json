@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "version": 3,
+  "final_space": true,
+  "console_title_template": "{{ .Shell }} in {{ .Folder }}",
+  "blocks": [
+    {
+      "type": "prompt",
+      "alignment": "left",
+      "segments": [
+        {
+          "type": "session",
+          "style": "diamond",
+          "foreground": "white",
+          "background": "transparent",
+          "template": "{{ .UserName }}"
+        },
+        {
+          "type": "path",
+          "style": "diamond",
+          "foreground": "cyan",
+          "background": "transparent",
+          "template": "{{ .Path }}",
+          "properties": {
+            "style": "folder"
+          }
+        },
+        {
+          "type": "git",
+          "style": "diamond",
+          "foreground": "blue",
+          "background": "transparent",
+          "template": "{{ .UpstreamIcon }}{{ .HEAD }}{{ if .Working }} *{{ end }}",
+          "properties": {
+            "fetch_upstream_icon": true
+          }
+        },
+        {
+          "type": "command_duration",
+          "style": "diamond",
+          "foreground": "yellow",
+          "background": "transparent",
+          "template": "{{ .FormattedDuration }}",
+          "properties": {
+            "threshold": 500
+          }
+        },
+        {
+          "type": "exit",
+          "style": "diamond",
+          "foreground": "red",
+          "background": "transparent",
+          "template": "✖ {{ .Code }}",
+          "properties": {
+            "always_enabled": true
+          }
+        },
+        {
+          "type": "text",
+          "style": "diamond",
+          "foreground": "green",
+          "background": "transparent",
+          "template": "❯"
+        }
+      ]
+    }
+  ]
+}
