@@ -284,9 +284,9 @@ Write-Host "✓ Neovim plugins installed"
 Write-Host ""
 Write-Host "Backup location: $BackupDir"
 Write-Host ""
-Write-Host "Next steps:"
-Write-Host "1. Start a new PowerShell session or run: . `$PROFILE"
-Write-Host "2. Set FiraCode Nerd Font in Windows Terminal preferences"
+Write-Host 'Next steps:'
+Write-Host '1. Start a new PowerShell session or run: . $PROFILE'
+Write-Host '2. Set FiraCode Nerd Font in Windows Terminal preferences'
 if ($SelectedComponents['gh']) { Write-Host '3. Authenticate with GitHub: gh auth login' }
 Write-Host '4. Add your SSH keys to $HOME/.ssh if needed'
-Write-Host ""
+Write-Host ''
