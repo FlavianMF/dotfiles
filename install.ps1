@@ -79,7 +79,7 @@ function Select-Components {
     while (-not $done) {
         Clear-Host
         Write-Host ""
-        Write-Host "Select components to install (↑↓ to navigate, SPACE to toggle, ENTER to confirm):"
+        Write-Host "Select components to install (up/down to navigate, SPACE to toggle, ENTER to confirm):"
         Write-Host ""
 
         for ($i = 0; $i -lt $options.Count; $i++) {
@@ -88,7 +88,7 @@ function Select-Components {
             $color = 'Gray'
 
             if ($i -eq $current) {
-                $marker = '→'
+                $marker = '>'
                 $color = 'Cyan'
             }
 
@@ -101,7 +101,6 @@ function Select-Components {
         Write-Host ""
 
         $key = $host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        $input = $key.Character
 
         switch ($key.VirtualKeyCode) {
             38 {  # Up arrow
@@ -161,7 +160,7 @@ foreach ($pkg in $PackagesToInstall) {
 # ===== Install/Update PSReadLine =====
 Write-Info "Installing PSReadLine module..."
 $psReadLineVersion = (Get-Module PSReadLine -ListAvailable | Select-Object -ExpandProperty Version | Sort-Object -Descending | Select-Object -First 1)
-if (-not $psReadLineVersion -or $psReadLineVersion -lt [version]"2.3.0") {
+if (-not $psReadLineVersion -or $psReadLineVersion -lt [version]'2.3.0') {
     Install-Module PSReadLine -Force -SkipPublisherCheck -AllowClobber 2>$null
 }
 
@@ -239,7 +238,7 @@ if (-not (Test-Path "$env:USERPROFILE\.gitconfig.local")) {
     $git_name = $env:GIT_NAME
     $git_email = $env:GIT_EMAIL
 
-    if (Is-Interactive -and -not $git_name) {
+    if ((Is-Interactive) -and -not $git_name) {
         $git_name = Read-Host "Enter your git user name"
         $git_email = Read-Host "Enter your git email"
     }
