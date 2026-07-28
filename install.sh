@@ -112,27 +112,24 @@ select_components() {
         echo ""
 
         # Read single character
-        read -rsn1 input
+        local input
+        read -r -s -n 1 input
 
-        case "$input" in
-            # Arrow up
-            $'\x1b')
-                read -rsn2 input  # Read [ and next char
-                case "$input" in
-                    '[A') current=$(( (current - 1 + ${#options[@]}) % ${#options[@]} )) ;;
-                    '[B') current=$(( (current + 1) % ${#options[@]} )) ;;
-                esac
-                ;;
-            # Space to toggle
-            ' ')
-                local comp="${options[$current]}"
-                SELECTED_COMPONENTS[$comp]=$((1 - SELECTED_COMPONENTS[$comp]))
-                ;;
-            # Enter to confirm
-            '')
-                done=1
-                ;;
-        esac
+        # Check for escape sequence (arrow keys)
+        if [[ "$input" == $'\x1b' ]]; then
+            read -r -s -n 2 input
+            case "$input" in
+                '[A') current=$(( (current - 1 + ${#options[@]}) % ${#options[@]} )) ;;
+                '[B') current=$(( (current + 1) % ${#options[@]} )) ;;
+            esac
+        # Space to toggle
+        elif [[ "$input" == ' ' ]]; then
+            local comp="${options[$current]}"
+            SELECTED_COMPONENTS[$comp]=$((1 - SELECTED_COMPONENTS[$comp]))
+        # Enter to confirm (newline = empty or actual newline)
+        elif [[ -z "$input" || "$input" == $'\n' ]]; then
+            done=1
+        fi
     done
 
     # Show cursor
