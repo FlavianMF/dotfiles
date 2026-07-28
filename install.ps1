@@ -1,25 +1,13 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param(
-    [switch]$NonInteractive
-)
+param([switch]$NonInteractive)
 
 $ErrorActionPreference = "Stop"
 
-# Colors for output
-function Write-Info {
-    Write-Host "[INFO] $args" -ForegroundColor Green
-}
+function Write-Info { Write-Host "[INFO] $args" -ForegroundColor Green }
+function Write-Warn { Write-Host "[WARN] $args" -ForegroundColor Yellow }
+function Write-Error-Custom { Write-Host "[ERROR] $args" -ForegroundColor Red }
 
-function Write-Warn {
-    Write-Host "[WARN] $args" -ForegroundColor Yellow
-}
-
-function Write-Error-Custom {
-    Write-Host "[ERROR] $args" -ForegroundColor Red
-}
-
-# Detect interactive mode
 function Is-Interactive {
     if ($NonInteractive) { return $false }
     return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
@@ -29,9 +17,6 @@ $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackupDir = Join-Path $env:USERPROFILE ".dotfiles-backup\$(Get-Date -UFormat %s)"
 
 Write-Info "Starting dotfiles installation from $RepoDir"
-
-# ===== Preflight checks =====
-Write-Info "Checking prerequisites..."
 
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Error-Custom "winget not found. Install App Installer from Microsoft Store."
@@ -45,26 +30,14 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
         if ($install_ps7 -eq 'y') {
             Write-Info "Installing PowerShell 7..."
             winget install --id Microsoft.PowerShell -e --source winget --accept-package-agreements --accept-source-agreements
-            Write-Warn "Please relaunch in pwsh (PowerShell 7) and run this script again."
+            Write-Warn "Please relaunch in pwsh and run this script again."
             exit 0
         }
     }
 }
 
-# ===== Component selection =====
-$SelectedComponents = @{
-    'node'   = $true
-    'python' = $true
-    'docker' = $false
-    'gh'     = $false
-}
-
-$OptionalComponents = @{
-    'node'   = 'Node.js (required for nvim treesitter)'
-    'python' = 'Python 3.12 (dev environment)'
-    'docker' = 'Docker (containerization)'
-    'gh'     = 'GitHub CLI (gh)'
-}
+$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false}
+$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -79,43 +52,28 @@ function Select-Components {
     while (-not $done) {
         Clear-Host
         Write-Host ""
-        Write-Host "Select components to install (up/down to navigate, SPACE to toggle, ENTER to confirm):"
+        Write-Host "Select components (up/down arrow, SPACE to toggle, ENTER to confirm):"
         Write-Host ""
 
         for ($i = 0; $i -lt $options.Count; $i++) {
             $comp = $options[$i]
-            $marker = ' '
-            $color = 'Gray'
-
-            if ($i -eq $current) {
-                $marker = '>'
-                $color = 'Cyan'
-            }
-
-            $checked = if ($SelectedComponents[$comp]) { '✓' } else { ' ' }
+            $marker = if ($i -eq $current) { '>' } else { ' ' }
+            $color = if ($i -eq $current) { 'Cyan' } else { 'Gray' }
+            $checked = if ($SelectedComponents[$comp]) { 'X' } else { ' ' }
             Write-Host "  $marker [$checked] $comp - $($OptionalComponents[$comp])" -ForegroundColor $color
         }
 
         Write-Host ""
-        Write-Host "  Press ENTER to confirm selection"
+        Write-Host "  Press ENTER to confirm"
         Write-Host ""
 
         $key = $host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 
         switch ($key.VirtualKeyCode) {
-            38 {  # Up arrow
-                $current = ($current - 1 + $options.Count) % $options.Count
-            }
-            40 {  # Down arrow
-                $current = ($current + 1) % $options.Count
-            }
-            32 {  # Space
-                $comp = $options[$current]
-                $SelectedComponents[$comp] = -not $SelectedComponents[$comp]
-            }
-            13 {  # Enter
-                $done = $true
-            }
+            38 { $current = ($current - 1 + $options.Count) % $options.Count }
+            40 { $current = ($current + 1) % $options.Count }
+            32 { $SelectedComponents[$options[$current]] = -not $SelectedComponents[$options[$current]] }
+            13 { $done = $true }
         }
     }
 
@@ -124,15 +82,8 @@ function Select-Components {
 
 Select-Components
 
-# ===== Build package list =====
 $PackagesToInstall = @('Git.Git', 'Neovim.Neovim', 'JanDeDobbeleer.OhMyPosh')
-
-$ComponentPackages = @{
-    'node'   = 'OpenJS.NodeJS.LTS'
-    'python' = 'Python.Python.3.12'
-    'docker' = 'Docker.DockerDesktop'
-    'gh'     = 'GitHub.cli'
-}
+$ComponentPackages = @{'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'}
 
 foreach ($comp in $ComponentPackages.Keys) {
     if ($SelectedComponents[$comp]) {
@@ -141,11 +92,10 @@ foreach ($comp in $ComponentPackages.Keys) {
     }
 }
 
-# ===== Install packages =====
 Write-Info "Installing packages via winget..."
 
 foreach ($pkg in $PackagesToInstall) {
-    if (winget list --id $pkg --exact | Select-String $pkg) {
+    if (winget list --id $pkg --exact 2>$null | Select-String $pkg) {
         Write-Info "$pkg already installed"
         continue
     }
@@ -157,29 +107,20 @@ foreach ($pkg in $PackagesToInstall) {
     }
 }
 
-# ===== Install/Update PSReadLine =====
 Write-Info "Installing PSReadLine module..."
 $psReadLineVersion = (Get-Module PSReadLine -ListAvailable | Select-Object -ExpandProperty Version | Sort-Object -Descending | Select-Object -First 1)
 if (-not $psReadLineVersion -or $psReadLineVersion -lt [version]'2.3.0') {
     Install-Module PSReadLine -Force -SkipPublisherCheck -AllowClobber 2>$null
 }
 
-# ===== Install oh-my-posh fonts =====
 Write-Info "Installing oh-my-posh fonts..."
 oh-my-posh font install FiraCode 2>$null
 Write-Warn "Remember to set FiraCode Nerd Font in Windows Terminal settings"
 
-# ===== Backup existing configs =====
 Write-Info "Creating backup of existing configs..."
 New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null
 
-$ConfigItems = @(
-    $PROFILE,
-    "$env:USERPROFILE\.gitconfig",
-    "$env:USERPROFILE\.config\git\ignore",
-    "$env:LOCALAPPDATA\nvim",
-    "$env:USERPROFILE\.claude\settings.json"
-)
+$ConfigItems = @($PROFILE, "$env:USERPROFILE\.gitconfig", "$env:USERPROFILE\.config\git\ignore", "$env:LOCALAPPDATA\nvim", "$env:USERPROFILE\.claude\settings.json")
 
 foreach ($item in $ConfigItems) {
     if (Test-Path $item) {
@@ -188,13 +129,8 @@ foreach ($item in $ConfigItems) {
     }
 }
 
-# ===== Helper function to create symlinks/copies =====
 function New-ConfigLink {
-    param(
-        [string]$Source,
-        [string]$Target,
-        [switch]$IsDirectory
-    )
+    param([string]$Source, [string]$Target, [switch]$IsDirectory)
 
     if (-not (Test-Path $Source)) {
         Write-Warn "Source not found: $Source"
@@ -203,7 +139,6 @@ function New-ConfigLink {
 
     $TargetDir = Split-Path -Parent $Target
     New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-
     Remove-Item -Path $Target -Recurse -Force -ErrorAction SilentlyContinue
 
     try {
@@ -211,7 +146,7 @@ function New-ConfigLink {
         Write-Info "Symlinked $Target"
     }
     catch {
-        Write-Warn "Symlink failed (no admin/dev mode), copying instead: $Target"
+        Write-Warn "Symlink failed, copying instead: $Target"
         if ($IsDirectory) {
             Copy-Item -Path $Source -Destination $Target -Recurse -Force
         }
@@ -221,9 +156,7 @@ function New-ConfigLink {
     }
 }
 
-# ===== Create symlinks/copies =====
 Write-Info "Creating/copying config files..."
-
 New-ConfigLink -Source "$RepoDir\powershell\Microsoft.PowerShell_profile.ps1" -Target $PROFILE
 New-ConfigLink -Source "$RepoDir\powershell\spaceship.omp.json" -Target "$env:USERPROFILE\.spaceship.omp.json"
 New-ConfigLink -Source "$RepoDir\git\.gitconfig-windows" -Target "$env:USERPROFILE\.gitconfig"
@@ -231,7 +164,6 @@ New-ConfigLink -Source "$RepoDir\git\ignore" -Target "$env:USERPROFILE\.config\g
 New-ConfigLink -Source "$RepoDir\nvim" -Target "$env:LOCALAPPDATA\nvim" -IsDirectory
 New-ConfigLink -Source "$RepoDir\claude\settings.json" -Target "$env:USERPROFILE\.claude\settings.json"
 
-# ===== Configure git identity =====
 if (-not (Test-Path "$env:USERPROFILE\.gitconfig.local")) {
     Write-Info "Setting up git identity..."
 
@@ -244,43 +176,37 @@ if (-not (Test-Path "$env:USERPROFILE\.gitconfig.local")) {
     }
 
     if ($git_name -and $git_email) {
-        $gitconfig = @"
-[user]
-	name = $git_name
-	email = $git_email
-"@
+        $gitconfig = "[user]`n`tname = $git_name`n`temail = $git_email"
         Set-Content -Path "$env:USERPROFILE\.gitconfig.local" -Value $gitconfig
         Write-Info "Created .gitconfig.local"
     }
     else {
-        Write-Warn "Skipping git identity (not interactive or env vars not set)"
+        Write-Warn "Skipping git identity"
     }
 }
 
-# ===== Install Neovim plugins =====
-Write-Info "Installing Neovim plugins (this may take a moment)..."
+Write-Info "Installing Neovim plugins..."
 nvim --headless "+Lazy! sync" +qa 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Warn "Could not auto-install nvim plugins. Run: :Lazy sync in nvim"
 }
 
-# ===== Summary =====
 Write-Host ""
 Write-Info "Installation complete!"
 Write-Host ""
 Write-Host "Summary:"
 Write-Host "=========="
-Write-Host "✓ System packages installed"
-Write-Host "✓ Neovim installed"
-if ($SelectedComponents['node']) { Write-Host "✓ Node.js and npm installed" }
-if ($SelectedComponents['python']) { Write-Host "✓ Python 3.12 installed" }
-if ($SelectedComponents['docker']) { Write-Host "✓ Docker Desktop installed" }
-if ($SelectedComponents['gh']) { Write-Host "✓ GitHub CLI (gh) installed" }
-Write-Host "✓ Oh My Posh configured"
-Write-Host "✓ PSReadLine configured"
-Write-Host "✓ Config files symlinked"
-Write-Host "✓ Git identity configured"
-Write-Host "✓ Neovim plugins installed"
+Write-Host "[OK] System packages installed"
+Write-Host "[OK] Neovim installed"
+if ($SelectedComponents['node']) { Write-Host "[OK] Node.js and npm installed" }
+if ($SelectedComponents['python']) { Write-Host "[OK] Python 3.12 installed" }
+if ($SelectedComponents['docker']) { Write-Host "[OK] Docker Desktop installed" }
+if ($SelectedComponents['gh']) { Write-Host "[OK] GitHub CLI (gh) installed" }
+Write-Host "[OK] Oh My Posh configured"
+Write-Host "[OK] PSReadLine configured"
+Write-Host "[OK] Config files copied"
+Write-Host "[OK] Git identity configured"
+Write-Host "[OK] Neovim plugins installed"
 Write-Host ""
 Write-Host "Backup location: $BackupDir"
 Write-Host ""
