@@ -10,24 +10,32 @@
       "segments": [
         {
           "type": "session",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "white",
           "background": "transparent",
           "template": "{{ .UserName }}"
         },
         {
           "type": "path",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "cyan",
           "background": "transparent",
           "template": "{{ .Path }}",
           "properties": {
-            "style": "folder"
+            "style": "folder",
+            "max_depth": 3
           }
         },
         {
+          "type": "os",
+          "style": "plain",
+          "foreground": "white",
+          "background": "transparent",
+          "template": "{{ .HostName }}"
+        },
+        {
           "type": "git",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "blue",
           "background": "transparent",
           "template": "{{ .UpstreamIcon }}{{ .HEAD }}{{ if .Working }} *{{ end }}",
@@ -37,7 +45,7 @@
         },
         {
           "type": "command_duration",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "yellow",
           "background": "transparent",
           "template": "{{ .FormattedDuration }}",
@@ -46,21 +54,28 @@
           }
         },
         {
+          "type": "text",
+          "style": "plain",
+          "foreground": "transparent",
+          "background": "transparent",
+          "template": "\n"
+        },
+        {
           "type": "exit",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "red",
           "background": "transparent",
-          "template": "✖ {{ .Code }}",
+          "template": "[{{ .Code }}]",
           "properties": {
-            "always_enabled": true
+            "always_enabled": false
           }
         },
         {
           "type": "text",
-          "style": "diamond",
+          "style": "plain",
           "foreground": "green",
           "background": "transparent",
-          "template": "❯"
+          "template": "❯ "
         }
       ]
     }
