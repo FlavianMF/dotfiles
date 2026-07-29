@@ -95,15 +95,13 @@ foreach ($comp in $ComponentPackages.Keys) {
 Write-Info "Installing packages via winget..."
 
 foreach ($pkg in $PackagesToInstall) {
-    if (winget list --id $pkg --exact 2>$null | Select-String $pkg) {
-        Write-Info "$pkg already installed"
-        continue
-    }
-
     Write-Info "Installing $pkg..."
-    winget install --id $pkg -e --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warn "Failed to install $pkg, continuing..."
+    winget install --id $pkg -e --source winget --accept-package-agreements --accept-source-agreements -h 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "$pkg installed successfully"
+    }
+    else {
+        Write-Warn "$pkg install failed or already present, continuing..."
     }
 }
 
