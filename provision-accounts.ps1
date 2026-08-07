@@ -9,11 +9,14 @@ function Write-Info { Write-Host "[INFO] $args" -ForegroundColor Green }
 function Write-Warn { Write-Host "[WARN] $args" -ForegroundColor Yellow }
 function Write-Error-Custom { Write-Host "[ERROR] $args" -ForegroundColor Red }
 
+Write-Info "=== Fase 1: Configurar nomes das contas ==="
 $AdminName = Read-Host "Nome da conta admin [admin]"
 if ([string]::IsNullOrWhiteSpace($AdminName)) { $AdminName = "admin" }
+Write-Info "Conta admin: '$AdminName'"
 
 $AlunoName = Read-Host "Nome da conta aluno [aluno]"
 if ([string]::IsNullOrWhiteSpace($AlunoName)) { $AlunoName = "aluno" }
+Write-Info "Conta aluno: '$AlunoName'"
 
 function Get-SecurePasswordWithConfirmation {
     param([string]$Prompt)
@@ -60,22 +63,31 @@ function New-OrUpdateLocalAccount {
         [switch]$AsAdmin
     )
 
-    $existingUser = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
+    Write-Host "[DEBUG] Iniciando New-OrUpdateLocalAccount: Username=$Username, FullName=$FullName, AsAdmin=$AsAdmin" -ForegroundColor Cyan
 
-    if ($existingUser) {
-        Write-Info "Conta '$Username' já existe, atualizando senha..."
-        Set-LocalUser -Name $Username -Password $SecurePassword -PasswordNeverExpires $true
-        Write-Info "Senha atualizada para '$Username'"
+    try {
+        $existingUser = Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
+
+        if ($existingUser) {
+            Write-Info "Conta '$Username' já existe, atualizando senha..."
+            Set-LocalUser -Name $Username -Password $SecurePassword -PasswordNeverExpires $true
+            Write-Info "Senha atualizada para '$Username'"
+        }
+        else {
+            Write-Info "Criando conta '$Username'..."
+            New-LocalUser -Name $Username `
+                -Password $SecurePassword `
+                -FullName $FullName `
+                -Description $Description `
+                -PasswordNeverExpires `
+                -AccountNeverExpires | Out-Null
+            Write-Info "Conta '$Username' criada com sucesso"
+        }
     }
-    else {
-        Write-Info "Criando conta '$Username'..."
-        New-LocalUser -Name $Username `
-            -Password $SecurePassword `
-            -FullName $FullName `
-            -Description $Description `
-            -PasswordNeverExpires `
-            -AccountNeverExpires | Out-Null
-        Write-Info "Conta '$Username' criada com sucesso"
+    catch {
+        Write-Error-Custom "Erro ao processar conta '$Username': $_"
+        Write-Host "[DEBUG] Stack trace: $($_.ScriptStackTrace)" -ForegroundColor Red
+        return
     }
 
     if ($AsAdmin) {
