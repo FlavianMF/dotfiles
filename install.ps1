@@ -36,8 +36,8 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     }
 }
 
-$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false}
-$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'}
+$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false}
+$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -45,7 +45,7 @@ function Select-Components {
         return
     }
 
-    $options = @('node', 'python', 'docker', 'gh')
+    $options = @('node', 'python', 'docker', 'gh', 'vscode', 'eim')
     $current = 0
     $done = $false
 
@@ -80,9 +80,39 @@ function Select-Components {
     Clear-Host
 }
 
+function Install-AppWithFallback {
+    param([string]$Name, [string]$WingetId, [string]$ExeFilter, [string[]]$SilentArgs)
+
+    Write-Info "Installing $Name..."
+    winget install --id $WingetId -e --source winget --accept-package-agreements --accept-source-agreements -h 2>$null
+
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "$Name installed successfully via winget"
+        return
+    }
+
+    Write-Warn "Winget install failed or package not found, trying local installer..."
+    $LocalExe = Get-ChildItem -Path "$RepoDir\exes" -Filter $ExeFilter -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($LocalExe) {
+        Write-Info "Found local installer: $($LocalExe.Name)"
+        $proc = Start-Process -FilePath $LocalExe.FullName -ArgumentList $SilentArgs -Wait -PassThru
+        if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+            Write-Info "$Name installed successfully via local installer"
+            return
+        }
+        else {
+            Write-Warn "$Name local installer exited with code $($proc.ExitCode)"
+        }
+    }
+    else {
+        Write-Warn "No local installer found for $Name (pattern: $ExeFilter)"
+    }
+}
+
 Select-Components
 
-$PackagesToInstall = @('Git.Git', 'Neovim.Neovim', 'JanDeDobbeleer.OhMyPosh')
+$PackagesToInstall = @('Neovim.Neovim', 'JanDeDobbeleer.OhMyPosh')
 $ComponentPackages = @{'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'}
 
 foreach ($comp in $ComponentPackages.Keys) {
@@ -94,6 +124,8 @@ foreach ($comp in $ComponentPackages.Keys) {
 
 Write-Info "Installing packages via winget..."
 
+Install-AppWithFallback -Name "Git" -WingetId "Git.Git" -ExeFilter "Git-*-64-bit.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"
+
 foreach ($pkg in $PackagesToInstall) {
     Write-Info "Installing $pkg..."
     winget install --id $pkg -e --source winget --accept-package-agreements --accept-source-agreements -h 2>$null
@@ -103,6 +135,14 @@ foreach ($pkg in $PackagesToInstall) {
     else {
         Write-Warn "$pkg install failed or already present, continuing..."
     }
+}
+
+if ($SelectedComponents['vscode']) {
+    Install-AppWithFallback -Name "Visual Studio Code" -WingetId "Microsoft.VisualStudioCode" -ExeFilter "VSCodeSetup-x64-*.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/MERGETASKS=!runcode"
+}
+
+if ($SelectedComponents['eim']) {
+    Install-AppWithFallback -Name "Espressif EIM" -WingetId "Espressif.EIM-CLI" -ExeFilter "eim-gui-windows-x64-*.exe" -SilentArgs "/S"
 }
 
 Write-Info "Installing PSReadLine module..."
@@ -194,12 +234,15 @@ Write-Info "Installation complete!"
 Write-Host ""
 Write-Host "Summary:"
 Write-Host "=========="
+Write-Host "[OK] Git installed"
 Write-Host "[OK] System packages installed"
 Write-Host "[OK] Neovim installed"
 if ($SelectedComponents['node']) { Write-Host "[OK] Node.js and npm installed" }
 if ($SelectedComponents['python']) { Write-Host "[OK] Python 3.12 installed" }
 if ($SelectedComponents['docker']) { Write-Host "[OK] Docker Desktop installed" }
 if ($SelectedComponents['gh']) { Write-Host "[OK] GitHub CLI (gh) installed" }
+if ($SelectedComponents['vscode']) { Write-Host "[OK] Visual Studio Code installed" }
+if ($SelectedComponents['eim']) { Write-Host "[OK] Espressif EIM installed" }
 Write-Host "[OK] Oh My Posh configured"
 Write-Host "[OK] PSReadLine configured"
 Write-Host "[OK] Config files copied"

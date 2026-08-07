@@ -54,3 +54,8 @@ tmp/
 temp/
 *.tmp
 .cache/
+
+# Executables and installers
+exes/
+*.exe
+*.zip
