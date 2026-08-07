@@ -36,8 +36,8 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     }
 }
 
-$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false}
-$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'}
+$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
+$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -45,7 +45,7 @@ function Select-Components {
         return
     }
 
-    $options = @('node', 'python', 'docker', 'gh', 'vscode', 'eim')
+    $options = @('node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit')
     $current = 0
     $done = $false
 
@@ -112,8 +112,28 @@ function Install-AppWithFallback {
 
 Select-Components
 
-$PackagesToInstall = @('Neovim.Neovim', 'JanDeDobbeleer.OhMyPosh')
-$ComponentPackages = @{'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'}
+# If nvim selected, force-select its dependencies
+if ($SelectedComponents['nvim']) {
+    if (-not $SelectedComponents['node']) {
+        Write-Info "nvim selected: forcing node (required for treesitter)"
+        $SelectedComponents['node'] = $true
+    }
+    if (-not $SelectedComponents['ripgrep']) {
+        Write-Info "nvim selected: forcing ripgrep (required for Telescope)"
+        $SelectedComponents['ripgrep'] = $true
+    }
+    if (-not $SelectedComponents['fd']) {
+        Write-Info "nvim selected: forcing fd (required for Telescope)"
+        $SelectedComponents['fd'] = $true
+    }
+    if (-not $SelectedComponents['lazygit']) {
+        Write-Info "nvim selected: forcing lazygit (used by nvim plugin)"
+        $SelectedComponents['lazygit'] = $true
+    }
+}
+
+$PackagesToInstall = @('JanDeDobbeleer.OhMyPosh')
+$ComponentPackages = @{'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'}
 
 foreach ($comp in $ComponentPackages.Keys) {
     if ($SelectedComponents[$comp]) {
@@ -199,7 +219,9 @@ New-ConfigLink -Source "$RepoDir\powershell\Microsoft.PowerShell_profile.ps1" -T
 New-ConfigLink -Source "$RepoDir\powershell\spaceship.omp.json" -Target "$env:USERPROFILE\.spaceship.omp.json"
 New-ConfigLink -Source "$RepoDir\git\.gitconfig-windows" -Target "$env:USERPROFILE\.gitconfig"
 New-ConfigLink -Source "$RepoDir\git\ignore" -Target "$env:USERPROFILE\.config\git\ignore"
-New-ConfigLink -Source "$RepoDir\nvim" -Target "$env:LOCALAPPDATA\nvim" -IsDirectory
+if ($SelectedComponents['nvim']) {
+    New-ConfigLink -Source "$RepoDir\nvim" -Target "$env:LOCALAPPDATA\nvim" -IsDirectory
+}
 New-ConfigLink -Source "$RepoDir\claude\settings.json" -Target "$env:USERPROFILE\.claude\settings.json"
 
 if (-not (Test-Path "$env:USERPROFILE\.gitconfig.local")) {
@@ -223,10 +245,12 @@ if (-not (Test-Path "$env:USERPROFILE\.gitconfig.local")) {
     }
 }
 
-Write-Info "Installing Neovim plugins..."
-nvim --headless "+Lazy! sync" +qa 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Warn "Could not auto-install nvim plugins. Run: :Lazy sync in nvim"
+if ($SelectedComponents['nvim']) {
+    Write-Info "Installing Neovim plugins..."
+    nvim --headless "+Lazy! sync" +qa 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn "Could not auto-install nvim plugins. Run: :Lazy sync in nvim"
+    }
 }
 
 Write-Host ""
@@ -236,18 +260,21 @@ Write-Host "Summary:"
 Write-Host "=========="
 Write-Host "[OK] Git installed"
 Write-Host "[OK] System packages installed"
-Write-Host "[OK] Neovim installed"
 if ($SelectedComponents['node']) { Write-Host "[OK] Node.js and npm installed" }
 if ($SelectedComponents['python']) { Write-Host "[OK] Python 3.12 installed" }
 if ($SelectedComponents['docker']) { Write-Host "[OK] Docker Desktop installed" }
 if ($SelectedComponents['gh']) { Write-Host "[OK] GitHub CLI (gh) installed" }
+if ($SelectedComponents['nvim']) { Write-Host "[OK] Neovim installed" }
+if ($SelectedComponents['ripgrep']) { Write-Host "[OK] ripgrep installed" }
+if ($SelectedComponents['fd']) { Write-Host "[OK] fd installed" }
+if ($SelectedComponents['lazygit']) { Write-Host "[OK] lazygit installed" }
 if ($SelectedComponents['vscode']) { Write-Host "[OK] Visual Studio Code installed" }
 if ($SelectedComponents['eim']) { Write-Host "[OK] Espressif EIM installed" }
 Write-Host "[OK] Oh My Posh configured"
 Write-Host "[OK] PSReadLine configured"
 Write-Host "[OK] Config files copied"
 Write-Host "[OK] Git identity configured"
-Write-Host "[OK] Neovim plugins installed"
+if ($SelectedComponents['nvim']) { Write-Host "[OK] Neovim plugins installed" }
 Write-Host ""
 Write-Host "Backup location: $BackupDir"
 Write-Host ""
