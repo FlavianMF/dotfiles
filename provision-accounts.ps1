@@ -25,16 +25,21 @@ function Get-SecurePasswordWithConfirmation {
         $password1 = Read-Host -AsSecureString -Prompt $Prompt
         $password2 = Read-Host -AsSecureString -Prompt "Confirme a senha"
 
-        $plaintext1 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($password1))
-        $plaintext2 = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($password2))
+        $bstr1 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password1)
+        $plaintext1 = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr1)
+
+        $bstr2 = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password2)
+        $plaintext2 = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr2)
 
         if ($plaintext1 -eq $plaintext2) {
-            [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode([System.Runtime.InteropServices.Marshal]::StringToCoTaskMemUnicode($plaintext1))
-            [System.Runtime.InteropServices.Marshal]::ZeroFreeGlobalAllocUnicode([System.Runtime.InteropServices.Marshal]::StringToCoTaskMemUnicode($plaintext2))
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr1)
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr2)
             return $password1
         }
         else {
             Write-Warn "Senhas não conferem. Tente novamente."
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr1)
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr2)
             $attempt++
         }
     }
@@ -115,12 +120,15 @@ Write-Info "Configurando auto-login para conta '$AlunoName'..."
 $WinLogonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
 
 try {
-    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToCoTaskMemUnicode($AlunoPassword))
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($AlunoPassword)
+    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
 
     Set-ItemProperty -Path $WinLogonPath -Name "AutoAdminLogon" -Value "1" -Type String
     Set-ItemProperty -Path $WinLogonPath -Name "DefaultUserName" -Value $AlunoName -Type String
     Set-ItemProperty -Path $WinLogonPath -Name "DefaultPassword" -Value $plainPassword -Type String
     Set-ItemProperty -Path $WinLogonPath -Name "DefaultDomainName" -Value $env:COMPUTERNAME -Type String
+
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
     Write-Info "Auto-login configurado para '$AlunoName'"
     Write-Warn "AVISO DE SEGURANÇA: A senha foi armazenada em texto puro no registro do Windows."
