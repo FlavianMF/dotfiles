@@ -53,12 +53,18 @@ declare -A OPTIONAL_COMPONENTS=(
     [python]="Python 3.12 (dev environment)"
     [docker]="Docker (containerization)"
     [gh]="GitHub CLI (gh)"
+    [nvim]="Neovim + LazyVim config"
+    [ripgrep]="ripgrep (fast search, used by nvim Telescope)"
+    [fd]="fd (fast file finder, used by nvim Telescope)"
+    [lazygit]="lazygit (git UI, used by nvim plugin)"
 )
 
 # Packages for each optional component
 declare -A COMPONENT_PACKAGES=(
     [node]="nodejs npm"
     [python]="python3.12 python3.12-venv python3.12-dev python3-pip"
+    [ripgrep]="ripgrep"
+    [fd]="fd-find"
 )
 
 # Track selected components (default: node and python selected)
@@ -67,6 +73,10 @@ declare -A SELECTED_COMPONENTS=(
     [python]=1
     [docker]=0
     [gh]=0
+    [nvim]=0
+    [ripgrep]=0
+    [fd]=0
+    [lazygit]=0
 )
 
 # Interactive selection with keyboard navigation
@@ -78,7 +88,7 @@ select_components() {
         return
     fi
 
-    local -a options=(node python docker gh)
+    local -a options=(node python docker gh nvim ripgrep fd lazygit)
     local current=0
     local done=0
     local old_stty
@@ -145,6 +155,26 @@ select_components() {
 
 select_components
 
+# If nvim selected, force-select its dependencies
+if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]]; then
+    if [[ ${SELECTED_COMPONENTS[node]} -eq 0 ]]; then
+        log_info "nvim selected: forcing node (required for treesitter)"
+        SELECTED_COMPONENTS[node]=1
+    fi
+    if [[ ${SELECTED_COMPONENTS[ripgrep]} -eq 0 ]]; then
+        log_info "nvim selected: forcing ripgrep (required for Telescope)"
+        SELECTED_COMPONENTS[ripgrep]=1
+    fi
+    if [[ ${SELECTED_COMPONENTS[fd]} -eq 0 ]]; then
+        log_info "nvim selected: forcing fd (required for Telescope)"
+        SELECTED_COMPONENTS[fd]=1
+    fi
+    if [[ ${SELECTED_COMPONENTS[lazygit]} -eq 0 ]]; then
+        log_info "nvim selected: forcing lazygit (used by nvim plugin)"
+        SELECTED_COMPONENTS[lazygit]=1
+    fi
+fi
+
 # Build package list based on selections
 ALL_PACKAGES=("${REQUIRED_PACKAGES[@]}")
 
@@ -156,6 +186,16 @@ fi
 if [[ ${SELECTED_COMPONENTS[python]} -eq 1 ]]; then
     log_info "Python 3.12 selected"
     ALL_PACKAGES+=(${COMPONENT_PACKAGES[python]})
+fi
+
+if [[ ${SELECTED_COMPONENTS[ripgrep]} -eq 1 ]]; then
+    log_info "ripgrep selected"
+    ALL_PACKAGES+=(${COMPONENT_PACKAGES[ripgrep]})
+fi
+
+if [[ ${SELECTED_COMPONENTS[fd]} -eq 1 ]]; then
+    log_info "fd selected"
+    ALL_PACKAGES+=(${COMPONENT_PACKAGES[fd]})
 fi
 
 # Check if packages are installed
@@ -172,8 +212,16 @@ if [[ ${#MISSING_PACKAGES[@]} -gt 0 ]]; then
     $SUDO_CMD apt-get install -y "${MISSING_PACKAGES[@]}"
 fi
 
-# Install Neovim if not present
-if ! command -v nvim &> /dev/null; then
+# Create fd symlink if installed (package name is fd-find, binary is fdfind)
+if [[ ${SELECTED_COMPONENTS[fd]} -eq 1 ]] && ! command -v fd &> /dev/null; then
+    if command -v fdfind &> /dev/null; then
+        log_info "Creating symlink for fd (fdfind -> /usr/local/bin/fd)"
+        $SUDO_CMD ln -sf "$(which fdfind)" /usr/local/bin/fd
+    fi
+fi
+
+# Install Neovim if selected
+if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]] && ! command -v nvim &> /dev/null; then
     log_info "Installing Neovim..."
     NVIM_VERSION=$(curl -s https://api.github.com/repos/neovim/neovim/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
     NVIM_URL="https://github.com/neovim/neovim/releases/download/$NVIM_VERSION/nvim-linux-x86_64.tar.gz"
@@ -186,6 +234,20 @@ if ! command -v nvim &> /dev/null; then
 
     # Symlink to PATH
     $SUDO_CMD ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim 2>/dev/null || true
+fi
+
+# Install lazygit if selected and not present
+if [[ ${SELECTED_COMPONENTS[lazygit]} -eq 1 ]] && ! command -v lazygit &> /dev/null; then
+    log_info "Installing lazygit..."
+    LAZYGIT_VERSION=$(curl -s https://api.github.com/repos/jesseduffield/lazygit/releases/latest | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4)
+    LAZYGIT_URL="https://github.com/jesseduffield/lazygit/releases/download/$LAZYGIT_VERSION/lazygit_${LAZYGIT_VERSION#v}_Linux_x86_64.tar.gz"
+
+    if [[ ! -d /tmp/lazygit ]]; then
+        mkdir -p /tmp/lazygit
+        curl -sL "$LAZYGIT_URL" | tar xzf - -C /tmp/lazygit
+        $SUDO_CMD install -m 755 /tmp/lazygit/lazygit /usr/local/bin/lazygit
+        rm -rf /tmp/lazygit
+    fi
 fi
 
 # Install Docker if selected and not present
@@ -292,7 +354,6 @@ log_info "Creating symlinks..."
 
 # Ensure directories exist
 mkdir -p "$HOME/.config/git"
-mkdir -p "$HOME/.config/nvim"
 mkdir -p "$HOME/.claude"
 
 # zshrc
@@ -303,10 +364,13 @@ log_info "Symlinked .zshrc"
 ln -sf "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
 log_info "Symlinked .tmux.conf"
 
-# nvim (entire directory)
-rm -rf "$HOME/.config/nvim" || true
-ln -sf "$REPO_DIR/nvim" "$HOME/.config/nvim"
-log_info "Symlinked nvim config"
+# nvim (entire directory) — only if nvim selected
+if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]]; then
+    mkdir -p "$HOME/.config/nvim"
+    rm -rf "$HOME/.config/nvim" || true
+    ln -sf "$REPO_DIR/nvim" "$HOME/.config/nvim"
+    log_info "Symlinked nvim config"
+fi
 
 # gitconfig
 ln -sf "$REPO_DIR/git/.gitconfig" "$HOME/.gitconfig"
@@ -349,9 +413,11 @@ fi
 log_info "Installing Tmux plugins..."
 "$HOME/.tmux/plugins/tpm/bin/install_plugins" 2>/dev/null || log_warn "Could not auto-install tmux plugins. Run: prefix + I in tmux"
 
-# ===== Install Neovim plugins =====
-log_info "Installing Neovim plugins (this may take a moment)..."
-nvim --headless "+Lazy! sync" +qa 2>/dev/null || log_warn "Could not auto-install nvim plugins. Run: :Lazy sync in nvim"
+# ===== Install Neovim plugins (if nvim selected) =====
+if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]]; then
+    log_info "Installing Neovim plugins (this may take a moment)..."
+    nvim --headless "+Lazy! sync" +qa 2>/dev/null || log_warn "Could not auto-install nvim plugins. Run: :Lazy sync in nvim"
+fi
 
 # ===== Set default shell to zsh =====
 if [[ "$SHELL" != "$(which zsh)" ]]; then
@@ -375,11 +441,14 @@ echo ""
 echo "Summary:"
 echo "=========="
 echo "✓ System dependencies installed"
-echo "✓ Neovim installed"
 [[ ${SELECTED_COMPONENTS[node]} -eq 1 ]] && echo "✓ Node.js and npm installed"
 [[ ${SELECTED_COMPONENTS[python]} -eq 1 ]] && echo "✓ Python 3.12 installed"
 [[ ${SELECTED_COMPONENTS[docker]} -eq 1 ]] && echo "✓ Docker installed"
 [[ ${SELECTED_COMPONENTS[gh]} -eq 1 ]] && echo "✓ GitHub CLI (gh) installed"
+[[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]] && echo "✓ Neovim installed"
+[[ ${SELECTED_COMPONENTS[ripgrep]} -eq 1 ]] && echo "✓ ripgrep installed"
+[[ ${SELECTED_COMPONENTS[fd]} -eq 1 ]] && echo "✓ fd installed"
+[[ ${SELECTED_COMPONENTS[lazygit]} -eq 1 ]] && echo "✓ lazygit installed"
 echo "✓ Oh My Zsh configured"
 echo "✓ Zsh plugins installed (autosuggestions, syntax-highlighting)"
 echo "✓ Spaceship prompt theme installed"
@@ -387,7 +456,7 @@ echo "✓ Tmux plugin manager installed"
 echo "✓ Config files symlinked from $REPO_DIR"
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"
-echo "✓ Neovim plugins installed"
+[[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]] && echo "✓ Neovim plugins installed"
 echo ""
 echo "Backup location: $BACKUP_DIR"
 echo ""
