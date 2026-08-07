@@ -156,8 +156,41 @@ if ($SelectedComponents['vscode']) {
     Install-AppWithFallback -Name "Visual Studio Code" -WingetId "Microsoft.VisualStudioCode" -ExeFilter "VSCodeSetup-x64-*.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/MERGETASKS=!runcode"
 }
 
+$EimProvisioned = $false
 if ($SelectedComponents['eim']) {
     Install-AppWithFallback -Name "Espressif EIM" -WingetId "Espressif.EIM-CLI" -ExeFilter "eim-gui-windows-x64-*.exe" -SilentArgs "/S"
+
+    Write-Info "Refreshing PATH to find eim command..."
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    if (Get-Command eim -ErrorAction SilentlyContinue) {
+        Write-Info "Running ESP-IDF provisioning via EIM..."
+        $EimConfigSource = Join-Path $RepoDir "eim\eim_config.toml"
+
+        if (Test-Path $EimConfigSource) {
+            $EimConfigTemp = Join-Path $env:TEMP "eim_config.toml"
+            $EimConfigContent = Get-Content -Path $EimConfigSource -Raw
+            $EimConfigContent = $EimConfigContent -replace 'config_file_save_path\s*=\s*[''"].*?[''"]', "config_file_save_path = '$env:USERPROFILE\Downloads\eim_config.toml'"
+            Set-Content -Path $EimConfigTemp -Value $EimConfigContent -Force
+
+            & eim install --config $EimConfigTemp
+            if ($LASTEXITCODE -eq 0) {
+                Write-Info "ESP-IDF provisioned successfully"
+                $EimProvisioned = $true
+            }
+            else {
+                Write-Warn "EIM provisioning failed with exit code $LASTEXITCODE"
+            }
+
+            Remove-Item -Path $EimConfigTemp -Force -ErrorAction SilentlyContinue
+        }
+        else {
+            Write-Warn "EIM config not found at $EimConfigSource"
+        }
+    }
+    else {
+        Write-Warn "eim command not found. You may need to restart your terminal and run: eim install --config $RepoDir\eim\eim_config.toml"
+    }
 }
 
 Write-Info "Installing PSReadLine module..."
@@ -266,6 +299,7 @@ if ($SelectedComponents['fd']) { Write-Host "[OK] fd installed" }
 if ($SelectedComponents['lazygit']) { Write-Host "[OK] lazygit installed" }
 if ($SelectedComponents['vscode']) { Write-Host "[OK] Visual Studio Code installed" }
 if ($SelectedComponents['eim']) { Write-Host "[OK] Espressif EIM installed" }
+if ($EimProvisioned) { Write-Host "[OK] ESP-IDF provisioned via EIM" }
 Write-Host "[OK] Oh My Posh configured"
 Write-Host "[OK] PSReadLine configured"
 Write-Host "[OK] Config files copied"
