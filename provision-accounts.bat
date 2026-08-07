@@ -31,11 +31,12 @@ set "TEMP_SCRIPT=%TEMP%\provision-accounts.ps1"
 
 echo [INFO] Downloading provision-accounts.ps1 from GitHub...
 
-REM Download the script
+REM Download the script with correct UTF-8 encoding
 powershell -NoProfile -Command ^
     "$ProgressPreference = 'SilentlyContinue'; " ^
     "try { " ^
-    "  Invoke-WebRequest -Uri '%GITHUB_URL%' -OutFile '%TEMP_SCRIPT%' -UseBasicParsing; " ^
+    "  $content = (Invoke-WebRequest -Uri '%GITHUB_URL%' -UseBasicParsing).Content; " ^
+    "  [System.IO.File]::WriteAllText('%TEMP_SCRIPT%', $content, [System.Text.Encoding]::UTF8); " ^
     "  exit 0; " ^
     "} catch { " ^
     "  Write-Host '[ERROR] Failed to download script: '$_.Exception.Message -ForegroundColor Red; " ^
