@@ -23,21 +23,13 @@ if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-if ($PSVersionTable.PSVersion.Major -lt 7) {
+$NeedsPS7 = $PSVersionTable.PSVersion.Major -lt 7
+if ($NeedsPS7) {
     Write-Warn "PowerShell 7+ recommended for oh-my-posh and PSReadLine features."
-    if (Is-Interactive) {
-        $install_ps7 = Read-Host "Install PowerShell 7? (y/n)"
-        if ($install_ps7 -eq 'y') {
-            Write-Info "Installing PowerShell 7..."
-            winget install --id Microsoft.PowerShell -e --source winget --accept-package-agreements --accept-source-agreements
-            Write-Warn "Please relaunch in pwsh and run this script again."
-            exit 0
-        }
-    }
 }
 
-$SelectedComponents = @{'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
-$OptionalComponents = @{'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'}
+$SelectedComponents = @{'powershell7'=$false; 'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
+$OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -46,6 +38,9 @@ function Select-Components {
     }
 
     $options = @('node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit')
+    if ($NeedsPS7) {
+        $options = @('powershell7') + $options
+    }
     $current = 0
     $done = $false
 
@@ -133,7 +128,7 @@ if ($SelectedComponents['nvim']) {
 }
 
 $PackagesToInstall = @('JanDeDobbeleer.OhMyPosh')
-$ComponentPackages = @{'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'}
+$ComponentPackages = @{'powershell7'='Microsoft.PowerShell'; 'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'}
 
 foreach ($comp in $ComponentPackages.Keys) {
     if ($SelectedComponents[$comp]) {
@@ -260,6 +255,7 @@ Write-Host "Summary:"
 Write-Host "=========="
 Write-Host "[OK] Git installed"
 Write-Host "[OK] System packages installed"
+if ($SelectedComponents['powershell7']) { Write-Host "[OK] PowerShell 7 installed" }
 if ($SelectedComponents['node']) { Write-Host "[OK] Node.js and npm installed" }
 if ($SelectedComponents['python']) { Write-Host "[OK] Python 3.12 installed" }
 if ($SelectedComponents['docker']) { Write-Host "[OK] Docker Desktop installed" }
