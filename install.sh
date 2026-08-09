@@ -340,6 +340,7 @@ CONFIG_ITEMS=(
     "$HOME/.gitconfig"
     "$HOME/.config/git/ignore"
     "$HOME/.claude/settings.json"
+    "$HOME/.claude/skills/second-brain-sync"
 )
 
 for item in "${CONFIG_ITEMS[@]}"; do
@@ -383,6 +384,11 @@ log_info "Symlinked git ignore"
 # claude settings
 ln -sf "$REPO_DIR/claude/settings.json" "$HOME/.claude/settings.json"
 log_info "Symlinked .claude/settings.json"
+
+# claude skills - second-brain-sync
+mkdir -p "$HOME/.claude/skills"
+ln -sf "$REPO_DIR/claude/skills/second-brain-sync" "$HOME/.claude/skills/second-brain-sync"
+log_info "Symlinked .claude/skills/second-brain-sync"
 
 # ===== Configure git identity =====
 if [[ ! -f "$HOME/.gitconfig.local" ]]; then
@@ -454,6 +460,7 @@ echo "✓ Zsh plugins installed (autosuggestions, syntax-highlighting)"
 echo "✓ Spaceship prompt theme installed"
 echo "✓ Tmux plugin manager installed"
 echo "✓ Config files symlinked from $REPO_DIR"
+echo "✓ Claude Code skill 'second-brain-sync' symlinked"
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"
 [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]] && echo "✓ Neovim plugins installed"
