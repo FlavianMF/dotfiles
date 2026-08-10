@@ -20,6 +20,9 @@ Write-Info "Conta aluno: '$AlunoName' (sem senha)"
 $AdminPassword = ConvertTo-SecureString $AdminPasswordPlain -AsPlainText -Force
 $AlunoPassword = $null
 
+Write-Info "Ajustando política local de senha (permitir senha em branco)..."
+net accounts /minpwlen:0 | Out-Null
+
 function New-OrUpdateLocalAccount {
     param(
         [string]$Username,
@@ -36,7 +39,12 @@ function New-OrUpdateLocalAccount {
 
         if ($existingUser) {
             Write-Info "Conta '$Username' já existe, atualizando senha..."
-            Set-LocalUser -Name $Username -Password $SecurePassword -PasswordNeverExpires $true
+            if ($null -eq $SecurePassword) {
+                Set-LocalUser -Name $Username -Password (New-Object System.Security.SecureString) -PasswordNeverExpires $true
+            }
+            else {
+                Set-LocalUser -Name $Username -Password $SecurePassword -PasswordNeverExpires $true
+            }
             Write-Info "Senha atualizada para '$Username'"
         }
         else {
