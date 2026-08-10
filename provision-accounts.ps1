@@ -155,15 +155,23 @@ if ($guestUser) {
 }
 
 $SpecialAccountsPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
-if (Test-Path $SpecialAccountsPath) {
-    foreach ($acct in @($AdminName, $AlunoName)) {
-        $existing = Get-ItemProperty -Path $SpecialAccountsPath -Name $acct -ErrorAction SilentlyContinue
-        if ($null -ne $existing -and $existing.$acct -eq 0) {
-            Write-Warn "Conta '$acct' estava marcada como oculta no registro; removendo restrição..."
-            Remove-ItemProperty -Path $SpecialAccountsPath -Name $acct -ErrorAction SilentlyContinue
-        }
-    }
+if (-not (Test-Path $SpecialAccountsPath)) {
+    New-Item -Path $SpecialAccountsPath -Force | Out-Null
 }
+foreach ($acct in @($AdminName, $AlunoName)) {
+    Set-ItemProperty -Path $SpecialAccountsPath -Name $acct -Value 1 -Type DWord
+}
+Write-Info "Contas '$AdminName' e '$AlunoName' forçadas como visíveis nas telas de login"
+
+Write-Host ""
+Write-Info "Configurando tela de login para sempre pedir usuário+senha (Other user)..."
+
+$PoliciesSystemPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+if (-not (Test-Path $PoliciesSystemPath)) {
+    New-Item -Path $PoliciesSystemPath -Force | Out-Null
+}
+Set-ItemProperty -Path $PoliciesSystemPath -Name "dontdisplaylastusername" -Value 1 -Type DWord
+Write-Info "Configurado: Ctrl+Alt+Del > Trocar usuário agora mostra campos em branco (Other user)"
 
 Write-Host ""
 Write-Info "Configurando auto-login para conta '$AlunoName'..."
@@ -199,6 +207,8 @@ Write-Host "[OK] Conta admin '$AdminName' criada/atualizada"
 Write-Host "[OK] Perfil de '$AdminName' pré-inicializado"
 Write-Host "[OK] Conta aluno '$AlunoName' criada/atualizada"
 Write-Host "[OK] Conta Guest desabilitada"
+Write-Host "[OK] Contas forçadas como visíveis (SpecialAccounts\UserList)"
+Write-Host "[OK] Tela de login configurada para pedir usuário+senha (Other user)"
 Write-Host "[OK] Auto-login configurado para '$AlunoName'"
 Write-Host ""
 Write-Host "Próximos passos:"
@@ -208,9 +218,8 @@ Write-Host "     (a tela de login é pulada automaticamente)"
 Write-Host ""
 Write-Host "2. Para fazer login com '$AdminName' e verificar privilégios:"
 Write-Host "   → Pressione Ctrl+Alt+Del > 'Trocar usuário'"
-Write-Host "   → No Windows 11, '$AdminName' pode não aparecer como ícone —"
-Write-Host "     clique em 'Outro usuário' e digite '$AdminName' manualmente"
-Write-Host "   → Digite a senha (perfil já pré-criado, login deve ser rápido)"
+Write-Host "   → Agora deve aparecer 'Other user' com campos em branco"
+Write-Host "   → Digite '$AdminName' e a senha (perfil já pré-criado, login deve ser rápido)"
 Write-Host "   → IMPORTANTE: Não use 'Sair' nem reinicie — esses fluxos"
 Write-Host "     reaplicam o auto-login, levando de volta a '$AlunoName'"
 Write-Host ""
