@@ -78,14 +78,30 @@ def semester_key(created: str) -> str:
 
 
 def shard_rows(rows: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
-    """Split rows into semester shards if the type exceeds SHARD_THRESHOLD, else one shard."""
+    """Split rows into semester shards if the type exceeds SHARD_THRESHOLD, else one shard.
+
+    A semester itself can still exceed the threshold (e.g. a bulk import that
+    stamps the same `created` date on hundreds of notes) — semester grouping
+    alone doesn't bound shard size, so oversized semesters get further split
+    into fixed-size chunks.
+    """
     if len(rows) <= SHARD_THRESHOLD:
         return {"": rows}
-    shards: dict[str, list[dict[str, str]]] = {}
+    by_semester: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         key = semester_key(row["created"])
-        shards.setdefault(key, []).append(row)
-    return dict(sorted(shards.items(), reverse=True))
+        by_semester.setdefault(key, []).append(row)
+
+    shards: dict[str, list[dict[str, str]]] = {}
+    for key, semester_rows in sorted(by_semester.items(), reverse=True):
+        if len(semester_rows) <= SHARD_THRESHOLD:
+            shards[key] = semester_rows
+            continue
+        for i in range(0, len(semester_rows), SHARD_THRESHOLD):
+            chunk_num = i // SHARD_THRESHOLD + 1
+            suffix = key if chunk_num == 1 else f"{key}-{chunk_num}"
+            shards[suffix] = semester_rows[i : i + SHARD_THRESHOLD]
+    return shards
 
 
 def render_table(rows: list[dict[str, str]]) -> str:
