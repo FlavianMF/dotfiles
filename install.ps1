@@ -131,6 +131,99 @@ function Install-AppWithFallback {
     }
 }
 
+function Install-CP210xDriver {
+    Write-Info "Installing Silicon Labs CP210x USB-to-UART driver..."
+    $ZipUrl = "https://www.silabs.com/documents/public/software/CP210x_Universal_Windows_Driver.zip"
+    $ZipPath = Join-Path $env:TEMP "CP210x_Driver.zip"
+    $ExtractPath = Join-Path $env:TEMP "CP210x_Driver"
+    $InstallerPath = $null
+
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipPath -UseBasicParsing -ErrorAction Stop
+        Remove-Item -Path $ExtractPath -Recurse -Force -ErrorAction SilentlyContinue
+        Expand-Archive -Path $ZipPath -DestinationPath $ExtractPath -Force
+        $found = Get-ChildItem -Path $ExtractPath -Filter "CP210xVCPInstaller_x64.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $InstallerPath = $found.FullName }
+    }
+    catch {
+        Write-Warn "CP210x driver download failed: $_"
+    }
+
+    if (-not $InstallerPath) {
+        $LocalExe = Get-ChildItem -Path "$RepoDir\exes" -Filter "CP210xVCPInstaller_x64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($LocalExe) {
+            Write-Info "Using local installer for CP210x driver: $($LocalExe.Name)"
+            $InstallerPath = $LocalExe.FullName
+        }
+    }
+
+    if (-not $InstallerPath) {
+        Write-Warn "CP210x driver installer not available (download failed, none found in exes\). Skipping — install manually if your board needs it."
+        return
+    }
+
+    $proc = Start-Process -FilePath $InstallerPath -ArgumentList "/S", "/SE" -Wait -PassThru
+    if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+        Write-Info "CP210x driver installed successfully"
+        $script:CP210xInstalled = $true
+    }
+    else {
+        Write-Warn "CP210x driver installer exited with code $($proc.ExitCode)"
+    }
+
+    Remove-Item -Path $ZipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $ExtractPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Install-CH340Driver {
+    Write-Info "Installing WCH CH340 USB-to-UART driver..."
+    $DownloadUrl = "https://www.wch.cn/downloads/CH341SER_EXE.html"
+    $ExePath = Join-Path $env:TEMP "CH341SER.EXE"
+    $downloaded = $false
+
+    try {
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $ExePath -UseBasicParsing -ErrorAction Stop
+        $bytes = [System.IO.File]::ReadAllBytes($ExePath)
+        if ($bytes.Length -gt 2 -and $bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+            $downloaded = $true
+        }
+        else {
+            Write-Warn "CH340 download did not return a valid executable (WCH download link may have changed)"
+            Remove-Item -Path $ExePath -Force -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+        Write-Warn "CH340 driver download failed: $_"
+    }
+
+    if (-not $downloaded) {
+        $LocalExe = Get-ChildItem -Path "$RepoDir\exes" -Filter "CH341SER.EXE" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($LocalExe) {
+            Write-Info "Using local installer for CH340 driver: $($LocalExe.Name)"
+            Copy-Item -Path $LocalExe.FullName -Destination $ExePath -Force
+            $downloaded = $true
+        }
+    }
+
+    if (-not $downloaded) {
+        Write-Warn "CH340 driver installer not available (download failed, none found in exes\). Skipping — install manually if your board needs it (place CH341SER.EXE in exes\ to enable the fallback)."
+        return
+    }
+
+    $proc = Start-Process -FilePath $ExePath -ArgumentList "/S" -Wait -PassThru
+    if ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010) {
+        Write-Info "CH340 driver installed successfully"
+        $script:CH340Installed = $true
+    }
+    else {
+        Write-Warn "CH340 driver installer exited with code $($proc.ExitCode)"
+    }
+
+    Remove-Item -Path $ExePath -Force -ErrorAction SilentlyContinue
+}
+
 Select-Components
 
 $WingetScope = if ($SystemWide) { 'machine' } else { 'user' }
@@ -188,6 +281,8 @@ if ($SelectedComponents['vscode']) {
 }
 
 $EimProvisioned = $false
+$CP210xInstalled = $false
+$CH340Installed = $false
 if ($SelectedComponents['eim']) {
     Install-AppWithFallback -Name "Espressif EIM" -WingetId "Espressif.EIM-CLI" -ExeFilter "eim-gui-windows-x64-*.exe" -SilentArgs "/S"
 
@@ -222,6 +317,9 @@ if ($SelectedComponents['eim']) {
     else {
         Write-Warn "eim command not found. You may need to restart your terminal and run: eim install --config $RepoDir\eim\eim_config.toml"
     }
+
+    Install-CP210xDriver
+    Install-CH340Driver
 }
 
 Write-Info "Installing PSReadLine module..."
@@ -332,6 +430,10 @@ if ($SelectedComponents['lazygit']) { Write-Host "[OK] lazygit installed" }
 if ($SelectedComponents['vscode']) { Write-Host "[OK] Visual Studio Code installed" }
 if ($SelectedComponents['eim']) { Write-Host "[OK] Espressif EIM installed" }
 if ($EimProvisioned) { Write-Host "[OK] ESP-IDF provisioned via EIM" }
+if ($SelectedComponents['eim']) {
+    if ($CP210xInstalled) { Write-Host "[OK] CP210x USB driver installed" } else { Write-Host "[WARN] CP210x USB driver NOT installed (see warnings above)" }
+    if ($CH340Installed) { Write-Host "[OK] CH340 USB driver installed" } else { Write-Host "[WARN] CH340 USB driver NOT installed (see warnings above)" }
+}
 Write-Host "[OK] Oh My Posh configured"
 Write-Host "[OK] PSReadLine configured"
 Write-Host "[OK] Config files copied"
