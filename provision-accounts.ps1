@@ -105,10 +105,38 @@ function New-OrUpdateLocalAccount {
     }
 }
 
+function Initialize-UserProfile {
+    param(
+        [string]$Username,
+        [securestring]$SecurePassword
+    )
+
+    Write-Info "Pré-criando perfil de usuário para '$Username' (evita que a conta fique 'invisível' na tela de login)..."
+
+    try {
+        $credential = New-Object System.Management.Automation.PSCredential($Username, $SecurePassword)
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" `
+            -ArgumentList "/c", "exit" `
+            -Credential $credential `
+            -WorkingDirectory "$env:SystemRoot\System32" `
+            -WindowStyle Hidden `
+            -Wait -ErrorAction Stop
+
+        Write-Info "Perfil de '$Username' inicializado (C:\Users\$Username deve existir agora)"
+    }
+    catch {
+        Write-Warn "Não foi possível pré-inicializar o perfil de '$Username': $_"
+        Write-Warn "A conta ainda funciona via 'Outro usuário' na tela de login, mas o perfil só será criado no primeiro login manual."
+    }
+}
+
 Write-Info "Iniciando provisionamento de contas locais..."
 Write-Host ""
 
 New-OrUpdateLocalAccount -Username $AdminName -SecurePassword $AdminPassword -FullName "Administrator Account" -Description "Conta administrativa" -AsAdmin
+Write-Host ""
+
+Initialize-UserProfile -Username $AdminName -SecurePassword $AdminPassword
 Write-Host ""
 
 New-OrUpdateLocalAccount -Username $AlunoName -SecurePassword $AlunoPassword -FullName "Student Account" -Description "Conta de aluno"
@@ -123,6 +151,17 @@ if ($guestUser) {
     }
     else {
         Write-Info "Conta Guest já está desabilitada"
+    }
+}
+
+$SpecialAccountsPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
+if (Test-Path $SpecialAccountsPath) {
+    foreach ($acct in @($AdminName, $AlunoName)) {
+        $existing = Get-ItemProperty -Path $SpecialAccountsPath -Name $acct -ErrorAction SilentlyContinue
+        if ($null -ne $existing -and $existing.$acct -eq 0) {
+            Write-Warn "Conta '$acct' estava marcada como oculta no registro; removendo restrição..."
+            Remove-ItemProperty -Path $SpecialAccountsPath -Name $acct -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -157,6 +196,7 @@ Write-Host ""
 Write-Host "Resumo:"
 Write-Host "=========="
 Write-Host "[OK] Conta admin '$AdminName' criada/atualizada"
+Write-Host "[OK] Perfil de '$AdminName' pré-inicializado"
 Write-Host "[OK] Conta aluno '$AlunoName' criada/atualizada"
 Write-Host "[OK] Conta Guest desabilitada"
 Write-Host "[OK] Auto-login configurado para '$AlunoName'"
@@ -168,7 +208,9 @@ Write-Host "     (a tela de login é pulada automaticamente)"
 Write-Host ""
 Write-Host "2. Para fazer login com '$AdminName' e verificar privilégios:"
 Write-Host "   → Pressione Ctrl+Alt+Del > 'Trocar usuário'"
-Write-Host "   → Selecione '$AdminName' e digite a senha"
+Write-Host "   → No Windows 11, '$AdminName' pode não aparecer como ícone —"
+Write-Host "     clique em 'Outro usuário' e digite '$AdminName' manualmente"
+Write-Host "   → Digite a senha (perfil já pré-criado, login deve ser rápido)"
 Write-Host "   → IMPORTANTE: Não use 'Sair' nem reinicie — esses fluxos"
 Write-Host "     reaplicam o auto-login, levando de volta a '$AlunoName'"
 Write-Host ""

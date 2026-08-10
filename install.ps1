@@ -13,6 +13,21 @@ function Is-Interactive {
     return [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
 }
 
+$IsElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $IsElevated) {
+    Write-Warn "Not running as Administrator. Re-launching elevated (required for system-wide installs)..."
+    $RelaunchArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $MyInvocation.MyCommand.Path)
+    if ($NonInteractive) { $RelaunchArgs += '-NonInteractive' }
+    try {
+        $proc = Start-Process powershell -Verb RunAs -ArgumentList $RelaunchArgs -Wait -PassThru
+        exit $proc.ExitCode
+    }
+    catch {
+        Write-Error-Custom "Elevation was cancelled or failed: $_"
+        exit 1
+    }
+}
+
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BackupDir = Join-Path $env:USERPROFILE ".dotfiles-backup\$(Get-Date -UFormat %s)"
 
@@ -28,18 +43,19 @@ if ($NeedsPS7) {
     Write-Warn "PowerShell 7+ recommended for oh-my-posh and PSReadLine features."
 }
 
-$SelectedComponents = @{'powershell7'=$false; 'node'=$true; 'python'=$true; 'docker'=$false; 'gh'=$false; 'vscode'=$false; 'eim'=$false; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
+$SystemWide = $true
+$SelectedComponents = @{'powershell7'=$false; 'node'=$false; 'python'=$true; 'docker'=$false; 'gh'=$true; 'vscode'=$true; 'eim'=$true; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
 $OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
-        Write-Info "Running non-interactively. Installing default components: node, python"
+        Write-Info "Running non-interactively. Installing default components: python, vscode, eim, gh (system-wide install: enabled)"
         return
     }
 
-    $options = @('node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit')
+    $options = @('systemwide', 'node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit')
     if ($NeedsPS7) {
-        $options = @('powershell7') + $options
+        $options = @('systemwide', 'powershell7') + $options[1..($options.Count - 1)]
     }
     $current = 0
     $done = $false
@@ -54,8 +70,14 @@ function Select-Components {
             $comp = $options[$i]
             $marker = if ($i -eq $current) { '>' } else { ' ' }
             $color = if ($i -eq $current) { 'Cyan' } else { 'Gray' }
-            $checked = if ($SelectedComponents[$comp]) { 'X' } else { ' ' }
-            Write-Host "  $marker [$checked] $comp - $($OptionalComponents[$comp])" -ForegroundColor $color
+            if ($comp -eq 'systemwide') {
+                $checked = if ($SystemWide) { 'X' } else { ' ' }
+                Write-Host "  $marker [$checked] System-wide install - Installs for ALL Windows users, incl. future accounts (unchecked = current user only)" -ForegroundColor $color
+            }
+            else {
+                $checked = if ($SelectedComponents[$comp]) { 'X' } else { ' ' }
+                Write-Host "  $marker [$checked] $comp - $($OptionalComponents[$comp])" -ForegroundColor $color
+            }
         }
 
         Write-Host ""
@@ -67,7 +89,10 @@ function Select-Components {
         switch ($key.VirtualKeyCode) {
             38 { $current = ($current - 1 + $options.Count) % $options.Count }
             40 { $current = ($current + 1) % $options.Count }
-            32 { $SelectedComponents[$options[$current]] = -not $SelectedComponents[$options[$current]] }
+            32 {
+                if ($options[$current] -eq 'systemwide') { $script:SystemWide = -not $script:SystemWide }
+                else { $SelectedComponents[$options[$current]] = -not $SelectedComponents[$options[$current]] }
+            }
             13 { $done = $true }
         }
     }
@@ -79,7 +104,7 @@ function Install-AppWithFallback {
     param([string]$Name, [string]$WingetId, [string]$ExeFilter, [string[]]$SilentArgs)
 
     Write-Info "Installing $Name..."
-    winget install --id $WingetId -e --source winget --accept-package-agreements --accept-source-agreements -h 2>$null
+    winget install --id $WingetId -e --source winget --accept-package-agreements --accept-source-agreements --scope $WingetScope -h 2>$null
 
     if ($LASTEXITCODE -eq 0) {
         Write-Info "$Name installed successfully via winget"
@@ -87,6 +112,7 @@ function Install-AppWithFallback {
     }
 
     Write-Warn "Winget install failed or package not found, trying local installer..."
+    Write-Warn "Local installer fallback for $Name may not respect the --scope $WingetScope preference (installer-specific behavior, unverified)"
     $LocalExe = Get-ChildItem -Path "$RepoDir\exes" -Filter $ExeFilter -ErrorAction SilentlyContinue | Select-Object -First 1
 
     if ($LocalExe) {
@@ -106,6 +132,9 @@ function Install-AppWithFallback {
 }
 
 Select-Components
+
+$WingetScope = if ($SystemWide) { 'machine' } else { 'user' }
+Write-Info "Install scope: $WingetScope"
 
 # If nvim selected, force-select its dependencies
 if ($SelectedComponents['nvim']) {
@@ -139,11 +168,12 @@ foreach ($comp in $ComponentPackages.Keys) {
 
 Write-Info "Installing packages via winget..."
 
-Install-AppWithFallback -Name "Git" -WingetId "Git.Git" -ExeFilter "Git-*-64-bit.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS"
+$GitScopeArg = if ($SystemWide) { '/ALLUSERS=1' } else { '/CURRENTUSER' }
+Install-AppWithFallback -Name "Git" -WingetId "Git.Git" -ExeFilter "Git-*-64-bit.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", $GitScopeArg
 
 foreach ($pkg in $PackagesToInstall) {
     Write-Info "Installing $pkg..."
-    winget install --id $pkg -e --source winget --accept-package-agreements --accept-source-agreements -h 2>$null
+    winget install --id $pkg -e --source winget --accept-package-agreements --accept-source-agreements --scope $WingetScope -h 2>$null
     if ($LASTEXITCODE -eq 0) {
         Write-Info "$pkg installed successfully"
     }
@@ -153,7 +183,8 @@ foreach ($pkg in $PackagesToInstall) {
 }
 
 if ($SelectedComponents['vscode']) {
-    Install-AppWithFallback -Name "Visual Studio Code" -WingetId "Microsoft.VisualStudioCode" -ExeFilter "VSCodeSetup-x64-*.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/MERGETASKS=!runcode"
+    $VSCodeScopeArg = if ($SystemWide) { '/ALLUSERS=1' } else { '/CURRENTUSER' }
+    Install-AppWithFallback -Name "Visual Studio Code" -WingetId "Microsoft.VisualStudioCode" -ExeFilter "VSCodeSetup-x64-*.exe" -SilentArgs "/VERYSILENT", "/NORESTART", "/MERGETASKS=!runcode", $VSCodeScopeArg
 }
 
 $EimProvisioned = $false
@@ -286,6 +317,7 @@ Write-Info "Installation complete!"
 Write-Host ""
 Write-Host "Summary:"
 Write-Host "=========="
+Write-Host "[OK] Install scope: $WingetScope"
 Write-Host "[OK] Git installed"
 Write-Host "[OK] System packages installed"
 if ($SelectedComponents['powershell7']) { Write-Host "[OK] PowerShell 7 installed" }
