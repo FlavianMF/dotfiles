@@ -98,7 +98,10 @@ def render_table(rows: list[dict[str, str]]) -> str:
 
 
 def sanitize_type_name(note_type: str) -> str:
-    return note_type.strip().lower().replace(" ", "-")
+    safe = note_type.strip().lower()
+    for char in (" ", "/", "\\"):
+        safe = safe.replace(char, "-")
+    return safe or "unclassified"
 
 
 def build_manifest_files(vault_root: Path) -> dict[str, str]:
@@ -151,7 +154,7 @@ def write_manifests(vault_root: Path) -> bool:
     existing_by_type_files: set[Path] = set()
     by_type_dir = manifest_dir / "by_type"
     if by_type_dir.is_dir():
-        existing_by_type_files = {p for p in by_type_dir.glob("*.md")}
+        existing_by_type_files = {p for p in by_type_dir.rglob("*.md")}
 
     desired_paths: set[Path] = set()
     for rel_name, content in desired.items():
@@ -166,6 +169,13 @@ def write_manifests(vault_root: Path) -> bool:
     for stale in existing_by_type_files - desired_paths:
         stale.unlink()
         changed = True
+        for parent in stale.parents:
+            if parent == by_type_dir or by_type_dir not in parent.parents:
+                break
+            try:
+                parent.rmdir()
+            except OSError:
+                break
 
     return changed
 
