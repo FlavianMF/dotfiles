@@ -152,3 +152,34 @@ alias zutty-fira='zutty --font "FiraCode Nerd Font Mono" --font-size 11'
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# ESP-IDF / EIM (Espressif) — activate on demand: run `get_idf` before working on ESP32 projects
+get_idf() {
+    local script
+    script=$(command ls "$HOME"/.espressif/tools/activate_idf_*.sh 2>/dev/null | head -n1)
+    if [[ -n "$script" ]]; then
+        \. "$script"
+    else
+        echo "No ESP-IDF activation script found in ~/.espressif/tools/. Run 'eim install --config eim_config-linux.toml' first." >&2
+    fi
+}
+
+# >>> ESP-IDF EIM PATH >>>
+# Added by ESP-IDF extension so the EIM CLI can be launched directly.
+case ":$PATH:" in
+  *:"/usr/bin":*) ;;
+  *) export PATH="/usr/bin:$PATH" ;;
+esac
+# <<< ESP-IDF EIM PATH <<<
+#
+if command -v yazi &> /dev/null; then
+    function y() {
+        local tmp="$(mktemp -t "yazi-cwd.XXXXXX")"
+        yazi "$@" --cwd-file="$tmp"
+        if cwd="$(cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+            builtin cd -- "$cwd"
+        fi
+        rm -f -- "$tmp"
+    }
+fi
+
