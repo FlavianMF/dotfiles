@@ -499,6 +499,16 @@ log_info "Creating symlinks..."
 mkdir -p "$HOME/.config/git"
 mkdir -p "$HOME/.claude/skills"
 
+# second-brain-sync skill lives in the obsidian_vault repo itself, not here
+# (keeps the skill's source versioned alongside the vault it manages, so a
+# fix ships to every consuming project via the normal docs/second_brain
+# submodule bump instead of needing a separate dotfiles update).
+VAULT_DIR="$HOME/obsidian_vault"
+if [[ ! -d "$VAULT_DIR/.git" ]]; then
+    log_info "Cloning obsidian_vault (second-brain-sync skill source)..."
+    git clone https://github.com/FlavianMF/obisidian_vault.git "$VAULT_DIR"
+fi
+
 # Symlink with fallback to copy if the filesystem doesn't support symlinks
 create_config_link() {
     local source="$1" target="$2"
@@ -527,7 +537,7 @@ fi
 create_config_link "$REPO_DIR/git/.gitconfig" "$HOME/.gitconfig"
 create_config_link "$REPO_DIR/git/ignore" "$HOME/.config/git/ignore"
 create_config_link "$REPO_DIR/claude/settings.json" "$HOME/.claude/settings.json"
-create_config_link "$REPO_DIR/claude/skills/second-brain-sync" "$HOME/.claude/skills/second-brain-sync"
+create_config_link "$VAULT_DIR/00_META/skills/second-brain-sync" "$HOME/.claude/skills/second-brain-sync"
 
 # ===== Configure git identity =====
 if [[ ! -f "$HOME/.gitconfig.local" ]]; then
