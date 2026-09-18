@@ -44,8 +44,8 @@ if ($NeedsPS7) {
 }
 
 $SystemWide = $true
-$SelectedComponents = @{'powershell7'=$false; 'node'=$false; 'python'=$true; 'docker'=$false; 'gh'=$true; 'vscode'=$true; 'eim'=$true; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false}
-$OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'}
+$SelectedComponents = @{'powershell7'=$false; 'node'=$false; 'python'=$true; 'docker'=$false; 'gh'=$true; 'vscode'=$true; 'eim'=$true; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false; 'wsl'=$false; 'ubuntu'=$false; 'usbipd'=$false}
+$OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'; 'wsl'='WSL 2 platform + kernel (Windows Subsystem for Linux)'; 'ubuntu'='Ubuntu distro for WSL (skips if a distro is already installed)'; 'usbipd'='usbipd-win (share USB devices from Windows into WSL)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -53,7 +53,7 @@ function Select-Components {
         return
     }
 
-    $options = @('systemwide', 'node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit')
+    $options = @('systemwide', 'node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit', 'wsl', 'ubuntu', 'usbipd')
     if ($NeedsPS7) {
         $options = @('systemwide', 'powershell7') + $options[1..($options.Count - 1)]
     }
@@ -156,8 +156,14 @@ if ($SelectedComponents['nvim']) {
     }
 }
 
+# If usbipd selected, force-select wsl (usbipd needs WSL running to attach devices into)
+if ($SelectedComponents['usbipd'] -and -not $SelectedComponents['wsl']) {
+    Write-Info "usbipd selected: forcing wsl (usbipd needs WSL running to attach devices into)"
+    $SelectedComponents['wsl'] = $true
+}
+
 $PackagesToInstall = @('JanDeDobbeleer.OhMyPosh')
-$ComponentPackages = @{'powershell7'='Microsoft.PowerShell'; 'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'}
+$ComponentPackages = @{'powershell7'='Microsoft.PowerShell'; 'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'; 'usbipd'='dorssel.usbipd-win'}
 
 foreach ($comp in $ComponentPackages.Keys) {
     if ($SelectedComponents[$comp]) {
@@ -221,6 +227,34 @@ if ($SelectedComponents['eim']) {
     }
     else {
         Write-Warn "eim command not found. You may need to restart your terminal and run: eim install --config $RepoDir\eim\eim_config.toml"
+    }
+}
+
+if ($SelectedComponents['wsl']) {
+    Write-Info "Enabling WSL platform (kernel + virtualization features)..."
+    wsl --install --no-distro 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Info "WSL platform installed/verified"
+    }
+    else {
+        Write-Warn "wsl --install --no-distro exited $LASTEXITCODE - may need a reboot or manual install (https://aka.ms/wslinstall)"
+    }
+}
+
+if ($SelectedComponents['ubuntu']) {
+    $ExistingDistros = (wsl -l -q 2>$null) -replace "`0", ''
+    if ($ExistingDistros -match 'Ubuntu') {
+        Write-Info "Ubuntu distro already installed, skipping"
+    }
+    else {
+        Write-Info "Installing Ubuntu distro for WSL..."
+        wsl --install -d Ubuntu 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Info "Ubuntu distro installed"
+        }
+        else {
+            Write-Warn "Ubuntu distro install exited $LASTEXITCODE"
+        }
     }
 }
 
@@ -332,6 +366,9 @@ if ($SelectedComponents['lazygit']) { Write-Host "[OK] lazygit installed" }
 if ($SelectedComponents['vscode']) { Write-Host "[OK] Visual Studio Code installed" }
 if ($SelectedComponents['eim']) { Write-Host "[OK] Espressif EIM installed" }
 if ($EimProvisioned) { Write-Host "[OK] ESP-IDF provisioned via EIM" }
+if ($SelectedComponents['wsl']) { Write-Host "[OK] WSL platform installed" }
+if ($SelectedComponents['ubuntu']) { Write-Host "[OK] Ubuntu distro installed" }
+if ($SelectedComponents['usbipd']) { Write-Host "[OK] usbipd-win installed" }
 Write-Host "[OK] Oh My Posh configured"
 Write-Host "[OK] PSReadLine configured"
 Write-Host "[OK] Config files copied"
@@ -345,4 +382,5 @@ Write-Host "1. Start a new PowerShell session"
 Write-Host "2. Set FiraCode Nerd Font in Windows Terminal"
 if ($SelectedComponents['gh']) { Write-Host "3. Run: gh auth login" }
 Write-Host "4. Add SSH keys to .ssh folder"
+if ($SelectedComponents['wsl']) { Write-Host "5. Reboot if this is the first time WSL was enabled on this machine" }
 Write-Host ""

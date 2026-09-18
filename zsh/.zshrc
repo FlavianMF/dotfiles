@@ -183,3 +183,5 @@ if command -v yazi &> /dev/null; then
     }
 fi
 
+export PATH="$PATH:/home/flv/bin"
+
