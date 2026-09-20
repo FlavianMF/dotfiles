@@ -2,6 +2,15 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Some sudoers configs (used by "sudo ./install.sh", see USAGE.md) reset $HOME
+# to the target user's home (root), which would symlink every dotfile into
+# /root instead of the real user's home. Resolve the invoking user's real home.
+if [[ -n "${SUDO_USER:-}" && "$EUID" -eq 0 ]]; then
+    REAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    [[ -n "$REAL_HOME" ]] && HOME="$REAL_HOME"
+fi
+
 BACKUP_DIR="$HOME/.dotfiles-backup/$(date +%s)"
 ZSH_CUSTOM="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
 
@@ -55,6 +64,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [gh]="GitHub CLI (gh)"
     [vscode]="Visual Studio Code (editor)"
     [eim]="Espressif EIM (ESP-IDF Installation Manager, CLI)"
+    [claudeskills]="Claude Code skills (plugins + npx skills-dir packages)"
     [nvim]="Neovim + LazyVim config"
     [ripgrep]="ripgrep (fast search, used by nvim Telescope)"
     [fd]="fd (fast file finder, used by nvim Telescope)"
@@ -79,6 +89,7 @@ declare -A SELECTED_COMPONENTS=(
     [gh]=1
     [vscode]=1
     [eim]=1
+    [claudeskills]=1
     [nvim]=0
     [ripgrep]=0
     [fd]=0
@@ -94,16 +105,17 @@ SYSTEM_WIDE=1
 # Interactive selection with keyboard navigation
 select_components() {
     if ! is_interactive; then
-        log_info "Running non-interactively. Installing default components: node, python, gh, vscode, eim (system-wide install: enabled)"
+        log_info "Running non-interactively. Installing default components: node, python, gh, vscode, eim, claudeskills (system-wide install: enabled)"
         SELECTED_COMPONENTS[node]=1
         SELECTED_COMPONENTS[python]=1
         SELECTED_COMPONENTS[gh]=1
         SELECTED_COMPONENTS[vscode]=1
         SELECTED_COMPONENTS[eim]=1
+        SELECTED_COMPONENTS[claudeskills]=1
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim nvim yazi ripgrep fd lazygit usbip)
+    local -a options=(systemwide node python docker gh vscode eim claudeskills nvim yazi ripgrep fd lazygit usbip)
     local current=0
     local done=0
     local old_stty
@@ -545,22 +557,35 @@ create_config_link "$VAULT_DIR/00_META/skills/second-brain-sync" "$HOME/.claude/
 # Declarative, not symlinked: installed_plugins.json/.skill-lock.json carry
 # absolute paths and machine metadata, so we replay the install commands
 # instead. Idempotent — safe to rerun on a machine that already has them.
-if command -v claude >/dev/null 2>&1; then
-    log_info "Reinstalling Claude Code plugins..."
-    claude plugin marketplace add anthropics/claude-plugins-official 2>/dev/null || true
-    claude plugin marketplace add JuliusBrussee/caveman 2>/dev/null || true
-    claude plugin install caveman@caveman -y 2>/dev/null || true
-    claude plugin install figma@claude-plugins-official -y 2>/dev/null || true
-else
-    log_warn "claude CLI not found, skipping plugin install"
-fi
+if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
+    # claude and npx are typically user-local (~/.local/bin, nvm's node bin
+    # dir) and invisible to sudo's secure_path — prepend them before checking.
+    export PATH="$HOME/.local/bin:$PATH"
+    NVM_NODE_BIN="$(find "$HOME/.nvm/versions/node" -maxdepth 2 -type d -name bin 2>/dev/null | sort -V | tail -1)"
+    [[ -n "$NVM_NODE_BIN" ]] && export PATH="$NVM_NODE_BIN:$PATH"
 
-if command -v npx >/dev/null 2>&1; then
-    log_info "Reinstalling skills-dir packages..."
-    npx skills add Leonxlnx/taste-skill || true
-    npx skills add vercel-labs/skills || true
-else
-    log_warn "npx not found, skipping skills-dir packages"
+    if command -v claude >/dev/null 2>&1; then
+        log_info "Reinstalling Claude Code plugins..."
+        claude plugin marketplace add anthropics/claude-plugins-official || true
+        claude plugin marketplace add JuliusBrussee/caveman || true
+        claude plugin install caveman@caveman -y || true
+        claude plugin install figma@claude-plugins-official -y || true
+    else
+        log_warn "claude CLI not found (checked PATH incl. ~/.local/bin), skipping plugin install"
+    fi
+
+    if command -v npx >/dev/null 2>&1; then
+        NODE_MAJOR="$(node -v 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')"
+        if [[ -n "$NODE_MAJOR" && "$NODE_MAJOR" -ge 20 ]]; then
+            log_info "Reinstalling skills-dir packages..."
+            npx skills add Leonxlnx/taste-skill || true
+            npx skills add vercel-labs/skills || true
+        else
+            log_warn "Node >=20 required by the skills CLI (found $(node -v 2>/dev/null || echo none)); skipping npx skills add. Install a newer Node (e.g. nvm) and rerun."
+        fi
+    else
+        log_warn "npx not found, skipping skills-dir packages"
+    fi
 fi
 
 # ===== Configure git identity =====
