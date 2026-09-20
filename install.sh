@@ -482,6 +482,7 @@ CONFIG_ITEMS=(
     "$HOME/.gitconfig"
     "$HOME/.config/git/ignore"
     "$HOME/.claude/settings.json"
+    "$HOME/.claude/CLAUDE.md"
     "$HOME/.claude/skills/second-brain-sync"
 )
 
@@ -537,7 +538,30 @@ fi
 create_config_link "$REPO_DIR/git/.gitconfig" "$HOME/.gitconfig"
 create_config_link "$REPO_DIR/git/ignore" "$HOME/.config/git/ignore"
 create_config_link "$REPO_DIR/claude/settings.json" "$HOME/.claude/settings.json"
+create_config_link "$REPO_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 create_config_link "$VAULT_DIR/00_META/skills/second-brain-sync" "$HOME/.claude/skills/second-brain-sync"
+
+# ===== Reinstall Claude Code plugins and skills-dir packages =====
+# Declarative, not symlinked: installed_plugins.json/.skill-lock.json carry
+# absolute paths and machine metadata, so we replay the install commands
+# instead. Idempotent — safe to rerun on a machine that already has them.
+if command -v claude >/dev/null 2>&1; then
+    log_info "Reinstalling Claude Code plugins..."
+    claude plugin marketplace add anthropics/claude-plugins-official 2>/dev/null || true
+    claude plugin marketplace add JuliusBrussee/caveman 2>/dev/null || true
+    claude plugin install caveman@caveman -y 2>/dev/null || true
+    claude plugin install figma@claude-plugins-official -y 2>/dev/null || true
+else
+    log_warn "claude CLI not found, skipping plugin install"
+fi
+
+if command -v npx >/dev/null 2>&1; then
+    log_info "Reinstalling skills-dir packages..."
+    npx skills add Leonxlnx/taste-skill || true
+    npx skills add vercel-labs/skills || true
+else
+    log_warn "npx not found, skipping skills-dir packages"
+fi
 
 # ===== Configure git identity =====
 if [[ ! -f "$HOME/.gitconfig.local" ]]; then
