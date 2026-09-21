@@ -141,6 +141,12 @@ export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.cargo/bin"
 
+# Local secrets (gitignored, per-machine — see dotfiles/secrets/)
+for _secret_env in "$HOME/dotfiles/secrets/"*.env(N); do
+  source "$_secret_env"
+done
+unset _secret_env
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'

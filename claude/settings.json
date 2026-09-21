@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  },
   "model": "sonnet",
   "hooks": {
     "SessionStart": [
@@ -70,13 +73,20 @@
   },
   "enabledPlugins": {
     "caveman@caveman": true,
-    "figma@claude-plugins-official": true
+    "figma@claude-plugins-official": true,
+    "fast-jev-compaction@fast-jev-compaction": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman"
+      }
+    },
+    "fast-jev-compaction": {
+      "source": {
+        "source": "github",
+        "repo": "tamaratran/fast-jev-compaction"
       }
     }
   },

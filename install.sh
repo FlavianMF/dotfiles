@@ -570,6 +570,8 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
         claude plugin marketplace add JuliusBrussee/caveman || true
         claude plugin install caveman@caveman -y || true
         claude plugin install figma@claude-plugins-official -y || true
+        claude plugin marketplace add tamaratran/fast-jev-compaction || true
+        claude plugin install fast-jev-compaction@fast-jev-compaction -y || true
     else
         log_warn "claude CLI not found (checked PATH incl. ~/.local/bin), skipping plugin install"
     fi
