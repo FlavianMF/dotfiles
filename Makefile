@@ -75,4 +75,6 @@ lint:
 	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/hooks/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
+	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
+	@python3 opencode/render_agents.py vendor/ecc/agents .cache/lint-agents --dry-run > /dev/null
 	@echo "lint ok"

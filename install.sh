@@ -132,6 +132,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [claudeskills]="Claude Code plugins (from settings.json) + skills in ~/.agents/skills"
     [codex]="OpenAI Codex CLI (npm, ~/.local) + ~/.codex config"
     [opencode]="OpenCode CLI (npm, ~/.local) + ~/.config/opencode config"
+    [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
     [nvim]="Neovim + LazyVim config"
     [ripgrep]="ripgrep (fast search, used by nvim Telescope)"
     [fd]="fd (fast file finder, used by nvim Telescope)"
@@ -160,6 +161,7 @@ declare -A SELECTED_COMPONENTS=(
     [claudeskills]=1
     [codex]=0
     [opencode]=0
+    [ecc]=0
     [nvim]=0
     [ripgrep]=0
     [fd]=0
@@ -186,7 +188,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim claudeskills codex opencode nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim claudeskills codex opencode ecc nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -263,7 +265,7 @@ select_components() {
 if [[ $HARNESS_ONLY -eq 1 ]]; then
     # Only the harness-related components make sense without system setup.
     for comp in "${!SELECTED_COMPONENTS[@]}"; do
-        [[ "$comp" == claudeskills ]] || SELECTED_COMPONENTS[$comp]=0
+        [[ "$comp" == claudeskills || "$comp" == ecc ]] || SELECTED_COMPONENTS[$comp]=0
     done
     log_info "Harness-only mode: skipping system packages, shell, tmux and editor setup"
 else
@@ -636,6 +638,9 @@ CONFIG_ITEMS=(
     "$HOME/.codex/config.toml"
     "$HOME/.codex/yolo.config.toml"
     "$HOME/.codex/AGENTS.md"
+    "$HOME/.codex/rules/dotfiles.rules"
+    "$HOME/.claude/rules/ecc"
+    "$HOME/.claude/rules/local"
     "$HOME/.config/opencode/opencode.json"
     "$HOME/.config/opencode/AGENTS.md"
 )
@@ -861,6 +866,33 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
     done
 fi
 
+# --- ECC pieces (vendor/ecc, pinned; see vendor/ecc/SOURCE.md) ---
+if [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]]; then
+    log_info "Linking vendored ECC skills, agents and rules..."
+    # Skills: canonical in ~/.agents/skills (Codex, OpenCode) + link for Claude.
+    for skill_dir in "$REPO_DIR"/vendor/ecc/skills/*/; do
+        link_shared_skill "$(basename "$skill_dir")" "${skill_dir%/}"
+    done
+    # Agents: Claude Code format. Codex has no agent-file equivalent (skills only).
+    for agent_file in "$REPO_DIR"/vendor/ecc/agents/*.md; do
+        create_config_link "$agent_file" "$HOME/.claude/agents/ecc-$(basename "$agent_file")"
+    done
+    # Path-scoped rules: only load when Claude reads a matching file.
+    create_config_link "$REPO_DIR/vendor/ecc/rules" "$HOME/.claude/rules/ecc"
+    create_config_link "$REPO_DIR/claude/rules" "$HOME/.claude/rules/local"
+    if [[ $OPENCODE_ACTIVE -eq 1 ]]; then
+        # OpenCode rejects Claude's agent frontmatter (tools/model), so it gets
+        # converted copies instead of links; only changed files are rewritten.
+        if [[ $DRY_RUN -eq 1 ]]; then
+            python3 "$REPO_DIR/opencode/render_agents.py" "$REPO_DIR/vendor/ecc/agents" \
+                "$HOME/.config/opencode/agents" --prefix ecc- --dry-run
+        else
+            as_user python3 "$REPO_DIR/opencode/render_agents.py" "$REPO_DIR/vendor/ecc/agents" \
+                "$HOME/.config/opencode/agents" --prefix ecc- || log_warn "OpenCode agent render failed"
+        fi
+    fi
+fi
+
 # --- Codex config ---
 if [[ $CODEX_ACTIVE -eq 1 ]]; then
     log_info "Configuring Codex (~/.codex)..."
@@ -879,6 +911,9 @@ if [[ $CODEX_ACTIVE -eq 1 ]]; then
         fi
     fi
     create_config_link "$REPO_DIR/codex/yolo.config.toml" "$HOME/.codex/yolo.config.toml"
+    # Command deny list (execpolicy). Codex writes its own approvals to
+    # ~/.codex/rules/default.rules, so ours lives in a separate file.
+    create_config_link "$REPO_DIR/codex/dotfiles.rules" "$HOME/.codex/rules/dotfiles.rules"
     create_config_link "$REPO_DIR/agents/AGENTS.md" "$HOME/.codex/AGENTS.md"
     HARNESS_CHECKLIST+=(
         "Codex: codex login (conta ChatGPT)"
@@ -994,6 +1029,7 @@ echo "✓ Config files symlinked from $REPO_DIR"
 echo "✓ Skill 'second-brain-sync' linked (~/.agents/skills + ~/.claude/skills)"
 [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]] && echo "✓ Claude Code plugins reconciled with claude/settings.json; skills in ~/.agents/skills"
 [[ $CODEX_ACTIVE -eq 1 ]] && echo "✓ Codex configured (~/.codex/config.toml rendered, AGENTS.md linked)"
+[[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
 [[ $OPENCODE_ACTIVE -eq 1 ]] && echo "✓ OpenCode configured (~/.config/opencode/opencode.json + AGENTS.md linked)"
 if [[ $HARNESS_ONLY -eq 0 ]]; then
 echo "✓ Git identity configured"

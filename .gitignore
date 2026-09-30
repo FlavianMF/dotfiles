@@ -60,3 +60,6 @@ temp/
 exes/
 *.exe
 *.zip
+
+# Python
+__pycache__/

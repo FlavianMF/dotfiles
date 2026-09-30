@@ -16,7 +16,11 @@
     },
     "playwright": {
       "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest"
+      ],
       "enabled": true
     },
     "github": {
@@ -62,7 +66,17 @@
       "wget * | sh*": "deny",
       "ssh *": "deny",
       "scp *": "deny",
-      "nc *": "deny"
+      "nc *": "deny",
+      "rm -rf*": "deny",
+      "rm -fr*": "deny",
+      "rm -Rf*": "deny",
+      "rm -rF*": "deny",
+      "rm -r -f*": "deny",
+      "rm -f -r*": "deny",
+      "sudo": "deny",
+      "sudo *": "deny",
+      "chmod 777*": "deny",
+      "chmod -R 777*": "deny"
     }
   }
 }

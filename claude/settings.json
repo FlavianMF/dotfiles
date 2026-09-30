@@ -170,7 +170,16 @@
       "Bash(curl * | bash)",
       "Bash(ssh *)",
       "Bash(scp *)",
-      "Bash(nc *)"
+      "Bash(nc *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm -Rf *)",
+      "Bash(rm -rF *)",
+      "Bash(rm -r -f *)",
+      "Bash(rm -f -r *)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)",
+      "Bash(chmod -R 777 *)"
     ]
   },
   "statusLine": {

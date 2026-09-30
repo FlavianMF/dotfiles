@@ -148,6 +148,14 @@ docker run -it dev-env
 - **Hooks opcionais por projeto** (em `.claude/settings.local.json` do projeto):
   `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}` liga format/typecheck no fim do turno;
   `"env": {"SECOND_BRAIN_HOOKS": "0"}` desliga os hooks do second brain.
+- **Peças do ECC** (componente `ecc`, desligado): `./install.sh --harness-only --with=ecc`.
+  Linka skills (`verification-loop`, `eval-harness`, `search-first`, `gan-style-harness`,
+  `ecc-security-review`), agents `ecc-*` (revisores e build resolvers de TS/Python/C++/Rust,
+  GAN planner/generator/evaluator etc.) e regras por linguagem que só carregam quando o
+  Claude lê um arquivo daquela extensão. Para atualizar o ECC, siga `vendor/ecc/SOURCE.md`.
+- **Deny list**: `rm -rf`, `sudo`, `chmod 777`, `ssh`/`scp`/`nc`, `curl | bash` e leitura de
+  segredos estão bloqueados nos 3 harnesses. Precisa de um deles? Rode você mesmo no terminal
+  (no Claude, `! comando`).
 - **Auditoria**: `make audit` (AgentShield com versão fixada, via npx).
 - **Lint**: `make lint` (bash -n, shellcheck, JSON e TOML). O shellcheck é o componente
   `shellcheck` do `install.sh` (desligado por padrão).
