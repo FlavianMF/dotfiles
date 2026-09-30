@@ -147,6 +147,15 @@ for _secret_env in "$HOME/dotfiles/secrets/"*.env(N); do
 done
 unset _secret_env
 
+# AI harnesses (Claude Code / Codex / OpenCode) — ver dotfiles/agents/AGENTS.md
+# OpenCode lê skills de ~/.agents/skills; sem isto leria também ~/.claude/skills
+# (que só tem links para ~/.agents/skills) e carregaria cada skill em dobro.
+export OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
+# Modos de sessão do Claude Code (contexto extra no system prompt)
+alias claude-dev='claude --append-system-prompt-file "$HOME/dotfiles/claude/contexts/dev.md"'
+alias claude-review='claude --append-system-prompt-file "$HOME/dotfiles/claude/contexts/review.md"'
+alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude/contexts/research.md"'
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'
