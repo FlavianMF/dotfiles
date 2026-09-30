@@ -42,10 +42,11 @@ config/tmux/.tmux/sessions/
 local-config.sh
 install.local
 
-# Secrets
+# Secrets (só os *.env.example de secrets/ são versionados)
 .env
 .env.local
-secrets/
+secrets/*
+!secrets/*.env.example
 *.key
 *.pem
 
@@ -59,3 +60,6 @@ temp/
 exes/
 *.exe
 *.zip
+
+# Python
+__pycache__/

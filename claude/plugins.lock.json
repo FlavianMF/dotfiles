@@ -1,0 +1,56 @@
+{
+  "marketplaces": [
+    {
+      "name": "caveman",
+      "repo": "JuliusBrussee/caveman",
+      "commit": "0d95a81d35a9f2d123a5e9430d1cfc43d55f1bb0"
+    },
+    {
+      "name": "claude-plugins-official",
+      "repo": "anthropics/claude-plugins-official",
+      "commit": null
+    },
+    {
+      "name": "fast-jev-compaction",
+      "repo": "tamaratran/fast-jev-compaction",
+      "commit": "e3f262a7f4d42bd8dd32ced30d26176f7cb545b0"
+    },
+    {
+      "name": "typesafe-ai",
+      "repo": "typesafe-ai/skills",
+      "commit": "65a39f393687675ce170e6094757de20370365b9"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "caveman@caveman",
+      "version": "0d95a81d35a9",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "fast-jev-compaction@fast-jev-compaction",
+      "version": "0.3.0",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "figma@claude-plugins-official",
+      "version": "2.2.120",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "mattpocock-skills@claude-plugins-official",
+      "version": "1.2.3",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "typesafe@typesafe-ai",
+      "version": "0.5.7",
+      "scope": "user",
+      "enabled": true
+    }
+  ]
+}

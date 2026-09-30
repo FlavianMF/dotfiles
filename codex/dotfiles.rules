@@ -1,0 +1,56 @@
+# Regras de execpolicy do Codex versionadas no dotfiles (Starlark, prefix_rule).
+# Linkado em ~/.codex/rules/dotfiles.rules. O próprio Codex grava as aprovações
+# "sempre permitir" em ~/.codex/rules/default.rules, que fica fora do git.
+# Espelha a deny list do Claude (claude/settings.json) e do OpenCode (opencode.json).
+# Teste: codex execpolicy check --rules codex/dotfiles.rules rm -rf build
+
+prefix_rule(
+    pattern = ["rm", ["-rf", "-fr", "-Rf", "-rF", "-fR", "-FR"]],
+    decision = "forbidden",
+    justification = "rm -rf bloqueado pelo dotfiles; apague caminhos específicos com rm/rmdir ou peça ao usuário.",
+    match = ["rm -rf build", "rm -fr /tmp/x"],
+    not_match = ["rm build.log", "rm -r build"],
+)
+
+prefix_rule(
+    pattern = ["rm", ["-r", "-R"], "-f"],
+    decision = "forbidden",
+    justification = "rm -r -f bloqueado pelo dotfiles; apague caminhos específicos ou peça ao usuário.",
+    match = ["rm -r -f build"],
+)
+
+prefix_rule(
+    pattern = ["rm", "-f", ["-r", "-R"]],
+    decision = "forbidden",
+    justification = "rm -f -r bloqueado pelo dotfiles; apague caminhos específicos ou peça ao usuário.",
+    match = ["rm -f -r build"],
+)
+
+prefix_rule(
+    pattern = ["sudo"],
+    decision = "forbidden",
+    justification = "sudo bloqueado pelo dotfiles; peça ao usuário para rodar o comando privilegiado.",
+    match = ["sudo apt-get install jq"],
+)
+
+prefix_rule(
+    pattern = ["chmod", "777"],
+    decision = "forbidden",
+    justification = "chmod 777 bloqueado; use a permissão mínima (ex.: 755 para diretórios, 644 para arquivos).",
+    match = ["chmod 777 file"],
+    not_match = ["chmod 755 dir"],
+)
+
+prefix_rule(
+    pattern = ["chmod", ["-R", "--recursive"], "777"],
+    decision = "forbidden",
+    justification = "chmod -R 777 bloqueado; use a permissão mínima.",
+    match = ["chmod -R 777 dir"],
+)
+
+prefix_rule(
+    pattern = [["ssh", "scp", "nc"]],
+    decision = "forbidden",
+    justification = "Acesso remoto/rede crua bloqueado pelo dotfiles (o sandbox também não tem rede); peça ao usuário.",
+    match = ["ssh host", "scp a host:b", "nc -l 1234"],
+)
