@@ -2,7 +2,7 @@
   "env": {
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
   },
-  "model": "sonnet",
+  "model": "opus",
   "hooks": {
     "SessionStart": [
       {
@@ -74,7 +74,9 @@
   "enabledPlugins": {
     "caveman@caveman": true,
     "figma@claude-plugins-official": true,
-    "fast-jev-compaction@fast-jev-compaction": true
+    "fast-jev-compaction@fast-jev-compaction": true,
+    "typesafe@typesafe-ai": true,
+    "mattpocock-skills@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -87,6 +89,12 @@
       "source": {
         "source": "github",
         "repo": "tamaratran/fast-jev-compaction"
+      }
+    },
+    "typesafe-ai": {
+      "source": {
+        "source": "github",
+        "repo": "typesafe-ai/skills"
       }
     }
   },
