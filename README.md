@@ -6,7 +6,8 @@ Reproducible development environment configuration. Clone and run `install.sh` t
 - **Editor**: Neovim (LazyVim)
 - **Multiplexer**: tmux + Catppuccin theme + plugins
 - **Tools**: git, GitHub CLI (gh), Docker
-- **Claude Code**: settings with caveman plugin
+- **Tools (optional)**: shellcheck (component `shellcheck`, apt or GitHub release binary)
+- **AI harnesses**: Claude Code, Codex and OpenCode sharing one `AGENTS.md`, one skills dir and the same MCPs (see [AI harnesses](#ai-harnesses))
 
 ## Quick Start
 
@@ -34,7 +35,30 @@ The script will:
 | `nvim/` | Entire LazyVim config | init.lua, plugins, lazy-lock.json (74 plugins pinned) |
 | `.gitconfig` | `git/` | Includes gh auth, excludes user.name/email (set locally) |
 | `git/ignore` | Global gitignore (`.config/git/ignore`) | Excludes Claude local settings |
-| `claude/settings.json` | Claude Code config | Model (Haiku), effort level, caveman plugin |
+| `claude/settings.json` | Claude Code config | Model (opus/xhigh, subagents on sonnet), plugins, hooks, deny list, statusline |
+| `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Imports `agents/AGENTS.md` + Claude-only notes |
+| `agents/AGENTS.md` | Codex / OpenCode / Claude | Shared instructions (performance, security, git, design skills) |
+| `codex/`, `opencode/` | `~/.codex`, `~/.config/opencode` | Only when the component is selected or the tool is installed |
+
+## AI harnesses
+
+One set of instructions, skills and MCPs for Claude Code, Codex and OpenCode.
+
+| Piece | Source of truth | How it gets installed |
+|-------|-----------------|-----------------------|
+| Instructions | `agents/AGENTS.md` | linked to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`; imported by `claude/CLAUDE.md` (`@~/dotfiles/agents/AGENTS.md`) |
+| Claude plugins | `enabledPlugins` + `extraKnownMarketplaces` in `claude/settings.json` | `install.sh` reconciles with `claude plugin list --json` (installs what's missing, warns about extras). `make plugins-freeze` records versions in `claude/plugins.lock.json` |
+| Skills | `~/.agents/skills` (canonical, read by Codex and OpenCode) | `npx skills@<pinned> add ... -g`; shared skills get a link in `~/.claude/skills`. Skills Claude already gets from a plugin (impeccable, mattpocock, caveman, figma, typesafe) are installed for Codex/OpenCode only |
+| `second-brain-sync` | `~/obsidian_vault/00_META/skills/second-brain-sync` | `~/.agents/skills/second-brain-sync` → vault, `~/.claude/skills/second-brain-sync` → `~/.agents/skills/...` |
+| MCPs (Figma, Playwright, GitHub) | Claude: plugins; Codex: `codex/config.base.toml`; OpenCode: `opencode/opencode.json` | GitHub MCP uses a PAT (`secrets/github-mcp.env`): the hosted server doesn't offer OAuth to these clients |
+| Codex config | `codex/config.base.toml` (+ `codex/yolo.config.toml` profile) | rendered into `~/.codex/config.toml`, keeping machine-only keys such as `[projects.*]`. `make codex-drift` shows differences |
+| OpenCode config | `opencode/opencode.json` | symlinked (OpenCode doesn't rewrite it). `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` in `.zshrc` avoids loading skills twice |
+
+Components `codex` and `opencode` are **off by default** (`./install.sh --with=codex,opencode`); both install from npm into `~/.local` and are skipped if already installed. Logins are manual: the install prints a checklist at the end.
+
+Claude Code extras (all in `claude/`): `statusline.sh` (model, cwd, git branch/dirty, % context left, caveman badge), `hooks/` (compact suggestion after ~50 tool calls, opt-in format/typecheck on Stop, second-brain hints/reminder behind `SECOND_BRAIN_HOOKS=1`) and `contexts/` (session modes via the `claude-dev`, `claude-review`, `claude-research` aliases).
+
+Useful targets: `make harness`, `make harness-dry-run`, `make plugins-freeze`, `make plugins-update`, `make codex-drift`, `make audit` (AgentShield, pinned, via npx), `make lint`.
 
 ## What's NOT Included
 
@@ -45,6 +69,8 @@ These are intentionally excluded for security and machine-specific reasons:
 - `.config/github-copilot/` — Copilot auth
 - `.config/gh/hosts.yml` — GitHub auth tokens
 - `.claude/.credentials.json` — Claude credentials
+- `secrets/*.env` — API keys (only `secrets/*.env.example` is versioned; `.zshrc` sources every `secrets/*.env`)
+- `~/.codex/auth.json`, OpenCode auth — harness logins
 - `~/.local/share/nvim/` — Plugin installs (regenerated from `lazy-lock.json`)
 - `.zsh_history`, `.bash_history` — Shell history
 - All runtime/cache files

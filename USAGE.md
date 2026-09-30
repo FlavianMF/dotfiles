@@ -126,16 +126,39 @@ docker build -t dev-env .
 docker run -it dev-env
 ```
 
+## 🤖 Harnesses de IA (Claude Code, Codex, OpenCode)
+
+```bash
+./install.sh --dry-run                      # mostra o que mudaria nos harnesses, sem mudar nada
+./install.sh --harness-only                 # só links + harnesses (sem apt, shell, tmux)
+./install.sh --harness-only --with=codex,opencode   # instala também Codex e OpenCode (npm, ~/.local)
+```
+
+- **Instruções**: edite só `agents/AGENTS.md`. O Claude importa via `claude/CLAUDE.md`;
+  Codex e OpenCode leem o link.
+- **Plugins do Claude**: declare em `claude/settings.json` (`enabledPlugins` +
+  `extraKnownMarketplaces`) e rode `make harness`. Depois `make plugins-freeze` e commite
+  `claude/plugins.lock.json`. Para atualizar: `make plugins-update` e revise o diff do lock.
+- **Skills**: ficam em `~/.agents/skills`. Instale com `npx skills add <repo> -g`; para o
+  Claude ver, a skill precisa de link em `~/.claude/skills` (o skills CLI cria com
+  `-a claude-code`).
+- **Codex**: edite `codex/config.base.toml`, rode `make harness` e confira `make codex-drift`.
+  Perfil sem sandbox: `codex --profile yolo`.
+- **Modos de sessão**: `claude-dev`, `claude-review`, `claude-research`.
+- **Hooks opcionais por projeto** (em `.claude/settings.local.json` do projeto):
+  `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}` liga format/typecheck no fim do turno;
+  `"env": {"SECOND_BRAIN_HOOKS": "0"}` desliga os hooks do second brain.
+- **Auditoria**: `make audit` (AgentShield com versão fixada, via npx).
+- **Lint**: `make lint` (bash -n, shellcheck, JSON e TOML). O shellcheck é o componente
+  `shellcheck` do `install.sh` (desligado por padrão).
+
 ## 🔐 Adicionar Secrets (Seguro)
 
 Se você quer adicionar secrets sem expostos no git:
 
-1. Crie um arquivo `.env.local` na raiz
-2. Adicione em `.gitignore` (já está)
-3. Edite `config/zsh/.zshrc` para sourçar:
-```bash
-[ -f ~/.env.local ] && source ~/.env.local
-```
+1. Copie o exemplo: `cp secrets/github-mcp.env.example secrets/github-mcp.env`
+2. Preencha o valor (o arquivo real é ignorado pelo git; só `*.env.example` é versionado)
+3. O `.zshrc` carrega todo `~/dotfiles/secrets/*.env` ao abrir o shell
 
 ## 📱 Sincronizar Entre Máquinas
 
