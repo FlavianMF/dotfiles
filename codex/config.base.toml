@@ -1,0 +1,35 @@
+# Codex CLI — config base versionada no dotfiles.
+#
+# NÃO é linkada: o install.sh renderiza ~/.codex/config.toml a partir deste arquivo
+# (codex/render_config.py). Na mesclagem, as chaves daqui vencem; chaves que só existem
+# na máquina (ex.: [projects."/caminho"] trust_level, criadas pelo próprio Codex) são
+# preservadas. `make codex-drift` mostra o que a máquina tem de diferente desta base.
+#
+# Login: `codex login` (conta ChatGPT). Perfil sem sandbox: `codex --profile yolo`
+# (arquivo separado codex/yolo.config.toml, linkado em ~/.codex/yolo.config.toml).
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+network_access = false
+
+# ----- MCPs globais (mesmo trio nos 3 harnesses) -----
+
+# Figma remoto. Autentique uma vez com: codex mcp login figma
+[mcp_servers.figma]
+url = "https://mcp.figma.com/mcp"
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+
+# GitHub remoto. O servidor hospedado não oferece OAuth para o Codex (sem registro
+# dinâmico de cliente), então usa PAT via variável de ambiente, carregada pelo .zshrc
+# a partir de ~/dotfiles/secrets/github-mcp.env (ver secrets/github-mcp.env.example).
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+bearer_token_env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
+
+[mcp_servers.github.http_headers]
+X-MCP-Toolsets = "repos,issues,pull_requests"

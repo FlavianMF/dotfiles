@@ -1,0 +1,5 @@
+# Perfil "yolo" do Codex: sem aprovação e sem sandbox. Use só em repo descartável
+# ou container: `codex --profile yolo`.
+# Codex >= 0.134 lê perfis de $CODEX_HOME/<nome>.config.toml, não de [profiles.<nome>].
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
