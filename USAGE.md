@@ -153,6 +153,18 @@ docker run -it dev-env
   `ecc-security-review`), agents `ecc-*` (revisores e build resolvers de TS/Python/C++/Rust,
   GAN planner/generator/evaluator etc.) e regras por linguagem que só carregam quando o
   Claude lê um arquivo daquela extensão. Para atualizar o ECC, siga `vendor/ecc/SOURCE.md`.
+- **ECC completo por projeto** (plugin `ecc@ecc`: 387 skills/commands, 68 agents): fica
+  instalado e **desligado** no `claude/settings.json`, porque custa ~45k tokens em toda
+  sessão (`claude plugin details ecc@ecc`). Ligue só onde for usar:
+  `make ecc-on DIR=~/proj` (rules completas do ECC, incluindo `rules/common`, que carrega
+  sempre e manda delegar a agents `ecc:*`) ou `make ecc-on DIR=~/proj NO_COMMON=1` (só os
+  packs de linguagem). `make ecc-off DIR=~/proj` desfaz e `make ecc-status DIR=~/proj`
+  mostra o estado. Nada entra no git do projeto (`.git/info/exclude`). Reinicie o Claude
+  Code no projeto depois de ligar ou desligar.
+  Hooks do ECC: perfil `minimal` (`ECC_HOOK_PROFILE`), com `stop:evaluate-session` e
+  `post:ecc-metrics-bridge` desligados (`ECC_DISABLED_HOOKS`). Rodam só `block-no-verify`,
+  `session:start`/`session-end` (retomada de sessão), `cost-tracker` e `plan-canvas-pending`.
+  GateGuard, config-protection e o format/typecheck do ECC ficam desligados.
 - **Deny list**: `rm -rf`, `sudo`, `chmod 777`, `ssh`/`scp`/`nc`, `curl | bash` e leitura de
   segredos estão bloqueados nos 3 harnesses. Precisa de um deles? Rode você mesmo no terminal
   (no Claude, `! comando`).
