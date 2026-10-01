@@ -792,15 +792,35 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
             jq -r '.extraKnownMarketplaces // {} | to_entries[]
                    | [.key, (.value.source.repo // .value.source.url // .value.source.path // "")] | @tsv' "$CLAUDE_SETTINGS"
         )
+        # `marketplace add` rewrites settings.json (the repo file) and drops
+        # autoUpdate; versions are pinned on purpose, so put it back.
+        if [[ $DRY_RUN -eq 0 ]] && jq -e '.extraKnownMarketplaces // {} | any(.[]; .autoUpdate != false)' "$CLAUDE_SETTINGS" >/dev/null; then
+            log_info "Restoring autoUpdate:false on declared marketplaces"
+            settings_tmp="$(mktemp)"
+            jq '.extraKnownMarketplaces |= with_entries(.value.autoUpdate = false)' "$CLAUDE_SETTINGS" > "$settings_tmp" \
+                && cat "$settings_tmp" > "$CLAUDE_SETTINGS"
+            rm -f "$settings_tmp"
+        fi
 
         installed_plugins="$(claude plugin list --json 2>/dev/null | jq -r '.[].id' 2>/dev/null || true)"
-        declared_plugins="$(jq -r '.enabledPlugins // {} | to_entries[] | select(.value == true) | .key' "$CLAUDE_SETTINGS")"
+        # Declared = every key in enabledPlugins. `false` means installed but off at
+        # user scope (enabled per project, e.g. ecc@ecc via claude/ecc-project.sh).
+        declared_plugins="$(jq -r '.enabledPlugins // {} | keys[]' "$CLAUDE_SETTINGS")"
+        disabled_plugins="$(jq -r '.enabledPlugins // {} | to_entries[] | select(.value == false) | .key' "$CLAUDE_SETTINGS")"
         while read -r plugin_id; do
             [[ -z "$plugin_id" ]] && continue
             grep -qxF "$plugin_id" <<< "$installed_plugins" && continue
             log_info "Installing plugin $plugin_id"
             as_user claude plugin install "$plugin_id" -y < /dev/null || log_warn "plugin install $plugin_id failed"
         done <<< "$declared_plugins"
+        # install enables at user scope (and rewrites settings.json, which is the repo
+        # file); put declared-off plugins back to false.
+        while read -r plugin_id; do
+            [[ -z "$plugin_id" ]] && continue
+            [[ "$(jq -r --arg p "$plugin_id" '.enabledPlugins[$p]' "$CLAUDE_SETTINGS")" == false ]] && continue
+            log_info "Disabling plugin $plugin_id at user scope (declared false)"
+            as_user claude plugin disable "$plugin_id" -s user < /dev/null || log_warn "plugin disable $plugin_id failed"
+        done <<< "$disabled_plugins"
         while read -r plugin_id; do
             [[ -z "$plugin_id" ]] && continue
             grep -qxF "$plugin_id" <<< "$declared_plugins" && continue

@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-rules codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -18,6 +18,10 @@ help:
 	@echo "  make harness-dry-run  - Mostra o que o install faria nos harnesses, sem mudar nada"
 	@echo "  make plugins-freeze   - Grava claude/plugins.lock.json (versões instaladas)"
 	@echo "  make plugins-update   - Atualiza marketplaces e plugins declarados, depois freeze"
+	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common)"
+	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto"
+	@echo "  make ecc-status DIR=. - Mostra se o ECC está ligado no projeto"
+	@echo "  make ecc-rules        - Reespelha vendor/ecc/upstream/rules no pin do SOURCE.md"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
@@ -58,10 +62,25 @@ plugins-freeze:
 
 plugins-update:
 	claude plugin marketplace update
-	@jq -r '.enabledPlugins // {} | to_entries[] | select(.value == true) | .key' claude/settings.json | \
+	@jq -r '.enabledPlugins // {} | keys[]' claude/settings.json | \
 		while read -r id; do echo "claude plugin update $$id"; claude plugin update "$$id" < /dev/null || true; done
 	@./claude/plugins-freeze.sh
 	@echo "Revise: git diff claude/plugins.lock.json (reinicie o Claude Code para aplicar)"
+	@echo "Se ecc@ecc mudou de versão: atualize o SHA em vendor/ecc/SOURCE.md e rode make ecc-rules"
+
+# ECC: plugin instalado e desligado globalmente; liga por projeto.
+DIR ?= .
+ecc-on:
+	@./claude/ecc-project.sh on "$(DIR)" $(if $(NO_COMMON),--no-common)
+
+ecc-off:
+	@./claude/ecc-project.sh off "$(DIR)"
+
+ecc-status:
+	@./claude/ecc-project.sh status "$(DIR)"
+
+ecc-rules:
+	@./vendor/ecc/fetch-upstream.sh
 
 codex-drift:
 	@python3 codex/render_config.py codex/config.base.toml $(HOME)/.codex/config.toml --drift
@@ -71,8 +90,8 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/hooks/*.sh; do bash -n "$$f" || exit 1; done
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/hooks/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh; do bash -n "$$f" || exit 1; done
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
