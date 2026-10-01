@@ -153,6 +153,13 @@ docker run -it dev-env
   `ecc-security-review`), agents `ecc-*` (revisores e build resolvers de TS/Python/C++/Rust,
   GAN planner/generator/evaluator etc.) e regras por linguagem que só carregam quando o
   Claude lê um arquivo daquela extensão. Para atualizar o ECC, siga `vendor/ecc/SOURCE.md`.
+- **Jev tools** (componente `jev`, desligado): `./install.sh --harness-only --with=jev` clona
+  e compila `~/projetos_claude/jev-workflow` (repo privado). O hook `jev-e.sh`
+  (UserPromptSubmit) já vem ligado em `claude/settings.json` em **modo sombra**
+  (`JEV_MODE_E=shadow`): sugere uma skill, grava só em `~/.local/state/jev-tools/log.jsonl` e
+  não escreve nada para o modelo; sem o build ele não faz nada. Desligar na hora:
+  `JEV_TOOL_E=0` (em `.claude/settings.local.json`) ou `node ~/projetos_claude/jev-workflow/dist/cli.js off`.
+  Promover a ativo é trocar `JEV_MODE_E` para `active` (só depois do critério da etapa 8 do plano).
 - **Deny list**: `rm -rf`, `sudo`, `chmod 777`, `ssh`/`scp`/`nc`, `curl | bash` e leitura de
   segredos estão bloqueados nos 3 harnesses. Precisa de um deles? Rode você mesmo no terminal
   (no Claude, `! comando`).

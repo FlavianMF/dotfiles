@@ -2,7 +2,8 @@
   "env": {
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
-    "SECOND_BRAIN_HOOKS": "1"
+    "SECOND_BRAIN_HOOKS": "1",
+    "JEV_MODE_E": "shadow"
   },
   "model": "opus",
   "hooks": {
@@ -33,6 +34,15 @@
             "type": "command",
             "command": "bash \"$HOME/.tmux/plugins/tmux-claude-monitor/hooks/claude-state.sh\" UserPromptSubmit",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/jev-e.sh\"",
+            "timeout": 2
           }
         ]
       }

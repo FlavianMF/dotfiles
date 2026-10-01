@@ -12,5 +12,8 @@
   relacionadas ao repo; o Stop lembra de rodar `vault_sync.py` depois de várias edições.
   Desligue por projeto com `"env": {"SECOND_BRAIN_HOOKS": "0"}` em
   `.claude/settings.local.json`.
+- Hook `jev-e` (UserPromptSubmit, modo sombra): grava num log local qual skill o Jev sugeriria
+  e **não escreve nada no contexto**; ignore-o. Desligue por projeto com
+  `"env": {"JEV_TOOL_E": "0"}` em `.claude/settings.local.json`.
 - Format/typecheck no Stop é opt-in por projeto: `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}`
   (e opcionalmente `CLAUDE_FORMAT_TYPECHECK_CMD`) em `.claude/settings.local.json`.
