@@ -153,6 +153,13 @@ docker run -it dev-env
   `ecc-security-review`), agents `ecc-*` (revisores e build resolvers de TS/Python/C++/Rust,
   GAN planner/generator/evaluator etc.) e regras por linguagem que só carregam quando o
   Claude lê um arquivo daquela extensão. Para atualizar o ECC, siga `vendor/ecc/SOURCE.md`.
+- **Jev tools** (componente `jev`, desligado): `./install.sh --harness-only --with=jev` clona
+  e compila `~/projetos_claude/jev-workflow` (repo privado). O hook `jev-e.sh`
+  (UserPromptSubmit) já vem ligado em `claude/settings.json` em **modo sombra**
+  (`JEV_MODE_E=shadow`): sugere uma skill, grava só em `~/.local/state/jev-tools/log.jsonl` e
+  não escreve nada para o modelo; sem o build ele não faz nada. Desligar na hora:
+  `JEV_TOOL_E=0` (em `.claude/settings.local.json`) ou `node ~/projetos_claude/jev-workflow/dist/cli.js off`.
+  Promover a ativo é trocar `JEV_MODE_E` para `active` (só depois do critério da etapa 8 do plano).
 - **ECC completo por projeto** (plugin `ecc@ecc`: 387 skills/commands, 68 agents): fica
   instalado e **desligado** no `claude/settings.json`, porque custa ~45k tokens em toda
   sessão (`claude plugin details ecc@ecc`). Ligue só onde for usar:

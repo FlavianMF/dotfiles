@@ -39,6 +39,7 @@ The script will:
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Imports `agents/AGENTS.md` + Claude-only notes |
 | `agents/AGENTS.md` | Codex / OpenCode / Claude | Shared instructions (performance, security, git, design skills) |
 | `codex/`, `opencode/` | `~/.codex`, `~/.config/opencode` | Only when the component is selected or the tool is installed |
+| `claude/hooks/jev-e.sh` | `~/.claude/hooks/` (directory link) | Runs only if jev-workflow is built (component `jev`) |
 | `vendor/ecc/`, `claude/rules/` | `~/.agents/skills`, `~/.claude/{agents,rules}` | Component `ecc` (off by default): selected ECC pieces, global |
 | `ecc@ecc` plugin, `vendor/ecc/upstream/` | Project `.claude/` | Full ECC, installed but off; `make ecc-on DIR=...` per project ([ECC](#ecc-affaan-mecc)) |
 
@@ -59,6 +60,8 @@ One set of instructions, skills and MCPs for Claude Code, Codex and OpenCode.
 Components `codex` and `opencode` are **off by default** (`./install.sh --with=codex,opencode`); both install from npm into `~/.local` and are skipped if already installed. Logins are manual: the install prints a checklist at the end.
 
 Claude Code extras (all in `claude/`): `statusline.sh` (model, cwd, git branch/dirty, % context left, caveman badge), `hooks/` (compact suggestion after ~50 tool calls, opt-in format/typecheck on Stop, second-brain hints/reminder behind `SECOND_BRAIN_HOOKS=1`) and `contexts/` (session modes via the `claude-dev`, `claude-review`, `claude-research` aliases).
+
+**Jev tools** (component `jev`, off by default): `./install.sh --harness-only --with=jev` clones (private repo) and builds [jev-workflow](https://github.com/FlavianMF/jev-workflow) in `~/projetos_claude/jev-workflow` (override with `JEV_WORKFLOW_HOME`). `claude/hooks/jev-e.sh` is wired on `UserPromptSubmit` (timeout 2 s, `JEV_MODE_E=shadow` in `settings.json` `env`): in shadow mode it only appends a decision to `~/.local/state/jev-tools/log.jsonl` and prints nothing; it is a silent no-op without the build, without `TYPESAFE_API_KEY`, or when `JEV_TOOLS=0` / `JEV_TOOL_E=0` / the `DISABLED` marker is set.
 
 **Deny lists** (same intent in the 3 harnesses): secrets reads (`~/.ssh`, `~/.aws`, `.env*`, `secrets/`), `curl | bash`, `ssh`/`scp`/`nc`, `rm -rf` (and variants), `sudo`, `chmod 777`. Claude: `permissions.deny`; OpenCode: `permission.bash`/`read`; Codex: sandbox + `codex/dotfiles.rules` (execpolicy, linked as `~/.codex/rules/dotfiles.rules`).
 

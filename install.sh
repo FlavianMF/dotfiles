@@ -133,6 +133,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [codex]="OpenAI Codex CLI (npm, ~/.local) + ~/.codex config"
     [opencode]="OpenCode CLI (npm, ~/.local) + ~/.config/opencode config"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
+    [jev]="jev-workflow (clone + npm ci + build in ~/projetos_claude/jev-workflow); the E hook in settings.json stays in shadow mode"
     [nvim]="Neovim + LazyVim config"
     [ripgrep]="ripgrep (fast search, used by nvim Telescope)"
     [fd]="fd (fast file finder, used by nvim Telescope)"
@@ -162,6 +163,7 @@ declare -A SELECTED_COMPONENTS=(
     [codex]=0
     [opencode]=0
     [ecc]=0
+    [jev]=0
     [nvim]=0
     [ripgrep]=0
     [fd]=0
@@ -188,7 +190,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim claudeskills codex opencode ecc nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim claudeskills codex opencode ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -911,6 +913,30 @@ if [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]]; then
                 "$HOME/.config/opencode/agents" --prefix ecc- || log_warn "OpenCode agent render failed"
         fi
     fi
+fi
+
+# --- jev-workflow (Jev tools; the UserPromptSubmit hook is already wired in claude/settings.json) ---
+# The hook (claude/hooks/jev-e.sh) is a silent no-op until the build below exists,
+# and in shadow mode (JEV_MODE_E=shadow in settings.json "env") it only writes a local log.
+if [[ ${SELECTED_COMPONENTS[jev]} -eq 1 ]]; then
+    JEV_HOME="${JEV_WORKFLOW_HOME:-$HOME/projetos_claude/jev-workflow}"
+    if [[ ! -d "$JEV_HOME/.git" ]]; then
+        log_info "Cloning jev-workflow (private repo: needs gh/git credentials) to $JEV_HOME..."
+        as_user mkdir -p "$(dirname "$JEV_HOME")"
+        as_user git clone https://github.com/FlavianMF/jev-workflow.git "$JEV_HOME" || log_warn "Could not clone jev-workflow; the E hook stays a no-op"
+    fi
+    if [[ -d "$JEV_HOME" ]] || [[ $DRY_RUN -eq 1 ]]; then
+        log_info "Building jev-workflow (npm ci && npm run build)..."
+        if [[ $DRY_RUN -eq 1 ]]; then
+            echo -e "${YELLOW}[dry-run]${NC} (cd $JEV_HOME && npm ci && npm run build)"
+        else
+            (cd "$JEV_HOME" && as_user npm ci && as_user npm run build) || log_warn "jev-workflow build failed; the E hook stays a no-op"
+        fi
+    fi
+    HARNESS_CHECKLIST+=(
+        "Jev: TYPESAFE_API_KEY em ~/dotfiles/secrets/fast-jev.env (ver .env.example); teste com: node $JEV_HOME/dist/cli.js selftest"
+        "Jev: o hook E (UserPromptSubmit) está em modo sombra (JEV_MODE_E=shadow em claude/settings.json): só grava ~/.local/state/jev-tools/log.jsonl. Desligar: JEV_TOOL_E=0 ou 'node $JEV_HOME/dist/cli.js off'"
+    )
 fi
 
 # --- Codex config ---
