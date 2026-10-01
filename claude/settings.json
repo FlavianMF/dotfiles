@@ -3,7 +3,9 @@
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
     "SECOND_BRAIN_HOOKS": "1",
-    "JEV_MODE_E": "shadow"
+    "JEV_MODE_E": "shadow",
+    "ECC_HOOK_PROFILE": "minimal",
+    "ECC_DISABLED_HOOKS": "stop:evaluate-session,post:ecc-metrics-bridge"
   },
   "model": "opus",
   "hooks": {
@@ -125,7 +127,8 @@
     "mattpocock-skills@claude-plugins-official": true,
     "impeccable@impeccable": true,
     "github@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true
+    "playwright@claude-plugins-official": true,
+    "ecc@ecc": false
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -153,6 +156,13 @@
       "source": {
         "source": "github",
         "repo": "pbakaus/impeccable"
+      },
+      "autoUpdate": false
+    },
+    "ecc": {
+      "source": {
+        "source": "github",
+        "repo": "affaan-m/ECC"
       },
       "autoUpdate": false
     }
@@ -196,5 +206,13 @@
     "type": "command",
     "command": "bash \"$HOME/.claude/statusline.sh\"",
     "padding": 0
+  },
+  "pluginConfigs": {
+    "ecc@ecc": {
+      "options": {
+        "hooks_enabled": true,
+        "hook_profile": "minimal"
+      }
+    }
   }
 }

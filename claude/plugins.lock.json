@@ -11,9 +11,19 @@
       "commit": null
     },
     {
+      "name": "ecc",
+      "repo": "affaan-m/ECC",
+      "commit": "c70874fae9eb0e5ad0365beb7e2955899fd1d30f"
+    },
+    {
       "name": "fast-jev-compaction",
       "repo": "tamaratran/fast-jev-compaction",
       "commit": "e3f262a7f4d42bd8dd32ced30d26176f7cb545b0"
+    },
+    {
+      "name": "impeccable",
+      "repo": "pbakaus/impeccable",
+      "commit": "0d6b47ea19b63afe15e3f93a44d5d9fbbc6fd275"
     },
     {
       "name": "typesafe-ai",
@@ -29,6 +39,12 @@
       "enabled": true
     },
     {
+      "id": "ecc@ecc",
+      "version": "2.2.2",
+      "scope": "user",
+      "enabled": false
+    },
+    {
       "id": "fast-jev-compaction@fast-jev-compaction",
       "version": "0.3.0",
       "scope": "user",
@@ -41,8 +57,26 @@
       "enabled": true
     },
     {
+      "id": "github@claude-plugins-official",
+      "version": "ab024cdcfa7c",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "impeccable@impeccable",
+      "version": "4.4.0",
+      "scope": "user",
+      "enabled": true
+    },
+    {
       "id": "mattpocock-skills@claude-plugins-official",
       "version": "1.2.3",
+      "scope": "user",
+      "enabled": true
+    },
+    {
+      "id": "playwright@claude-plugins-official",
+      "version": "ab024cdcfa7c",
       "scope": "user",
       "enabled": true
     },

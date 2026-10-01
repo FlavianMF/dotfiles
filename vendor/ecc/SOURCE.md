@@ -13,6 +13,36 @@
 Para atualizar: troque o SHA, baixe os mesmos caminhos, reaplique as modificações abaixo e
 revise o diff.
 
+## ECC completo (plugin, por projeto)
+
+Além das peças acima, o ECC inteiro está disponível como plugin `ecc@ecc`, no mesmo pin:
+
+- **Instalação**: marketplace `ecc` (`affaan-m/ECC`, `autoUpdate: false`) e
+  `"ecc@ecc": false` em `claude/settings.json`. O `install.sh` instala o plugin e o deixa
+  desligado no escopo de usuário. São ~45k tokens fixos por sessão, por isso ele não fica
+  ligado globalmente.
+- **Por projeto**: `claude/ecc-project.sh on|off|status [dir] [--no-common]`
+  (`make ecc-on DIR=…`). O script grava `enabledPlugins["ecc@ecc"]=true` em
+  `.claude/settings.local.json` e linka `.claude/rules/ecc-upstream`.
+- **Rules**: `upstream/rules/` é espelho fiel do pin, gerado por `fetch-upstream.sh` (alvo
+  `make ecc-rules`). Ficam de fora só `rules/README.md` e os `*/hooks.md`. O SHA está em
+  `upstream/rules/.ecc-sha`. Não edite à mão; as rules trimadas para uso global continuam
+  em `rules/`.
+- **Hooks**: perfil `minimal`, com desligamentos via env em `claude/settings.json`
+  (`ECC_HOOK_PROFILE`, `ECC_DISABLED_HOOKS`) e também em `pluginConfigs`. Os IDs foram
+  conferidos em `hooks/hooks.json`, `scripts/hooks/*-dispatcher.js` e
+  `scripts/lib/hook-flags.js` neste pin. Hook sem `profiles` cai em `standard,strict`.
+- **MCP**: o `.mcp.json` do plugin sobe `chrome-devtools-mcp@1.10.1` via `npx` quando o
+  plugin está ligado. Isso sobrepõe o Playwright.
+- **Duplicatas**: em projeto ligado, as 5 skills e os 13 agents vendorizados aparecem
+  duas vezes (`ecc-X` global e `ecc:X` do plugin). O custo é baixo e eles foram mantidos.
+- **Atualizar o pin**:
+  1. `make plugins-update`
+  2. Troque o SHA no topo deste arquivo pelo commit do marketplace (`claude/plugins.lock.json`).
+  3. `make ecc-rules`
+  4. Revise `git diff vendor/ecc/upstream`.
+  5. Confira se os IDs de hook mudaram e atualize `ECC_DISABLED_HOOKS` se for o caso.
+
 ## Arquivos
 
 | Local | Upstream |
