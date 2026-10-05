@@ -7,6 +7,29 @@
     "ECC_HOOK_PROFILE": "minimal",
     "ECC_DISABLED_HOOKS": "stop:evaluate-session,post:ecc-metrics-bridge"
   },
+  "permissions": {
+    "deny": [
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(**/.env*)",
+      "Read(~/dotfiles/secrets/**)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.aws/**)",
+      "Bash(curl * | bash)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(nc *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(rm -Rf *)",
+      "Bash(rm -rF *)",
+      "Bash(rm -r -f *)",
+      "Bash(rm -f -r *)",
+      "Bash(sudo *)",
+      "Bash(chmod 777 *)",
+      "Bash(chmod -R 777 *)"
+    ]
+  },
   "model": "opus",
   "hooks": {
     "SessionStart": [
@@ -119,6 +142,11 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$HOME/.claude/statusline.sh\"",
+    "padding": 0
+  },
   "enabledPlugins": {
     "caveman@caveman": true,
     "figma@claude-plugins-official": true,
@@ -128,7 +156,7 @@
     "impeccable@impeccable": true,
     "github@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
-    "ecc@ecc": false
+    "ecc@ecc": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -142,8 +170,7 @@
       "source": {
         "source": "github",
         "repo": "tamaratran/fast-jev-compaction"
-      },
-      "autoUpdate": false
+      }
     },
     "typesafe-ai": {
       "source": {
@@ -176,37 +203,6 @@
       "effortLevel": "xhigh"
     }
   },
-  "theme": "dark",
-  "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true,
-  "permissions": {
-    "deny": [
-      "Read(~/.ssh/**)",
-      "Read(~/.aws/**)",
-      "Read(**/.env*)",
-      "Read(~/dotfiles/secrets/**)",
-      "Edit(~/.ssh/**)",
-      "Edit(~/.aws/**)",
-      "Bash(curl * | bash)",
-      "Bash(ssh *)",
-      "Bash(scp *)",
-      "Bash(nc *)",
-      "Bash(rm -rf *)",
-      "Bash(rm -fr *)",
-      "Bash(rm -Rf *)",
-      "Bash(rm -rF *)",
-      "Bash(rm -r -f *)",
-      "Bash(rm -f -r *)",
-      "Bash(sudo *)",
-      "Bash(chmod 777 *)",
-      "Bash(chmod -R 777 *)"
-    ]
-  },
-  "statusLine": {
-    "type": "command",
-    "command": "bash \"$HOME/.claude/statusline.sh\"",
-    "padding": 0
-  },
   "pluginConfigs": {
     "ecc@ecc": {
       "options": {
@@ -214,5 +210,8 @@
         "hook_profile": "minimal"
       }
     }
-  }
+  },
+  "theme": "dark",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
 }
