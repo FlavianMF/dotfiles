@@ -17,6 +17,8 @@ cd ~/dotfiles
 ./install.sh
 ```
 
+Run it as your **normal user, without `sudo`**. The script calls `sudo` itself for the steps that need it (apt, `/opt`, `/etc/apt`) and prompts for your password. Running the whole script under `sudo` leaves root-owned files in your home and breaks later runs (see [Troubleshooting](#troubleshooting)). If `./install.sh` fails with `Permission denied` on a copy that lost the exec bit, use `bash install.sh`.
+
 The script will:
 1. Install system dependencies via apt
 2. Install Neovim, Docker, and GitHub CLI
@@ -163,8 +165,25 @@ Then commit and push to keep your setup in sync across machines.
 
 ## Troubleshooting
 
+### `Permission denied` running install.sh
+`chmod +x` rarely helps: the file is already executable in git. The usual cause is root-owned files in your home, left by an earlier `sudo ./install.sh`.
+
+```bash
+# 1. Find root-owned leftovers
+find ~ -user root -not -path '*/.git/*' | head
+
+# 2. Give them back to your user
+sudo chown -R "$USER:$USER" ~/.local ~/.npm ~/.oh-my-zsh ~/.tmux ~/.cache \
+  ~/.copilot ~/.dotfiles-backup ~/.gitconfig.local
+
+# 3. Re-run as your normal user (no sudo)
+cd ~/dotfiles && ./install.sh
+```
+
+Still failing? `bash -x ./install.sh 2>&1 | tail -20` shows the first `Permission denied` line and the path involved. Also make sure you run the checkout you expect (`/root/dotfiles` is not reachable by other users).
+
 ### Docker installation fails
-On Ubuntu 24.04, the install script may require sudo password. Ensure your user has sudoers access.
+On Ubuntu 24.04, the install script asks for your sudo password. Ensure your user has sudoers access, and run `./install.sh` as that user (not under `sudo`).
 
 ### Tmux plugins don't load
 Run `prefix + I` inside tmux to install plugins manually (TPM should auto-install during setup).

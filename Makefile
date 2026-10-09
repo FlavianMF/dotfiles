@@ -27,8 +27,8 @@ help:
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
 
 install:
-	sudo chmod +x install.sh
-	sudo ./install.sh
+	chmod +x install.sh
+	./install.sh
 
 update:
 	@echo "Atualizando configurações..."

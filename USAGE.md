@@ -8,8 +8,8 @@
 git clone <seu-repo-url> ~/dotfiles
 cd ~/dotfiles
 
-# Instale (vai pedir senha sudo)
-sudo ./install.sh
+# Instale como usuário normal, SEM sudo (o script pede a senha quando precisar)
+./install.sh
 
 # Reabra o terminal
 exec zsh
@@ -206,6 +206,17 @@ git pull
 ```
 
 ## 🆘 Troubleshooting Comum
+
+### "Permission denied" ao rodar install.sh
+`chmod +x` quase nunca resolve: o arquivo já é executável no git. Causa comum: arquivos de
+root na sua home, deixados por um `sudo ./install.sh` antigo.
+```bash
+find ~ -user root -not -path '*/.git/*' | head
+sudo chown -R "$USER:$USER" ~/.local ~/.npm ~/.oh-my-zsh ~/.tmux ~/.cache \
+  ~/.copilot ~/.dotfiles-backup ~/.gitconfig.local
+cd ~/dotfiles && ./install.sh   # sem sudo
+```
+Ainda falha? `bash -x ./install.sh 2>&1 | tail -20` mostra o primeiro `Permission denied`.
 
 ### "Zsh não inicia"
 ```bash
