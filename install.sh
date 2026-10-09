@@ -609,6 +609,8 @@ else
     log_info "Updating spaceship-prompt theme..."
     git -C "$ZSH_THEMES_DIR/spaceship-prompt" pull origin master
 fi
+# oh-my-zsh resolves ZSH_THEME="spaceship" to $ZSH_CUSTOM/themes/spaceship.zsh-theme
+ln -sf "$ZSH_THEMES_DIR/spaceship-prompt/spaceship.zsh-theme" "$ZSH_THEMES_DIR/spaceship.zsh-theme"
 
 # ===== Install TPM (Tmux Plugin Manager) =====
 if [[ ! -d $HOME/.tmux/plugins/tpm ]]; then
