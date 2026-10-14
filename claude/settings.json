@@ -166,7 +166,7 @@
     "impeccable@impeccable": true,
     "github@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
-    "ecc@ecc": true
+    "ecc@ecc": false
   },
   "extraKnownMarketplaces": {
     "caveman": {
