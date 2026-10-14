@@ -3,6 +3,7 @@
     "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1",
     "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
     "SECOND_BRAIN_HOOKS": "1",
+    "SECOND_BRAIN_PROMPT_HINT": "shadow",
     "JEV_MODE_E": "shadow",
     "ECC_HOOK_PROFILE": "minimal",
     "ECC_DISABLED_HOOKS": "stop:evaluate-session,post:ecc-metrics-bridge"
@@ -67,6 +68,15 @@
           {
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/jev-e.sh\"",
+            "timeout": 2
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/second-brain-prompt-hint.sh\"",
             "timeout": 2
           }
         ]

@@ -23,10 +23,28 @@ if common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/
 fi
 [[ -z "$repo" ]] && repo="$(basename "$cwd")"
 # O próprio vault não precisa de dica sobre si mesmo.
-[[ "$(cd "$cwd" 2>/dev/null && pwd -P)" == "$(cd "$vault" 2>/dev/null && pwd -P)"* ]] && exit 0
+# Caminho exato ou filho: um irmão como ~/obsidian_vault2 não casa.
+real_cwd="$(cd "$cwd" 2>/dev/null && pwd -P)"
+real_vault="$(cd "$vault" 2>/dev/null && pwd -P)"
+[[ -n "$real_cwd" && ( "$real_cwd" == "$real_vault" || "$real_cwd" == "$real_vault"/* ) ]] && exit 0
 
 out="$(timeout 4 bash "$hint" "$repo" 2>/dev/null | head -n 5)"
 [[ -z "$out" ]] && exit 0
+
+# Registra o que o L0 mostrou no arquivo de dedupe do L1 (prompt_hint.sh); numa sessão que
+# volta de compactação a janela perdeu o conteúdo, então o arquivo recomeça vazio.
+if command -v jq >/dev/null 2>&1; then
+    session="$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)"
+    session="${session//[^A-Za-z0-9_-]/}"
+    source_kind="$(printf '%s' "$input" | jq -r '.source // empty' 2>/dev/null)"
+    state_dir="${SECOND_BRAIN_STATE_DIR:-$HOME/.local/state/second-brain}"
+    if [[ -n "$session" ]] && (umask 077; mkdir -p "$state_dir") 2>/dev/null; then
+        seen_file="$state_dir/$session.seen"
+        [[ "$source_kind" == "compact" ]] && : >"$seen_file"
+        printf '%s\n' "$out" | sed -n 's/.* — \(.*\) (\([^()]*\))$/\1/p' >>"$seen_file" 2>/dev/null
+        chmod 600 "$seen_file" 2>/dev/null
+    fi
+fi
 
 printf 'Second brain: notas do vault relacionadas a "%s" (abra só se forem relevantes à tarefa):\n%s\n' "$repo" "$out"
 exit 0
