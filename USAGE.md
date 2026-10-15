@@ -173,10 +173,11 @@ docker run -it dev-env
   específico: `make ecc-on DIR=~/proj PACKS=web,typescript`; só o plugin: `NO_RULES=1`. Com `SECOND_BRAIN_HOOKS=1`, o `SessionStart`
   injeta uma linha com esse estado (`ECC desligado (usuário). ...`). Nada entra no git do projeto (`.git/info/exclude`). Reinicie o Claude
   Code no projeto depois de ligar ou desligar.
-  Hooks do ECC: perfil `minimal` (`ECC_HOOK_PROFILE`), com `stop:evaluate-session` e
-  `post:ecc-metrics-bridge` desligados (`ECC_DISABLED_HOOKS`). Rodam só `block-no-verify`,
-  `session:start`/`session-end` (retomada de sessão), `cost-tracker` e `plan-canvas-pending`.
-  GateGuard, config-protection e o format/typecheck do ECC ficam desligados.
+  Hooks do ECC: perfil completo quando ligado (`ECC_HOOK_PROFILE=strict`, nada em `ECC_DISABLED_HOOKS`):
+  rodam GateGuard, config-protection, `pre-compact`, `session-end` com resumo, `skill-tracker`, `cost-tracker`,
+  quality gates e a observação do continuous-learning (log de tool calls em `~/.local/share/ecc-homunculus`).
+  O observer Haiku em background liga com `make ecc-observer-config`. `ECC_OBSERVE_SKIP_PATHS` exclui diretórios
+  com `secrets`, `.ssh` e `.aws`; `ECC_SKIP_OBSERVE=1` desliga o log de tool calls.
 - **Deny list**: `rm -rf`, `sudo`, `chmod 777`, `ssh`/`scp`/`nc`, `curl | bash` e leitura de
   segredos estão bloqueados nos 3 harnesses. Precisa de um deles? Rode você mesmo no terminal
   (no Claude, `! comando`).

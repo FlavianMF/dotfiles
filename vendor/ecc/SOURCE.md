@@ -28,8 +28,8 @@ Além das peças acima, o ECC inteiro está disponível como plugin `ecc@ecc`, n
   `make ecc-rules`). Ficam de fora só `rules/README.md` e os `*/hooks.md`. O SHA está em
   `upstream/rules/.ecc-sha`. Não edite à mão; as rules trimadas para uso global continuam
   em `rules/`.
-- **Hooks**: perfil `minimal`, com desligamentos via env em `claude/settings.json`
-  (`ECC_HOOK_PROFILE`, `ECC_DISABLED_HOOKS`) e também em `pluginConfigs`. Os IDs foram
+- **Hooks**: perfil `strict` (completo), sem hooks desligados, via env em `claude/settings.json`
+  (`ECC_HOOK_PROFILE`; `ECC_DISABLED_HOOKS` ausente) e também em `pluginConfigs`. Os IDs foram
   conferidos em `hooks/hooks.json`, `scripts/hooks/*-dispatcher.js` e
   `scripts/lib/hook-flags.js` neste pin. Hook sem `profiles` cai em `standard,strict`.
 - **MCP**: o `.mcp.json` do plugin sobe `chrome-devtools-mcp@1.10.1` via `npx` quando o
@@ -41,7 +41,7 @@ Além das peças acima, o ECC inteiro está disponível como plugin `ecc@ecc`, n
   2. Troque o SHA no topo deste arquivo pelo commit do marketplace (`claude/plugins.lock.json`).
   3. `make ecc-rules`
   4. Revise `git diff vendor/ecc/upstream`.
-  5. Confira se os IDs de hook mudaram e atualize `ECC_DISABLED_HOOKS` se for o caso.
+  5. Confira se os IDs de hook mudaram e atualize `ECC_DISABLED_HOOKS` se algum dia voltar a desligar hooks.
 
 ## Arquivos
 

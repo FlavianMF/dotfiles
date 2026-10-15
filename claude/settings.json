@@ -5,8 +5,8 @@
     "SECOND_BRAIN_HOOKS": "1",
     "SECOND_BRAIN_PROMPT_HINT": "shadow",
     "JEV_MODE_E": "shadow",
-    "ECC_HOOK_PROFILE": "minimal",
-    "ECC_DISABLED_HOOKS": "stop:evaluate-session,post:ecc-metrics-bridge"
+    "ECC_HOOK_PROFILE": "strict",
+    "ECC_OBSERVE_SKIP_PATHS": "observer-sessions,.claude-mem,secrets,.ssh,.aws"
   },
   "permissions": {
     "deny": [
@@ -239,7 +239,7 @@
     "ecc@ecc": {
       "options": {
         "hooks_enabled": true,
-        "hook_profile": "minimal"
+        "hook_profile": "strict"
       }
     }
   },

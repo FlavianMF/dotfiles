@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto ecc-rules test codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto ecc-observer-config ecc-rules test codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -21,6 +21,7 @@ help:
 	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common, PACKS=a,b só esses packs, NO_RULES=1 só o plugin)"
 	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto e cria .claude/ecc.off (o auto não religa)"
 	@echo "  make ecc-auto DIR=..  - Liga o ECC só se o projeto for web, C ou backend Node (claude/ecc-auto.conf)"
+	@echo "  make ecc-observer-config - Liga o observer do continuous-learning-v2 (link para claude/ecc-clv2-config.json)"
 	@echo "  make test             - Roda os testes bash de tests/"
 	@echo "  make ecc-status DIR=. - Mostra se o ECC está ligado no projeto"
 	@echo "  make ecc-rules        - Reespelha vendor/ecc/upstream/rules no pin do SOURCE.md"
@@ -80,6 +81,12 @@ ecc-off:
 
 ecc-auto:
 	@./claude/ecc-project.sh auto "$(DIR)"
+
+ecc-observer-config:
+	@d="$${CLV2_HOMUNCULUS_DIR:-$${XDG_DATA_HOME:-$$HOME/.local/share}/ecc-homunculus}"; \
+	mkdir -p "$$d" && \
+	if [ -e "$$d/config.json" ] && [ ! -L "$$d/config.json" ]; then echo "$$d/config.json existe e não é link; não mexi"; \
+	else ln -sfn "$(CURDIR)/claude/ecc-clv2-config.json" "$$d/config.json" && echo "observer: $$d/config.json -> claude/ecc-clv2-config.json"; fi
 
 ecc-status:
 	@./claude/ecc-project.sh status "$(DIR)"
