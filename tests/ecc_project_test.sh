@@ -165,6 +165,11 @@ d="$(newrepo offgit)"; "$ECC" off "$d" >/dev/null; expect "ecc.off fora do git s
 d="$(newrepo gitdirenv)"; web "$d"; other="$(newrepo other)"
 GIT_DIR="$other/.git" "$ECC" auto "$d" >/dev/null; expect "GIT_DIR herdado ignorado" "$(git -C "$other" status --porcelain)" ""
 
+# 16b. status numa subpasta mostra o estado da raiz do git; no dotfiles responde em vez de recusar.
+d="$(newrepo statusroot)"; mkdir -p "$d/a/b"; "$ECC" on "$d" --no-rules >/dev/null
+expect "status em subpasta" "$("$ECC" status "$d/a/b" --short)" "ECC ligado (local)."
+expect "status no dotfiles responde" "$("$ECC" status "$ROOT" --short)" "ECC desligado (usuário)."
+
 # 17. guarda do próprio dotfiles: cópia do script num repo falso que seria detectado como web.
 fake="$tmp/fakedotfiles"; mkdir -p "$fake/claude" "$fake/vendor/ecc/upstream/rules"; cp "$ECC" "$ROOT/claude/ecc-detect.sh" "$fake/claude/"
 echo c70874f >"$fake/vendor/ecc/upstream/rules/.ecc-sha"; git init -q "$fake"; web "$fake"

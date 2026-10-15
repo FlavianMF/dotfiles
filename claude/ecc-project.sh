@@ -59,7 +59,10 @@ if [[ "$action" == auto ]]; then
     dir="$(cd "$top" && pwd)"
     [[ ! -e "$dir/.claude" || -d "$dir/.claude" ]] || exit 0
 fi
-if [[ "$dir" == "$REPO_DIR" ]]; then
+if [[ "$action" == status ]]; then
+    # O Claude Code lê .claude/ da raiz do git: numa subpasta, o estado é o da raiz.
+    if top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)"; then dir="$(cd "$top" && pwd)"; fi
+elif [[ "$dir" == "$REPO_DIR" ]]; then
     [[ "$action" == auto ]] && exit 0
     echo "Não ligue o ECC no próprio dotfiles (o link das rules apontaria para dentro dele)" >&2; exit 1
 fi
