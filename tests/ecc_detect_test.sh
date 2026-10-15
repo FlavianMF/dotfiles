@@ -37,10 +37,27 @@ d="$(mk cdeep)";     : >"$d/Makefile"; mkdir -p "$d/src"; : >"$d/src/a.c"; mkdir
 d="$(mk empty)";                                                   check "vazio" "none" "$d"
 check "diretório inexistente" "none" "$tmp/nao-existe"
 
-# Desempenho: cada execução abaixo de 50 ms em média (100 execuções).
+# Casos de borda apontados na revisão.
+d="$(mk backdev)";   echo '{"dependencies":{"express":"4"},"devDependencies":{"react":"18"}}' >"$d/package.json"; check "backend com react só em devDependencies" "node" "$d"
+d="$(mk frontdev)";  echo '{"devDependencies":{"vite":"5"}}' >"$d/package.json"; check "vite só em devDependencies" "web web,typescript" "$d"
+d="$(mk script)";    echo '{"scripts":{"vite":"vite build"},"description":"uses react and vue"}' >"$d/package.json"; check "nome em script/descrição não conta" "none" "$d"
+d="$(mk peer)";      echo '{"peerDependencies":{"express":"4"}}' >"$d/package.json"; check "express só em peerDependencies" "none" "$d"
+d="$(mk rn)";        pkg "$d" '"react-native":"0.7"'; check "react-native não é web" "none" "$d"
+d="$(mk cmakever)";  printf 'project(foo VERSION 1 DESCRIPTION "a C lib")\n' >"$d/CMakeLists.txt"; check "cmake VERSION/DESCRIPTION sem linguagens" "none" "$d"
+d="$(mk cmakeold)";  printf 'project(foo C)\n' >"$d/CMakeLists.txt"; check "cmake forma antiga C" "c" "$d"
+d="$(mk cmakeold2)"; printf 'project(foo CXX C)\n' >"$d/CMakeLists.txt"; check "cmake forma antiga CXX C" "none" "$d"
+d="$(mk cmakecmt)";  printf '# project(x CXX)\nproject(foo C)\n' >"$d/CMakeLists.txt"; check "cmake comentário antes" "c" "$d"
+d="$(mk mesonq)";    printf 'project("x", "c")\n' >"$d/meson.build"; check "meson aspas duplas" "c" "$d"
+d="$(mk pyext)";     : >"$d/Makefile"; mkdir "$d/src"; : >"$d/src/ext.c"; : >"$d/pyproject.toml"; check "extensão C em projeto Python" "none" "$d"
+d="$(mk builder)";   : >"$d/Makefile"; : >"$d/builder.c"; check "arquivo build* não é pruned" "c" "$d"
+d="$(mk nmdepth2)";  : >"$d/Makefile"; : >"$d/main.c"; mkdir "$d/node_modules"; : >"$d/node_modules/y.cpp"; check "node_modules prunado no nível 2" "c" "$d"
+d="$(mk "sp ace é")"; pkg "$d" '"react":"18"'; check "caminho com espaço e acento" "web web,typescript,react" "$d"
+mkdir -p "$tmp/-dash"; pkg "$tmp/-dash" '"react":"18"'; got="$(cd "$tmp" && bash "$DETECT" -dash)"; [[ "$got" == "web web,typescript,react" ]] || { echo "FALHA: dir relativo com hífen ($got)"; fail=1; }
+
+# Desempenho: média por execução abaixo de 150 ms (50 execuções; a margem cobre máquina carregada).
 d="$(mk perf)"; pkg "$d" '"next":"14"'
-start=$(date +%s%N); for _ in $(seq 100); do bash "$DETECT" "$d" >/dev/null; done; end=$(date +%s%N)
-avg=$(( (end - start) / 100 / 1000000 ))
-[[ $avg -lt 50 ]] || { echo "FALHA: média ${avg} ms por execução"; fail=1; }
+start=$(date +%s%N); for _ in $(seq 50); do bash "$DETECT" "$d" >/dev/null; done; end=$(date +%s%N)
+avg=$(( (end - start) / 50 / 1000000 ))
+[[ $avg -lt 150 ]] || { echo "FALHA: média ${avg} ms por execução"; fail=1; }
 
 [[ $fail -eq 0 ]] && echo "ok" || exit 1

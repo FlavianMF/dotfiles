@@ -66,8 +66,9 @@ expect "none não cria .claude" "$(has x "$d/.claude")" no
 # 6. subpasta: age na raiz do git. Diretório sem git: usa o próprio diretório.
 d="$(newrepo sub)"; web "$d"; mkdir -p "$d/a/b"; "$ECC" auto "$d/a/b" >/dev/null
 expect "subpasta escreve na raiz" "$(local_val "$d")" true; expect "subpasta sem .claude próprio" "$(has x "$d/a/b/.claude")" no
-mkdir "$tmp/nogit"; web "$tmp/nogit"; "$ECC" auto "$tmp/nogit" >/dev/null
-expect "sem git usa o diretório" "$(local_val "$tmp/nogit")" true
+mkdir "$tmp/nogit"; web "$tmp/nogit"; expect "fora de git o auto não age" "$("$ECC" auto "$tmp/nogit")" ""
+expect "fora de git nada criado" "$(has x "$tmp/nogit/.claude")" no
+expect "dentro de .git o auto não age" "$("$ECC" auto "$d/.git")" ""; expect "dentro de .git nada criado" "$(has x "$d/.git/.claude")" no
 
 # 7. worktree e submódulo: o exclude vale e o git fica limpo.
 d="$(newrepo wt_main)"; web "$d"; git -C "$d" add -A; git -C "$d" commit -qm pkg
@@ -104,6 +105,70 @@ expect "--packs" "$(pack_list "$d")" "typescript,web"; expect "pack desconhecido
 d="$(newrepo keys)"; mkdir "$d/.claude"; echo '{"model":"opus","env":{"A":"1"}}' >"$d/.claude/settings.local.json"
 "$ECC" on "$d" --no-rules >/dev/null; "$ECC" off "$d" >/dev/null
 expect "outras chaves preservadas" "$(jq -c '[.model,.env.A]' "$d/.claude/settings.local.json")" '["opus","1"]'
+
+# 11. settings.local.json inválido: nada é feito e nada é anunciado.
+for bad in '{' '[]' '"x"' '{"enabledPlugins":[]}'; do
+    d="$(newrepo "bad_$RANDOM")"; web "$d"; mkdir "$d/.claude"; printf '%s' "$bad" >"$d/.claude/settings.local.json"
+    out="$("$ECC" auto "$d" 2>/dev/null)"; expect "inválido '$bad' sem anúncio" "$out" ""
+    expect "inválido '$bad' intacto" "$(cat "$d/.claude/settings.local.json")" "$bad"
+    expect "inválido '$bad' sem rules" "$(has x "$d/.claude/rules")" no
+    "$ECC" on "$d" >/dev/null 2>&1; expect "on recusa '$bad'" "$?" 1
+done
+d="$(newrepo emptyfile)"; web "$d"; mkdir "$d/.claude"; : >"$d/.claude/settings.local.json"
+"$ECC" auto "$d" >/dev/null; expect "arquivo vazio vale {}" "$(local_val "$d")" true
+
+# 12. concorrência: um vencedor, os outros silenciosos, nada de .tmp, JSON válido.
+for i in 1 2 3 4 5 6; do
+    d="$(newrepo "race$i")"; web "$d"
+    for k in 1 2 3; do "$ECC" auto "$d" >"$tmp/race.$k" 2>&1 & done; wait
+    expect "corrida $i: um anúncio" "$(cat "$tmp"/race.? | grep -c 'ligado automaticamente')" 1
+    expect "corrida $i: sem erros" "$(cat "$tmp"/race.? | grep -vc 'ligado automaticamente')" 0
+    expect "corrida $i: sem .tmp" "$(find "$d/.claude" -name '*.tmp' | wc -l | tr -d ' ')" 0
+    expect "corrida $i: JSON válido" "$(jq -r '.enabledPlugins["ecc@ecc"]' "$d/.claude/settings.local.json")" true
+    rm -f "$tmp"/race.?
+done
+
+# 13. --packs: nomes vazios, relativos e fora do projeto são ignorados; links existentes não somem por erro.
+d="$(newrepo packs)"
+"$ECC" on "$d" --packs 'web,,typescript' >/dev/null 2>&1; expect "pack vazio ignorado" "$(pack_list "$d")" "typescript,web"
+"$ECC" on "$d" --packs 'web,..,../../x,a/b,.' >/dev/null 2>&1; expect "packs relativos ignorados" "$(pack_list "$d")" "web"
+expect "nada vazou para fora" "$(test -e "$tmp/x" && echo 1 || echo 0)" 0
+"$ECC" on "$d" --packs ',' >/dev/null 2>&1; expect "só nomes vazios: sem links" "$(has x "$d/.claude/rules/ecc-upstream")" no
+"$ECC" on "$d" --packs 'web' >/dev/null 2>&1; expect "on volta a funcionar" "$(pack_list "$d")" "web"
+
+# 14. kinds: none não liga; espaços; conf ausente usa o padrão.
+d="$(newrepo kinds1)"; echo "x" >"$d/README.md"; echo 'kinds=none' >"$ECC_AUTO_CONF"
+expect "kinds=none não liga" "$("$ECC" auto "$d")" ""; expect "kinds=none nada criado" "$(has x "$d/.claude")" no
+d="$(newrepo kinds2)"; cproj "$d"; echo 'kinds=web, c' >"$ECC_AUTO_CONF"; "$ECC" auto "$d" >/dev/null
+expect "kinds com espaço" "$(local_val "$d")" true
+d="$(newrepo kinds3)"; cproj "$d"; printf 'kinds=web,c,node\nexclude=/nope, %s/kinds3*\n' "$tmp" >"$ECC_AUTO_CONF"
+expect "exclude com espaço" "$("$ECC" auto "$d")" ""
+d="$(newrepo kinds4)"; cproj "$d"; rm "$ECC_AUTO_CONF"; "$ECC" auto "$d" >/dev/null
+expect "conf ausente usa o padrão" "$(local_val "$d")" true
+echo 'kinds=web,c,node' >"$ECC_AUTO_CONF"
+
+# 15. symlink no settings.local.json é preservado; exclude sem \n final; caminho com symlink e exclude.
+d="$(newrepo symlink)"; web "$d"; mkdir "$d/.claude"; echo '{"model":"x"}' >"$tmp/real_settings.json"; ln -s "$tmp/real_settings.json" "$d/.claude/settings.local.json"
+"$ECC" auto "$d" >/dev/null
+expect "symlink continua" "$(test -L "$d/.claude/settings.local.json" && echo yes || echo no)" yes
+expect "alvo atualizado" "$(jq -r '.enabledPlugins["ecc@ecc"]' "$tmp/real_settings.json")" true
+d="$(newrepo noeol)"; web "$d"; printf '*.log' >"$d/.git/info/exclude"; "$ECC" auto "$d" >/dev/null
+expect "exclude sem \\n final preserva o padrão" "$(head -n 1 "$d/.git/info/exclude")" '*.log'
+expect "exclude sem \\n final: git limpo" "$(git -C "$d" status --porcelain | grep -v package.json)" ""
+d="$(newrepo viasym)"; cproj "$d"; mkdir "$tmp/linkparent"; ln -s "$d" "$tmp/linkparent/p"
+printf 'kinds=web,c,node\nexclude=%s/linkparent/*\n' "$tmp" >"$ECC_AUTO_CONF"
+expect "exclude vale pelo caminho digitado" "$("$ECC" auto "$tmp/linkparent/p")" ""
+echo 'kinds=web,c,node' >"$ECC_AUTO_CONF"
+
+# 16. ecc.off não aparece no git status; GIT_DIR herdado é ignorado.
+d="$(newrepo offgit)"; "$ECC" off "$d" >/dev/null; expect "ecc.off fora do git status" "$(git -C "$d" status --porcelain)" ""
+d="$(newrepo gitdirenv)"; web "$d"; other="$(newrepo other)"
+GIT_DIR="$other/.git" "$ECC" auto "$d" >/dev/null; expect "GIT_DIR herdado ignorado" "$(git -C "$other" status --porcelain)" ""
+
+# 17. guarda do próprio dotfiles: cópia do script num repo falso que seria detectado como web.
+fake="$tmp/fakedotfiles"; mkdir -p "$fake/claude" "$fake/vendor/ecc/upstream/rules"; cp "$ECC" "$ROOT/claude/ecc-detect.sh" "$fake/claude/"
+echo c70874f >"$fake/vendor/ecc/upstream/rules/.ecc-sha"; git init -q "$fake"; web "$fake"
+expect "auto ignora o repo do dotfiles" "$("$fake/claude/ecc-project.sh" auto "$fake")" ""; expect "dotfiles falso sem .claude" "$(has x "$fake/.claude")" no
 
 expect "usuário continua intocado" "$(sha256sum "$CLAUDE_CONFIG_DIR/settings.json")" "$user_sum"
 [[ $fail -eq 0 ]] && echo "ok" || exit 1
