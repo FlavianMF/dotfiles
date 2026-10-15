@@ -9,7 +9,7 @@
 - O hook `suggest-compact` avisa quando a sessão passa de ~50 tool calls: trate como
   sinal para compactar na próxima fronteira de fase, não no meio da edição.
 - Hooks do second brain (`SECOND_BRAIN_HOOKS=1`): o SessionStart injeta notas do vault
-  relacionadas ao repo; o Stop lembra de rodar `vault_sync.py` depois de várias edições.
+  relacionadas ao repo; o Stop lembra de enfileirar candidatos (`sb.py candidate add`) depois de várias edições (arquivos e Bash de escrita).
   Desligue por projeto com `"env": {"SECOND_BRAIN_HOOKS": "0"}` em
   `.claude/settings.local.json`.
 - Hook `jev-e` (UserPromptSubmit, modo sombra): grava num log local qual skill o Jev sugeriria
