@@ -9,7 +9,8 @@
 # Linha 2 (sem fork no caso comum): o estado do ECC é o snapshot gravado no SessionStart
 # (claude/hooks/ecc-session-start.sh); se o disco mudou depois, mostra `*` e "reinicie". "SB n
 # notas" = notas injetadas no contexto (<sid>.injected); "n aberta" = abertas pelo agente
-# (<sid>.opened, hook second-brain-note-opened.sh).
+# (<sid>.opened, hook second-brain-note-opened.sh). "n candidatos" = linhas da fila do
+# `sb candidate` (queue.jsonl); conta as vencidas também, `sb candidate list` mostra o exato.
 
 input="$(cat)"
 
@@ -122,6 +123,16 @@ else
     if [[ $opened -gt 0 ]]; then
         open_noun="abertas"; [[ $opened -eq 1 ]] && open_noun="aberta"
         sb_seg+=" ${C_DIM}·${C_RESET} ${C_CYAN}${opened} ${open_noun}${C_RESET}"
+    fi
+fi
+
+candidates=0
+if [[ -r "$sb_dir/queue.jsonl" ]]; then mapfile -t _c <"$sb_dir/queue.jsonl"; candidates=${#_c[@]}; fi
+if [[ $candidates -gt 0 ]]; then
+    if [[ $narrow -eq 1 ]]; then sb_seg+=" ${C_YELLOW}C${candidates}${C_RESET}"
+    else
+        cand_noun="candidatos"; [[ $candidates -eq 1 ]] && cand_noun="candidato"
+        sb_seg+=" ${C_DIM}·${C_RESET} ${C_YELLOW}${candidates} ${cand_noun}${C_RESET}"
     fi
 fi
 

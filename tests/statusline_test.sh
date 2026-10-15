@@ -46,6 +46,17 @@ expect "snapshot ligado, disco desligado" "$(last s3)" "ECC ligado (local)* rein
 echo '{"enabledPlugins":{"ecc@ecc":true}}' >"$proj/.claude/settings.local.json"; sleep 1.1; touch "$proj/.claude/settings.local.json"
 expect "volta a coincidir" "$(last s3)" "ECC ligado (local) · SB 0 notas"
 
+# Fila de candidatos do `sb candidate`.
+snap s5 ligado local on
+printf '{"id":"a"}\n' >"$tmp/sb/queue.jsonl"
+expect "um candidato" "$(last s5)" "ECC ligado (local) · SB 0 notas · 1 candidato"
+printf '{"id":"a"}\n{"id":"b"}\n' >"$tmp/sb/queue.jsonl"
+expect "candidatos" "$(last s5)" "ECC ligado (local) · SB 0 notas · 2 candidatos"
+expect "candidatos em forma curta" "$(COLUMNS=30 last s5)" "ECC+ · SB0 C2"
+: >"$tmp/sb/queue.jsonl"
+expect "fila vazia não aparece" "$(last s5)" "ECC ligado (local) · SB 0 notas"
+rm "$tmp/sb/queue.jsonl"
+
 # Second brain desligado na sessão; formas curtas; cores.
 snap s4 ligado local off
 expect "SB off" "$(last s4)" "ECC ligado (local) · SB off"
