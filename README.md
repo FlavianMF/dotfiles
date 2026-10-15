@@ -205,4 +205,4 @@ Start a fresh shell: `exec zsh`.
 
 The zsh config expects **FiraCode Nerd Font Mono** for proper rendering of prompt symbols. Install it on your system or adjust `SPACESHIP_CHAR_SYMBOL` in `.zshrc`.
 
-See `TERMINAL_FIX.md` for notes on terminal configuration.
+See `TERMINAL_FIX.md` for notes on terminal configuration. For a practical guide to tmux layouts, multi-pane workflows, and agent usage, see [TERMINAL_WORKFLOW.md](TERMINAL_WORKFLOW.md).

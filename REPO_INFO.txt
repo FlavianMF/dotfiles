@@ -48,6 +48,8 @@ make help          - Mostrar ajuda
 
 🎮 Atalhos do Sistema:
 Tmux:
+  Ctrl+Space + T   - layout 3 colunas
+  Ctrl+Space + E   - reaplica proporção
   Ctrl+Space + n   - próxima aba
   Ctrl+Space + p   - aba anterior
   Ctrl+Space + c   - nova janela
