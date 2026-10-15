@@ -6,7 +6,8 @@
     "SECOND_BRAIN_PROMPT_HINT": "shadow",
     "JEV_MODE_E": "shadow",
     "ECC_HOOK_PROFILE": "strict",
-    "ECC_OBSERVE_SKIP_PATHS": "observer-sessions,.claude-mem,secrets,.ssh,.aws"
+    "ECC_OBSERVE_SKIP_PATHS": "observer-sessions,.claude-mem,secrets,.ssh,.aws",
+    "ECC_INSTINCT_CONFIDENCE_THRESHOLD": "1"
   },
   "permissions": {
     "deny": [

@@ -178,6 +178,10 @@ docker run -it dev-env
   quality gates e a observação do continuous-learning (log de tool calls em `~/.local/share/ecc-homunculus`).
   O observer Haiku em background liga com `make ecc-observer-config`. `ECC_OBSERVE_SKIP_PATHS` exclui diretórios
   com `secrets`, `.ssh` e `.aws`; `ECC_SKIP_OBSERVE=1` desliga o log de tool calls.
+  `ECC_INSTINCT_CONFIDENCE_THRESHOLD=1` bloqueia a injeção de instincts no SessionStart (a confiança máxima do ECC é 0,9) e mantém
+  o resto. É temporário, até 2026-10-29: depois disso, remova a variável de `claude/settings.json` ao revisar os instincts.
+  `ECC_MAX_INJECTED_INSTINCTS=0` não funciona (volta ao padrão 6). `make ecc-observer-config` também deixa a raiz do
+  homunculus em modo `0700`.
 - **Deny list**: `rm -rf`, `sudo`, `chmod 777`, `ssh`/`scp`/`nc`, `curl | bash` e leitura de
   segredos estão bloqueados nos 3 harnesses. Precisa de um deles? Rode você mesmo no terminal
   (no Claude, `! comando`).

@@ -84,7 +84,7 @@ ecc-auto:
 
 ecc-observer-config:
 	@d="$${CLV2_HOMUNCULUS_DIR:-$${XDG_DATA_HOME:-$$HOME/.local/share}/ecc-homunculus}"; \
-	mkdir -p "$$d" && \
+	mkdir -p "$$d" && chmod 700 "$$d" && \
 	if [ -e "$$d/config.json" ] && [ ! -L "$$d/config.json" ]; then echo "$$d/config.json existe e não é link; não mexi"; \
 	else ln -sfn "$(CURDIR)/claude/ecc-clv2-config.json" "$$d/config.json" && echo "observer: $$d/config.json -> claude/ecc-clv2-config.json"; fi
 
