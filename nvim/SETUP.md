@@ -59,7 +59,9 @@ Ctrl+Space      → Prefix
 <Prefix>c       → Nova janela
 <Prefix>"       → Split vertical
 <Prefix>%       → Split horizontal
-<Prefix>h/j/k/l → Navegar panes (ou Ctrl+hjkl)
+<Prefix>T       → Layout 3 colunas
+<Prefix>E       → Reaplica proporção
+<Ctrl>h/j/k/l   → Navegar panes e splits Nvim
 <Prefix>H/J/K/L → Redimensionar panes
 <Prefix>r       → Reload config
 ```

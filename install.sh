@@ -703,6 +703,8 @@ link_shared_skill() {
 
 create_config_link "$REPO_DIR/zsh/.zshrc" "$HOME/.zshrc"
 create_config_link "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
+as_user mkdir -p "$HOME/.tmux"
+create_config_link "$REPO_DIR/tmux/scripts" "$HOME/.tmux/scripts"
 
 # nvim (entire directory) — only if nvim selected
 if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]]; then
