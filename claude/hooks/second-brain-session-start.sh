@@ -21,6 +21,22 @@ ecc_script="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../ecc-project.sh"
 ecc_line="$(timeout 2 bash "$ecc_script" status "$cwd" --short 2>/dev/null)"
 [[ -n "$ecc_line" ]] && printf '%s Só o usuário muda (make ecc-on|ecc-off DIR=...).\n' "$ecc_line"
 
+# ECC desligado num projeto web, C ou backend Node: o wrapper `claude` do zsh liga antes de abrir; se
+# a sessão veio de outro lugar (IDE), avisa para o agente sugerir. Respeita .claude/ecc.off.
+if [[ "$ecc_line" == "ECC desligado"* ]]; then
+    ecc_root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "$cwd")"
+    ecc_dotfiles="$(cd "$(dirname "$ecc_script")/.." 2>/dev/null && pwd -P)"
+    if [[ ! -e "$ecc_root/.claude/ecc.off" && "$(cd "$ecc_root" 2>/dev/null && pwd -P)" != "$ecc_dotfiles" ]]; then
+        read -r ecc_kind _ <<<"$(timeout 2 bash "$(dirname "$ecc_script")/ecc-detect.sh" "$ecc_root" 2>/dev/null)"
+        case "$ecc_kind" in
+            web|c|node)
+                printf 'O projeto parece %s e o ECC está desligado. Se a tarefa se beneficiar, sugira ao usuário: make ecc-on DIR=%q (vale na próxima sessão).\n' \
+                    "$([[ "$ecc_kind" == node ]] && echo 'backend Node' || echo "$ecc_kind")" "$ecc_root"
+                ;;
+        esac
+    fi
+fi
+
 # Nome do repo principal, mesmo dentro de um worktree (usa o diretório do .git comum).
 # Repo comum ou worktree: <repo>/.git. Submódulo (ou worktree dele): <super>/.git/modules/<nome>,
 # onde o nome do repo é o último componente. Não use --show-toplevel: num worktree ele devolve
