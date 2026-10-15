@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-rules codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto ecc-rules test codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -18,8 +18,10 @@ help:
 	@echo "  make harness-dry-run  - Mostra o que o install faria nos harnesses, sem mudar nada"
 	@echo "  make plugins-freeze   - Grava claude/plugins.lock.json (versões instaladas)"
 	@echo "  make plugins-update   - Atualiza marketplaces e plugins declarados, depois freeze"
-	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common)"
-	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto"
+	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common, PACKS=a,b só esses packs, NO_RULES=1 só o plugin)"
+	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto e cria .claude/ecc.off (o auto não religa)"
+	@echo "  make ecc-auto DIR=..  - Liga o ECC só se o projeto for web, C ou backend Node (claude/ecc-auto.conf)"
+	@echo "  make test             - Roda os testes bash de tests/"
 	@echo "  make ecc-status DIR=. - Mostra se o ECC está ligado no projeto"
 	@echo "  make ecc-rules        - Reespelha vendor/ecc/upstream/rules no pin do SOURCE.md"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
@@ -71,10 +73,13 @@ plugins-update:
 # ECC: plugin instalado e desligado globalmente; liga por projeto.
 DIR ?= .
 ecc-on:
-	@./claude/ecc-project.sh on "$(DIR)" $(if $(NO_COMMON),--no-common)
+	@./claude/ecc-project.sh on "$(DIR)" $(if $(NO_COMMON),--no-common) $(if $(PACKS),--packs "$(PACKS)") $(if $(NO_RULES),--no-rules)
 
 ecc-off:
 	@./claude/ecc-project.sh off "$(DIR)"
+
+ecc-auto:
+	@./claude/ecc-project.sh auto "$(DIR)"
 
 ecc-status:
 	@./claude/ecc-project.sh status "$(DIR)"
@@ -90,10 +95,13 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
 	@python3 opencode/render_agents.py vendor/ecc/agents .cache/lint-agents --dry-run > /dev/null
 	@echo "lint ok"
+
+test:
+	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" || exit 1; done
