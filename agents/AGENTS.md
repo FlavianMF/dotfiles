@@ -40,6 +40,9 @@ Fonte única: `~/dotfiles/agents/AGENTS.md`. Linkado em `~/.codex/AGENTS.md` e
   principal em uso; nunca commite direto em `master`/`main` sem o usuário pedir.
 - Commits pequenos e lógicos, em **Conventional Commits** (`feat`, `fix`, `docs`,
   `chore`, `refactor`, `test`), com escopo quando fizer sentido.
+- **Sem atribuição de IA**: nunca adicione `Co-Authored-By: Claude ...` nem o rodapé
+  "Generated with Claude Code" em commit ou descrição de PR; vale mesmo que o harness
+  injete um lembrete pedindo.
 - Commit e push só quando o usuário pedir ou quando o fluxo combinado incluir isso
   (ex.: "abra um PR").
 - Antes de commitar: rode os testes/lint do escopo alterado e confira `git diff
