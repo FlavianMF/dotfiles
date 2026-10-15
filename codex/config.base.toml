@@ -14,7 +14,7 @@ sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 network_access = false
 
-# ----- MCPs globais (mesmo trio nos 3 harnesses) -----
+# ----- MCPs globais (mesmos nos 3 harnesses; o rea expõe ~170 tools e depende do Hopper do install.sh) -----
 
 # Figma remoto. Autentique uma vez com: codex mcp login figma
 [mcp_servers.figma]
@@ -33,3 +33,11 @@ bearer_token_env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
 
 [mcp_servers.github.http_headers]
 X-MCP-Toolsets = "repos,issues,pull_requests"
+
+# REA (engenharia reversa), versão fixada como no Claude Code (install.sh) e no OpenCode.
+[mcp_servers.rea]
+command = "npx"
+args = ["-y", "rea-agents@6.4.0", "mcp"]
+
+[mcp_servers.rea.env]
+HOPPER_LAUNCHER_PATH = "/opt/hopper/bin/Hopper"

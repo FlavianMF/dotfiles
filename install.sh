@@ -133,6 +133,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [codex]="OpenAI Codex CLI (npm, ~/.local) + ~/.codex config"
     [opencode]="OpenCode CLI (npm, ~/.local) + ~/.config/opencode config"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
+    [hopper]="Hopper Disassembler 6.4.2 demo (.deb pinned by size+SHA-1) + Xvfb deps, backend of the rea MCP"
     [jev]="jev-workflow (clone + npm ci + build in ~/projetos_claude/jev-workflow); the E hook in settings.json stays in shadow mode"
     [nvim]="Neovim + LazyVim config"
     [ripgrep]="ripgrep (fast search, used by nvim Telescope)"
@@ -159,6 +160,7 @@ declare -A SELECTED_COMPONENTS=(
     [gh]=1
     [vscode]=1
     [eim]=1
+    [hopper]=1
     [claudeskills]=1
     [codex]=0
     [opencode]=0
@@ -180,17 +182,18 @@ SYSTEM_WIDE=1
 # Interactive selection with keyboard navigation
 select_components() {
     if ! is_interactive; then
-        log_info "Running non-interactively. Installing default components: node, python, gh, vscode, eim, claudeskills (system-wide install: enabled)"
+        log_info "Running non-interactively. Installing default components: node, python, gh, vscode, eim, hopper, claudeskills (system-wide install: enabled)"
         SELECTED_COMPONENTS[node]=1
         SELECTED_COMPONENTS[python]=1
         SELECTED_COMPONENTS[gh]=1
         SELECTED_COMPONENTS[vscode]=1
         SELECTED_COMPONENTS[eim]=1
+        SELECTED_COMPONENTS[hopper]=1
         SELECTED_COMPONENTS[claudeskills]=1
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim claudeskills codex opencode ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -531,6 +534,42 @@ if [[ ${SELECTED_COMPONENTS[usbip]} -eq 1 ]] && ! command -v usbip &> /dev/null;
     fi
 fi
 
+# Hopper Disassembler (backend of the rea MCP). The vendor publishes no checksums and
+# no apt repo, so the .deb is pinned by size + SHA-1 (same pins rea-agents ships), and
+# the installed binary's SHA-256 is checked afterwards. Bumping the version means
+# re-verifying all of these by hand; rea-agents only drives hashes it knows.
+HOPPER_VERSION="6.4.2"
+HOPPER_DEB_URL="https://www.hopperapp.com/downloader/public/Hopper-${HOPPER_VERSION}-Linux-demo.deb"
+HOPPER_DEB_SIZE=35755772
+HOPPER_DEB_SHA1="e4f79dff602648a8ff4a88b773875b6bfac0dc65"
+HOPPER_BIN_SHA256="0294ced141cc373468ee22d8343e7dac41980cb05a937994ca81c9f09afe7ded"
+HOPPER_RUNTIME_PACKAGES=(xvfb xauth python3 libx11-6 libxtst6)
+if [[ ${SELECTED_COMPONENTS[hopper]} -eq 1 ]]; then
+    installed_hopper="$(dpkg-query -W -f='${Version}' hopper 2>/dev/null || true)"
+    # shellcheck disable=SC1091
+    os_id="$(. /etc/os-release 2>/dev/null; echo "${ID:-}:${VERSION_ID:-0}")"
+    if [[ "$installed_hopper" == "$HOPPER_VERSION"* && -x /opt/hopper/bin/Hopper ]]; then
+        log_info "Hopper $installed_hopper already installed"
+    elif [[ "$os_id" == ubuntu:* ]] && dpkg --compare-versions "${os_id#ubuntu:}" ge 24.04 || [[ "$os_id" == debian:* ]]; then
+        log_info "Installing Hopper $HOPPER_VERSION (demo)..."
+        hopper_tmp="$(mktemp -d)"
+        hopper_deb="$hopper_tmp/hopper.deb"
+        if curl -fsSL -o "$hopper_deb" "$HOPPER_DEB_URL" \
+            && [[ "$(stat -c %s "$hopper_deb")" -eq $HOPPER_DEB_SIZE ]] \
+            && [[ "$(sha1sum "$hopper_deb" | cut -d' ' -f1)" == "$HOPPER_DEB_SHA1" ]]; then
+            $SUDO_CMD apt-get install -y "$hopper_deb" "${HOPPER_RUNTIME_PACKAGES[@]}" || log_warn "Hopper apt install failed"
+        else
+            log_warn "Hopper .deb download or size/SHA-1 check failed; not installing"
+        fi
+        rm -rf "$hopper_tmp"
+        if [[ -x /opt/hopper/bin/Hopper ]] && [[ "$(sha256sum /opt/hopper/bin/Hopper | cut -d' ' -f1)" != "$HOPPER_BIN_SHA256" ]]; then
+            log_warn "/opt/hopper/bin/Hopper SHA-256 differs from the pinned one; rea may refuse the demo dialog"
+        fi
+    else
+        log_warn "Hopper .deb targets Ubuntu >= 24.04; detected '$os_id', skipping"
+    fi
+fi
+
 # Install Espressif EIM (ESP-IDF Installation Manager) and provision ESP-IDF if selected
 EIM_PROVISIONED=0
 if [[ ${SELECTED_COMPONENTS[eim]} -eq 1 ]]; then
@@ -639,6 +678,8 @@ CONFIG_ITEMS=(
     "$HOME/.claude/hooks"
     "$HOME/.claude/skills/second-brain-sync"
     "$HOME/.agents/skills/second-brain-sync"
+    "$HOME/.claude/skills/reverse-engineer-anything"
+    "$HOME/.agents/skills/reverse-engineer-anything"
     "$HOME/.codex/config.toml"
     "$HOME/.codex/yolo.config.toml"
     "$HOME/.codex/AGENTS.md"
@@ -728,6 +769,9 @@ if [[ ! -d "$VAULT_DIR/.git" ]]; then
     as_user git clone https://github.com/FlavianMF/obisidian_vault.git "$VAULT_DIR"
 fi
 link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync"
+# reverse-engineer-anything ships with rea-agents@REA_VERSION; versioned here so the
+# skill and the MCP it documents stay in step (resync from the package on a bump).
+link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode =====
 # Declarative, not symlinked where the tool keeps machine state:
@@ -780,6 +824,24 @@ fi
 OPENCODE_ACTIVE=0
 if [[ ${SELECTED_COMPONENTS[opencode]} -eq 1 ]] || has_native_cmd opencode || [[ -d "$HOME/.config/opencode" ]]; then
     OPENCODE_ACTIVE=1
+fi
+
+# --- rea MCP (user scope), pinned like the Codex/OpenCode entries ---
+# `claude mcp add` is used instead of editing ~/.claude.json, which Claude rewrites.
+REA_PACKAGE="rea-agents@6.4.0"
+HOPPER_LAUNCHER="/opt/hopper/bin/Hopper"
+if has_native_cmd claude; then
+    current_rea="$(claude mcp get rea 2>/dev/null || true)"
+    if grep -qF "$REA_PACKAGE" <<< "$current_rea" && grep -qF "$HOPPER_LAUNCHER" <<< "$current_rea"; then
+        log_info "rea MCP already registered ($REA_PACKAGE)"
+    else
+        log_info "Registering rea MCP ($REA_PACKAGE)..."
+        [[ -n "$current_rea" ]] && as_user claude mcp remove rea -s user < /dev/null || true
+        as_user claude mcp add rea -s user -e "HOPPER_LAUNCHER_PATH=$HOPPER_LAUNCHER" -- npx -y "$REA_PACKAGE" mcp < /dev/null \
+            || log_warn "claude mcp add rea failed"
+    fi
+else
+    log_warn "claude CLI not found; skipping rea MCP registration"
 fi
 
 # --- Claude Code plugins, reconciled from claude/settings.json ---
@@ -1076,7 +1138,8 @@ echo "✓ Spaceship prompt theme installed"
 echo "✓ Tmux plugin manager installed"
 fi
 echo "✓ Config files symlinked from $REPO_DIR"
-echo "✓ Skill 'second-brain-sync' linked (~/.agents/skills + ~/.claude/skills)"
+echo "✓ Skills 'second-brain-sync' and 'reverse-engineer-anything' linked (~/.agents/skills + ~/.claude/skills)"
+echo "✓ rea MCP registered for Claude Code (user scope)"
 [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]] && echo "✓ Claude Code plugins reconciled with claude/settings.json; skills in ~/.agents/skills"
 [[ $CODEX_ACTIVE -eq 1 ]] && echo "✓ Codex configured (~/.codex/config.toml rendered, AGENTS.md linked)"
 [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
