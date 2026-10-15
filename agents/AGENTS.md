@@ -90,6 +90,14 @@ O vault Obsidian em `~/obsidian_vault` é a memória de longo prazo entre projet
 skill `second-brain-sync` para consultar os manifests antes de decisões de arquitetura e
 para destilar padrões, decisões e armadilhas ao fim de uma tarefa de dev.
 
+**Fila de candidatos.** Quando o usuário o corrigir ou você descobrir uma armadilha ou padrão
+reutilizável, acrescente uma linha à fila em vez de escrever no vault:
+`python3 ~/obsidian_vault/00_META/skills/second-brain-sync/scripts/sb.py candidate add --kind
+trap|pattern|decision|concept --title "..." --summary "..."`. A fila é estado local (expira em
+30 dias) e não toca o vault; nunca ponha segredo no texto. Quem transforma candidato em nota é o
+usuário, na revisão. Não rode `/promote`, `/evolve`, `/instinct-import` nem `/prune` por conta
+própria.
+
 ## ECC por projeto
 
 O plugin `ecc@ecc` custa ~45 mil tokens por sessão; fica desligado no escopo de usuário. Política permanente do
