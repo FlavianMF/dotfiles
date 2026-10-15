@@ -22,9 +22,15 @@ ecc_line="$(timeout 2 bash "$ecc_script" status "$cwd" --short 2>/dev/null)"
 [[ -n "$ecc_line" ]] && printf '%s Só o usuário muda (make ecc-on|ecc-off DIR=...).\n' "$ecc_line"
 
 # Nome do repo principal, mesmo dentro de um worktree (usa o diretório do .git comum).
+# Repo comum ou worktree: <repo>/.git. Submódulo (ou worktree dele): <super>/.git/modules/<nome>,
+# onde o nome do repo é o último componente. Não use --show-toplevel: num worktree ele devolve
+# o nome do diretório do worktree, que não casa com a proveniência dos manifests.
 repo=""
 if common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
-    repo="$(basename "$(dirname "$common")")"
+    case "$common" in
+        */.git/modules/*) repo="$(basename "$common")" ;;
+        *) repo="$(basename "$(dirname "$common")")" ;;
+    esac
 fi
 [[ -z "$repo" ]] && repo="$(basename "$cwd")"
 # O próprio vault não precisa de dica sobre si mesmo.
