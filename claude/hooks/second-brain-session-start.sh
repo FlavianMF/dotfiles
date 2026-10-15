@@ -16,6 +16,11 @@ cwd=""
 command -v jq >/dev/null 2>&1 && cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 [[ -d "$cwd" ]] || cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
+# Estado do ECC neste projeto (~20 tokens): o agente não deve ligar/desligar por conta própria.
+ecc_script="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../ecc-project.sh"
+ecc_line="$(timeout 2 bash "$ecc_script" status "$cwd" --short 2>/dev/null)"
+[[ -n "$ecc_line" ]] && printf '%s Só o usuário muda (make ecc-on|ecc-off DIR=...).\n' "$ecc_line"
+
 # Nome do repo principal, mesmo dentro de um worktree (usa o diretório do .git comum).
 repo=""
 if common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then

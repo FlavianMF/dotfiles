@@ -1,7 +1,7 @@
 #!/bin/bash
 # Liga/desliga o plugin ECC (ecc@ecc) num projeto, sem mexer no git dele.
 #
-# Uso: claude/ecc-project.sh on|off|status [dir] [--no-common]
+# Uso: claude/ecc-project.sh on|off|status [dir] [--no-common] [--short]
 #
 # on:  enabledPlugins["ecc@ecc"]=true em <dir>/.claude/settings.local.json e link
 #      <dir>/.claude/rules/ecc-upstream -> vendor/ecc/upstream/rules (rules do ECC no
@@ -9,6 +9,7 @@
 #      que carrega sempre e manda delegar a agents ecc:*). Os dois caminhos entram em
 #      .git/info/exclude.
 # off: remove a chave e o link; o resto do settings.local.json fica.
+# status: estado efetivo (local > projeto > usuário); --short imprime uma linha para o SessionStart.
 # Globalmente o plugin fica instalado e desligado (claude/settings.json).
 set -euo pipefail
 
@@ -16,13 +17,14 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RULES_SRC="$REPO_DIR/vendor/ecc/upstream/rules"
 PLUGIN="ecc@ecc"
 
-usage() { echo "Uso: $0 on|off|status [dir] [--no-common]" >&2; exit 1; }
+usage() { echo "Uso: $0 on|off|status [dir] [--no-common] [--short]" >&2; exit 1; }
 
 action="${1:-}"; shift || true
-dir="."; no_common=0
+dir="."; no_common=0; short=0
 for arg in "$@"; do
     case "$arg" in
         --no-common) no_common=1 ;;
+        --short) short=1 ;;
         -*) usage ;;
         *) dir="$arg" ;;
     esac
@@ -89,11 +91,24 @@ case "$action" in
         echo "ECC desligado em $dir. Reinicie o Claude Code nesse projeto."
         ;;
     status)
-        state="desligado"
-        [[ -f "$settings" ]] && [[ "$(jq -r --arg p "$PLUGIN" '.enabledPlugins[$p] // false' "$settings")" == true ]] && state="ligado"
+        # Precedência do Claude Code: local > projeto > usuário. Chave ausente = herda.
+        state="desligado"; scope="padrão"
+        for candidate in "$settings:local" "$dir/.claude/settings.json:projeto" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json:usuário"; do
+            file="${candidate%:*}"
+            [[ -f "$file" ]] || continue
+            value="$(jq -r --arg p "$PLUGIN" '.enabledPlugins[$p] | if . == null then empty else tostring end' "$file" 2>/dev/null || true)"
+            [[ -n "$value" ]] || continue
+            [[ "$value" == true ]] && state="ligado"
+            scope="${candidate##*:}"
+            break
+        done
         rules="sem rules"
         if [[ -L "$rules_link" ]]; then rules="rules completas"
         elif [[ -d "$rules_link" ]]; then rules="rules sem common"; fi
-        echo "$dir: ECC $state, $rules (pin $(cut -c1-7 "$RULES_SRC/.ecc-sha" 2>/dev/null || echo '?'))"
+        if [[ $short -eq 1 ]]; then
+            echo "ECC $state ($scope)."
+        else
+            echo "$dir: ECC $state ($scope), $rules (pin $(cut -c1-7 "$RULES_SRC/.ecc-sha" 2>/dev/null || echo '?'))"
+        fi
         ;;
 esac

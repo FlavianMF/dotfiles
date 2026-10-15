@@ -86,3 +86,15 @@ Contexto e decisões por trás destas regras:
 O vault Obsidian em `~/obsidian_vault` é a memória de longo prazo entre projetos. Use a
 skill `second-brain-sync` para consultar os manifests antes de decisões de arquitetura e
 para destilar padrões, decisões e armadilhas ao fim de uma tarefa de dev.
+
+## ECC por projeto
+
+O plugin `ecc@ecc` custa ~45 mil tokens por sessão; fica desligado no escopo de usuário e é ligado por
+projeto. A linha `ECC ligado|desligado (...)` no início da sessão informa o estado.
+
+- Só rode `make ecc-on|ecc-off DIR=...` (no repo de dotfiles) se o usuário pedir. Em vez disso,
+  sugira ligar quando a tarefa pedir revisão Go/Java/Kotlin, `orch-review` ou `review-pr`, e sugira
+  desligar no resto.
+- Com o ECC desligado, não invoque agentes `ecc:*` nem skills do plugin; use os `cavecrew-*`, o
+  `Explore` ou a sessão principal.
+- Mudança de estado só vale numa sessão nova (ou `/reload-plugins`).

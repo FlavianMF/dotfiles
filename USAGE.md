@@ -166,7 +166,8 @@ docker run -it dev-env
   `make ecc-on DIR=~/proj` (rules completas do ECC, incluindo `rules/common`, que carrega
   sempre e manda delegar a agents `ecc:*`) ou `make ecc-on DIR=~/proj NO_COMMON=1` (só os
   packs de linguagem). `make ecc-off DIR=~/proj` desfaz e `make ecc-status DIR=~/proj`
-  mostra o estado. Nada entra no git do projeto (`.git/info/exclude`). Reinicie o Claude
+  mostra o estado efetivo (local, projeto ou usuário). Com `SECOND_BRAIN_HOOKS=1`, o `SessionStart`
+  injeta uma linha com esse estado (`ECC desligado (usuário). ...`). Nada entra no git do projeto (`.git/info/exclude`). Reinicie o Claude
   Code no projeto depois de ligar ou desligar.
   Hooks do ECC: perfil `minimal` (`ECC_HOOK_PROFILE`), com `stop:evaluate-session` e
   `post:ecc-metrics-bridge` desligados (`ECC_DISABLED_HOOKS`). Rodam só `block-no-verify`,
