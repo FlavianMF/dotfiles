@@ -96,6 +96,7 @@ audit:
 
 lint:
 	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; fi
 	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml

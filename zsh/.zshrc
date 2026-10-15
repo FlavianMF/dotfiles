@@ -156,6 +156,9 @@ alias claude-dev='claude --append-system-prompt-file "$HOME/dotfiles/claude/cont
 alias claude-review='claude --append-system-prompt-file "$HOME/dotfiles/claude/contexts/review.md"'
 alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude/contexts/research.md"'
 
+# ECC automático em projetos web/C/Node backend (função claude); ver zsh/ecc-auto.zsh
+[[ -r "$HOME/dotfiles/zsh/ecc-auto.zsh" ]] && source "$HOME/dotfiles/zsh/ecc-auto.zsh"
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'
