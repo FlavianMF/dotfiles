@@ -119,7 +119,7 @@ fi
 
 # Base packages (always required; jq is used by the Claude plugin reconciliation
 # and the statusline/hooks)
-REQUIRED_PACKAGES=(git curl zsh tmux build-essential jq)
+REQUIRED_PACKAGES=(git curl zsh tmux build-essential jq unzip)
 
 # Optional components
 declare -A OPTIONAL_COMPONENTS=(
@@ -347,16 +347,6 @@ if [[ ${SELECTED_COMPONENTS[fd]} -eq 1 ]]; then
     ALL_PACKAGES+=(${COMPONENT_PACKAGES[fd]})
 fi
 
-if [[ ${SELECTED_COMPONENTS[yazi]} -eq 1 ]]; then
-    log_info "yazi selected"
-    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0")
-    if [[ $(echo "$UBUNTU_VERSION >= 24.04" | bc -l 2>/dev/null || echo 0) -eq 1 ]]; then
-        ALL_PACKAGES+=("yazi")
-    else
-        ALL_PACKAGES+=("cargo")
-    fi
-fi
-
 # Check if packages are installed
 MISSING_PACKAGES=()
 for pkg in "${ALL_PACKAGES[@]}"; do
@@ -385,17 +375,33 @@ if [[ ${SELECTED_COMPONENTS[fd]} -eq 1 ]] && ! command -v fd &> /dev/null; then
     fi
 fi
 
-# Install yazi via cargo if selected and not present (Ubuntu < 24.04 fallback)
+# Install yazi from the official release binary if selected and not present
+# (no apt package on Ubuntu 24.04; cargo build from git is slow and fragile)
 if [[ ${SELECTED_COMPONENTS[yazi]} -eq 1 ]] && ! command -v yazi &> /dev/null; then
-    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0")
-    if [[ $(echo "$UBUNTU_VERSION < 24.04" | bc -l 2>/dev/null || echo 1) -eq 1 ]]; then
-        log_info "Installing yazi via cargo..."
-        source "$HOME/.cargo/env" 2>/dev/null || true
-        if [[ $SYSTEM_WIDE -eq 1 ]]; then
-            cargo install --git https://github.com/sxyazi/yazi.git yazi
+    case "$(uname -m)" in
+        x86_64) YAZI_ARCH="x86_64" ;;
+        aarch64|arm64) YAZI_ARCH="aarch64" ;;
+        *) YAZI_ARCH="" ;;
+    esac
+    if [[ -z $YAZI_ARCH ]]; then
+        log_warn "yazi: unsupported architecture $(uname -m), skipping"
+    else
+        log_info "Installing yazi from GitHub release..."
+        YAZI_TMP=$(mktemp -d)
+        YAZI_ZIP="yazi-${YAZI_ARCH}-unknown-linux-musl"
+        if curl -fsSL "https://github.com/sxyazi/yazi/releases/latest/download/${YAZI_ZIP}.zip" -o "$YAZI_TMP/yazi.zip" \
+            && unzip -q "$YAZI_TMP/yazi.zip" -d "$YAZI_TMP"; then
+            if [[ $SYSTEM_WIDE -eq 1 ]]; then
+                $SUDO_CMD install -m 0755 "$YAZI_TMP/$YAZI_ZIP/yazi" "$YAZI_TMP/$YAZI_ZIP/ya" /usr/local/bin/
+            else
+                mkdir -p "$HOME/.local/bin"
+                install -m 0755 "$YAZI_TMP/$YAZI_ZIP/yazi" "$YAZI_TMP/$YAZI_ZIP/ya" "$HOME/.local/bin/"
+                log_warn "Installed yazi to ~/.local/bin — ensure it's on your PATH"
+            fi
         else
-            cargo install --git https://github.com/sxyazi/yazi.git yazi --root "$HOME/.local"
+            log_warn "yazi: download or extraction failed"
         fi
+        rm -rf "$YAZI_TMP"
     fi
 fi
 
@@ -746,6 +752,11 @@ create_config_link "$REPO_DIR/zsh/.zshrc" "$HOME/.zshrc"
 create_config_link "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
 as_user mkdir -p "$HOME/.tmux"
 create_config_link "$REPO_DIR/tmux/scripts" "$HOME/.tmux/scripts"
+
+# yazi (entire directory) — only if yazi selected
+if [[ ${SELECTED_COMPONENTS[yazi]} -eq 1 ]]; then
+    create_config_link "$REPO_DIR/yazi" "$HOME/.config/yazi"
+fi
 
 # nvim (entire directory) — only if nvim selected
 if [[ ${SELECTED_COMPONENTS[nvim]} -eq 1 ]]; then
