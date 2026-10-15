@@ -200,3 +200,4 @@ fi
 
 export PATH="$PATH:/home/flv/bin"
 
+[ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
