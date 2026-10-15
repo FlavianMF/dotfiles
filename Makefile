@@ -90,8 +90,8 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh; do bash -n "$$f" || exit 1; done
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py

@@ -149,6 +149,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/second-brain-note-opened.sh\"",
+            "timeout": 2
+          }
+        ]
       }
     ]
   },
