@@ -10,8 +10,20 @@ cd ~/dotfiles
 
 ### 2. Execute o script de instalação
 ```bash
-chmod +x install.sh
-sudo ./install.sh
+./install.sh
+```
+
+> Rode como **usuário normal, sem `sudo`**. O script chama `sudo` sozinho nos passos
+> que precisam (apt, `/opt`, `/etc/apt`) e pede a senha. Rodar tudo com `sudo` deixa
+> arquivos de root na sua home e quebra execuções seguintes.
+> Se `./install.sh` der `Permission denied` por falta do bit de execução, use `bash install.sh`.
+
+**Deu `Permission denied`?** Provavelmente sobrou arquivo de root de um `sudo ./install.sh` antigo:
+```bash
+find ~ -user root -not -path '*/.git/*' | head
+sudo chown -R "$USER:$USER" ~/.local ~/.npm ~/.oh-my-zsh ~/.tmux ~/.cache \
+  ~/.copilot ~/.dotfiles-backup ~/.gitconfig.local
+./install.sh
 ```
 
 ### 3. Reabra seu terminal
