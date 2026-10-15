@@ -16,27 +16,6 @@ cwd=""
 command -v jq >/dev/null 2>&1 && cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
 [[ -d "$cwd" ]] || cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
-# Estado do ECC neste projeto (~20 tokens): o agente não deve ligar/desligar por conta própria.
-ecc_script="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../ecc-project.sh"
-ecc_line="$(timeout 2 bash "$ecc_script" status "$cwd" --short 2>/dev/null)"
-[[ -n "$ecc_line" ]] && printf '%s Só o usuário muda (make ecc-on|ecc-off DIR=...).\n' "$ecc_line"
-
-# ECC desligado num projeto web, C ou backend Node: o wrapper `claude` do zsh liga antes de abrir; se
-# a sessão veio de outro lugar (IDE), avisa para o agente sugerir. Respeita .claude/ecc.off.
-if [[ "$ecc_line" == "ECC desligado"* ]]; then
-    ecc_root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || echo "$cwd")"
-    ecc_dotfiles="$(cd "$(dirname "$ecc_script")/.." 2>/dev/null && pwd -P)"
-    if [[ ! -e "$ecc_root/.claude/ecc.off" && "$(cd "$ecc_root" 2>/dev/null && pwd -P)" != "$ecc_dotfiles" ]]; then
-        read -r ecc_kind _ <<<"$(timeout 2 bash "$(dirname "$ecc_script")/ecc-detect.sh" "$ecc_root" 2>/dev/null)"
-        case "$ecc_kind" in
-            web|c|node)
-                printf 'O projeto parece %s e o ECC está desligado. Se a tarefa se beneficiar, sugira ao usuário: make ecc-on DIR=%q (vale na próxima sessão).\n' \
-                    "$([[ "$ecc_kind" == node ]] && echo 'backend Node' || echo "$ecc_kind")" "$ecc_root"
-                ;;
-        esac
-    fi
-fi
-
 # Nome do repo principal, mesmo dentro de um worktree (usa o diretório do .git comum).
 # Repo comum ou worktree: <repo>/.git. Submódulo (ou worktree dele): <super>/.git/modules/<nome>,
 # onde o nome do repo é o último componente. Não use --show-toplevel: num worktree ele devolve
@@ -67,9 +46,15 @@ if command -v jq >/dev/null 2>&1; then
     state_dir="${SECOND_BRAIN_STATE_DIR:-$HOME/.local/state/second-brain}"
     if [[ -n "$session" ]] && (umask 077; mkdir -p "$state_dir") 2>/dev/null; then
         seen_file="$state_dir/$session.seen"
-        [[ "$source_kind" == "compact" ]] && : >"$seen_file"
-        printf '%s\n' "$out" | sed -n 's/.* — \(.*\) (\([^()]*\))$/\1/p' >>"$seen_file" 2>/dev/null
-        chmod 600 "$seen_file" 2>/dev/null
+        injected_file="$state_dir/$session.injected"
+        [[ "$source_kind" == "compact" ]] && : >"$seen_file" && : >"$injected_file"
+        injected="$(printf '%s\n' "$out" | sed -n 's/.* — \(.*\) (\([^()]*\))$/\1/p')"
+        [[ -n "$injected" ]] && printf '%s\n' "$injected" >>"$seen_file" 2>/dev/null
+        # `.injected` = o que de fato entrou no contexto (a linha de status conta este arquivo), sem repetir.
+        while IFS= read -r note; do
+            [[ -n "$note" ]] && ! grep -qxF -- "$note" "$injected_file" 2>/dev/null && printf '%s\n' "$note" >>"$injected_file"
+        done <<<"$injected"
+        chmod 600 "$seen_file" "$injected_file" 2>/dev/null
     fi
 fi
 
