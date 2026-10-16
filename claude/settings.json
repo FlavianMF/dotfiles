@@ -90,6 +90,15 @@
             "timeout": 2
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/sb-router.sh\"",
+            "timeout": 2
+          }
+        ]
       }
     ],
     "PreToolUse": [
