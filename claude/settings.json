@@ -133,6 +133,11 @@
           },
           {
             "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/second-brain-observe.sh\" stop",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "bash \"$HOME/.claude/hooks/second-brain-stop.sh\"",
             "timeout": 10
           }
@@ -157,6 +162,15 @@
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/suggest-compact.sh\"",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/second-brain-observe.sh\"",
+            "timeout": 3
           }
         ]
       },

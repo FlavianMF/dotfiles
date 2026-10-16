@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto ecc-observer-config ecc-rules test codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -21,6 +21,8 @@ help:
 	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common, PACKS=a,b só esses packs, NO_RULES=1 só o plugin)"
 	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto e cria .claude/ecc.off (o auto não religa)"
 	@echo "  make ecc-auto DIR=..  - Liga o ECC só se o projeto for web, C ou backend Node (claude/ecc-auto.conf)"
+	@echo "  make plugins-auto DIR=.. - Desliga no projeto os plugins que o tipo dele não usa (claude/plugins-auto.conf)"
+	@echo "  make plugins-status DIR=. - Mostra o que o plugins-auto gerencia no projeto"
 	@echo "  make ecc-observer-config - Liga o observer do continuous-learning-v2 (link para claude/ecc-clv2-config.json)"
 	@echo "  make test             - Roda os testes bash de tests/"
 	@echo "  make ecc-status DIR=. - Mostra se o ECC está ligado no projeto"
@@ -82,6 +84,12 @@ ecc-off:
 ecc-auto:
 	@./claude/ecc-project.sh auto "$(DIR)"
 
+plugins-auto:
+	@./claude/plugins-project.sh auto "$(DIR)"
+
+plugins-status:
+	@./claude/plugins-project.sh status "$(DIR)"
+
 ecc-observer-config:
 	@d="$${CLV2_HOMUNCULUS_DIR:-$${XDG_DATA_HOME:-$$HOME/.local/share}/ecc-homunculus}"; \
 	mkdir -p "$$d" && chmod 700 "$$d" && \
@@ -102,9 +110,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
