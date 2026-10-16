@@ -1,0 +1,93 @@
+// ENTRADA gerada por stickies-to-entrada.mjs a partir de FLC/*.stickies.md. Não edite à mão: edite o .stickies.md e gere de novo.
+// ===== ENTRADA ==============================================================
+const S = 4.1;
+const ASPECT = 1.78;
+const POSTERS = [
+  {
+    name: "P1 · Controle de frota",
+    title: "PM Canvas — Empresa 03 — LFC — P1: Controle da frota com leitura de placas e reconhecimento facial",
+    md: "FLC/pm-canvas-empresa-03-controle-frota.md",
+    stickies: {
+      just: ["Frota sem registro de uso", "Multa sem condutor", "Fora da linha, sem trocas"],
+      obj: ["Ler placa no portão", "Rosto do condutor no portão", "Portão só p/ liberados", "Registrar saída e retorno", "§Meta: 100% com condutor"],
+      ben: ["Multa com dono", "Uso da frota visível", "Resultado fácil de medir"],
+      prod: ["Controle de acesso no portão", "Câmeras de placa e rosto", "Libera portão e registra"],
+      req: ["Câmeras de placa e rosto", "Câmeras com IR", "Hardware de borda", "Acionar portão", "Cadastro de veículos", "ERP próprio"],
+      stk: ["Leonir, contato principal", "Equipe do ERP", "Motorista: aval LGPD"],
+      eq: ["Dorian", "Francisco Irlan", "Jonathas Levi", "Wesley", "§Divisão entre P1 a P4", "§Cargo do Leonir"],
+      prem: ["LGPD antes de implantar", "Biometria só local", "Portão manual reserva", "Prazo fixo, 3 meses"],
+      ent: ["Base legal e termo LGPD", "Cadastro veículo, motorista", "Instalar câmeras no portão", "Modelo de placa e rosto", "Lógica de liberação", "Integrar com ERP"],
+      restr: ["Luz variável no portão", "Biometria exige LGPD", "ERP em obra"],
+      risk: ["LGPD e rejeição", "Luz falha a leitura", "Falha bloqueia o portão", "ERP muda requisito"],
+      lt: ["Mês 1: LGPD, câmeras", "Mês 2: modelo, ERP", "Mês 3: validar protótipo", "§Datas a refinar"],
+      cust: ["§A definir", "§Câmeras, borda, portão"],
+    },
+    date: "§24/09/26\nP1 núcleo, dentro dos 3 meses",
+  },
+  {
+    name: "P2 · Absenteísmo e ocupação dos postos",
+    title: "PM Canvas — Empresa 03 — LFC — P2: Acompanhamento do absenteísmo e ocupação dos postos",
+    md: "FLC/pm-canvas-empresa-03-absenteismo.md",
+    stickies: {
+      just: ["Sem controle de faltas", "Sem dados de ocupação", "Sem dados de OEE"],
+      obj: ["Presença por rosto", "Contar pessoas por posto", "Cruzar com o ERP", "§Meta: 95% presença"],
+      ben: ["Presença sem ponto manual", "Ocupação e OEE no painel"],
+      prod: ["Rosto na entrada: presença", "Pessoas contadas por posto", "Cruzado com ERP"],
+      req: ["Câmeras: entrada, linha", "Hardware de borda", "Cadastro de func.", "Produção vinda do ERP"],
+      stk: ["Leonir, contato principal", "Equipe do ERP", "Func.: aval LGPD"],
+      eq: ["Dorian", "Francisco Irlan", "Jonathas Levi", "Wesley", "§Alunos por projeto", "§Cargo do Leonir"],
+      prem: ["Reusa rosto do P1", "Layout muda sempre", "Prazo fixo, fase 2"],
+      ent: ["Rosto do P1 na entrada", "Câmeras por posto", "Calcular ocupação da linha", "Painel de ocupação"],
+      restr: ["Biometria exige LGPD", "Layout muda no dia"],
+      risk: ["Layout move câmeras", "Func. resistem à câmera"],
+      lt: ["Fase 2, após o P1", "Entrada 1º, postos depois", "§Datas a refinar"],
+      cust: ["§A definir", "§Câmeras extras, borda"],
+    },
+    date: "§24/09/26\nP2 fase 2, após o P1",
+  },
+  {
+    name: "P3 · Otimização de layout e setup",
+    title: "PM Canvas — Empresa 03 — LFC — P3: Otimização das trocas de layout e setup",
+    md: "FLC/pm-canvas-empresa-03-otimizacao-layout.md",
+    stickies: {
+      just: ["2 a 3 trocas por dia", "Posição só de memória"],
+      obj: ["Mapear equip. por config.", "Guardar layouts no sistema", "Tablet mostra destino", "Registrar tempo de setup", "Propor menos mudanças", "§Meta: setup -20%"],
+      ben: ["Setup mais rápido", "Menos memória da equipe"],
+      prod: ["Mapa de layouts", "Guia de troca no tablet", "Tablet já existente"],
+      req: ["Planta da produção", "Lista de equip.", "Sequência por produto", "Etiqueta QR ou RFID", "Tablet da linha"],
+      stk: ["Leonir, contato principal", "Equipe Pimpolho e Puma", "Equipe do ERP"],
+      eq: ["Dorian", "Francisco Irlan", "Jonathas Levi", "Wesley", "§Alunos por projeto", "§Cargo do Leonir"],
+      prem: ["Puma: processo do cliente", "Foco inicial na Pimpolho", "Depende da adesão da equipe", "Escopo próprio"],
+      ent: ["Planta e lista de equip.", "Layouts, Pimpolho 1º", "Etiquetar equip.", "Tela de troca no tablet", "Tempo de setup por troca"],
+      restr: ["Puma limita mudanças", "Depende da adesão da equipe"],
+      risk: ["Escopo maior que o prazo", "Baixa adesão da equipe"],
+      lt: ["Projeto à parte", "Pimpolho 1º, se der tempo", "§Datas a refinar"],
+      cust: ["§A definir", "§Etiquetas QR ou RFID"],
+    },
+    date: "§24/09/26\nP3 à parte, alto impacto",
+  },
+  {
+    name: "P4 · Energia solar e consumo",
+    title: "PM Canvas — Empresa 03 — LFC — P4: Monitoramento de geração solar e consumo de energia",
+    md: "FLC/pm-canvas-empresa-03-energia-solar.md",
+    stickies: {
+      just: ["Conta parece alta", "Sem dados"],
+      obj: ["Medir solar e consumo", "Comparar com a fatura", "§Meta: 1 fatura conferida"],
+      ben: ["Confirma suspeita", "Ganho rápido"],
+      prod: ["Medidores de energia online", "Painel solar e fatura"],
+      req: ["Medidores com rede", "Dados do inversor solar", ["Microcontrolador", "MCU"], "Faturas passadas"],
+      stk: ["Leonir e dona", "§Técnico a definir", "Equipe do ERP"],
+      eq: ["Dorian", "Francisco Irlan", "Jonathas Levi", "Wesley", "§Divisão entre P1 a P4", "§Cargo do Leonir"],
+      prem: ["Quadro só com técnico", "Sem depender de P1-P3"],
+      ent: ["Instalar medidores", "Ler inversor solar", "Painel e fatura", "Cruzar com fatura"],
+      restr: ["Quadro exige técnico", "Prazo fixo, 3 meses"],
+      risk: ["Prazo curto p/ escopo", "Mitigar: protótipo básico"],
+      lt: ["Mês 1: instalar", "Mês 2: painel", "Mês 3: validar 1 fatura", "§Datas a refinar"],
+      cust: ["§A definir", "§Medidores e MCU"],
+    },
+    date: "§24/09/26\nP4 ganho rápido, 3 meses",
+  },
+];
+const RENAME = {};
+const REMOVE = [];
+// ============================================================================

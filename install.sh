@@ -686,6 +686,8 @@ CONFIG_ITEMS=(
     "$HOME/.agents/skills/second-brain-sync"
     "$HOME/.claude/skills/reverse-engineer-anything"
     "$HOME/.agents/skills/reverse-engineer-anything"
+    "$HOME/.claude/skills/figjam-pm-canvas"
+    "$HOME/.agents/skills/figjam-pm-canvas"
     "$HOME/.codex/config.toml"
     "$HOME/.codex/yolo.config.toml"
     "$HOME/.codex/AGENTS.md"
@@ -783,6 +785,8 @@ link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync
 # reverse-engineer-anything ships with rea-agents@REA_VERSION; versioned here so the
 # skill and the MCP it documents stay in step (resync from the package on a bump).
 link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
+# figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
+link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode =====
 # Declarative, not symlinked where the tool keeps machine state:

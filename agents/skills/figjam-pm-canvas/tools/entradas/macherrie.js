@@ -1,0 +1,93 @@
+// ENTRADA gerada por stickies-to-entrada.mjs a partir de MaCherrie/*.stickies.md. Não edite à mão: edite o .stickies.md e gere de novo.
+// ===== ENTRADA ==============================================================
+const S = 4.1;
+const ASPECT = 1.78;
+const POSTERS = [
+  {
+    name: "P1 · Rastreabilidade",
+    title: "PM Canvas — Empresa 09 — MaCherrie — P1: Rastreabilidade e conciliação produção × estoque",
+    md: "MaCherrie/pm-canvas-empresa-09-rastreabilidade.md",
+    stickies: {
+      just: [["Saída da produção só anotada", "Saída só anotada"], ["Anotação gera desvio no estoque", "Desvio no estoque"], "Bipagem só na entrada"],
+      obj: ["Bipar saída da produção", "Cruzar produção × estoque", "§Meta: desvio ≤ X%"],
+      ben: ["Desvio visível por lote", "Base para P2 e P4", "Fim da anotação manual"],
+      prod: [["Bipagem na saída da produção", "Bipar na saída"]],
+      req: ["Usar etiqueta SKU atual", "Comparar saída × entrada", "Funciona offline", "Reparo fora do P1"],
+      stk: ["Ítalo Pinheiro, gerente", "§Jorge: papel", "§Técnico do GC", "§TI", "Revisoras", "PCP"],
+      eq: ["§Alunos alocados", "Ítalo Pinheiro, gerente"],
+      prem: ["Leitor atual na entrada", ["Leitor novo, empresa compra", "Empresa compra leitor"], "Software dos alunos", "Sem rede ok", "Prazo fixo de 3 meses"],
+      ent: ["Mapa do fluxo", "Modelo de dados", "App de bipagem", "Cruzar por lote", "Piloto em 1 lote"],
+      restr: ["§Wi-Fi na fábrica", "2 pontos de contagem", "Expedição é do P2", "Reparo fora do P1", "§Link com o GC"],
+      risk: ["Mudança de hábito na linha", "Reparos distorcem contagem", ["Sem Wi-Fi, atraso na sincronia", "Sem Wi-Fi, atraso"]],
+      lt: ["Mês 1: mapa e dados", "Mês 2: bipagem no piloto", "§Mês 3: meta ≤ X%", "§Pós-mês 3: leitura auto."],
+      cust: ["§A definir", "Leitor e rede"],
+    },
+    date: "§22/09/26\nNúcleo, dentro dos 3 meses",
+  },
+  {
+    name: "P2 · Expedição por peso",
+    title: "PM Canvas — Empresa 09 — MaCherrie — P2: Contagem por peso na expedição",
+    md: "MaCherrie/pm-canvas-empresa-09-expedicao-peso.md",
+    stickies: {
+      just: ["Carga sai com sobra", "Ex.: pedido 50, saem 52", ["Sem balança na expedição", "Sem balança"]],
+      obj: [["Zerar desvio pedido × carga", "Zerar desvio"], "Checar 100% dos pedidos", "Meta: 0 sobras no piloto"],
+      ben: ["Carga com qtd. exata", "Sem contagem manual", "Peso por SKU no GC"],
+      prod: ["Checar peso na expedição"],
+      req: ["Peso por SKU no GC", "Pesar pedido inteiro", "Comparar real × teórico", "Alerta antes de liberar", "Calibrar margem"],
+      stk: ["Ítalo Pinheiro, gerente", "§Jorge: papel", "§Técnico do GC", "§TI", "§Equipe da expedição"],
+      eq: ["§Alunos alocados", "Ítalo Pinheiro, gerente"],
+      prem: ["SKU já existe no GC", "Falta o peso por SKU", "Balança, empresa compra", "Software dos alunos", "Sem rede ok", "Prazo fixo de 3 meses"],
+      ent: ["Peso dos SKUs piloto", "Cadastro no GC", "Balança instalada", "Alerta de peso", "Piloto em pedidos"],
+      restr: ["Sem balança hoje", "Sem peso no GC", "2 pontos de contagem", "Produção × estoque é do P1", "§Wi-Fi na fábrica"],
+      risk: ["Peso varia no mesmo SKU", ["Catálogo grande, trabalho manual", "Catálogo grande"], "Depende do técnico do GC"],
+      lt: ["Mês 1: peso e cadastro", ["Mês 2: balança na expedição", "Mês 2: balança"], ["Mês 3: alerta, meta 0 sobras", "Mês 3: alerta"], ["§Pós-mês 3: catálogo todo", "§Pós: catálogo todo"]],
+      cust: ["§A definir", "Balança e leitor"],
+    },
+    date: "§22/09/26\nDentro dos 3 meses",
+  },
+  {
+    name: "P3 · Alertas das máquinas",
+    title: "PM Canvas — Empresa 09 — MaCherrie — P3: Alertas de falha das máquinas de costura",
+    md: "MaCherrie/pm-canvas-empresa-09-alertas-maquinas.md",
+    stickies: {
+      just: ["Sem histórico de falhas", "Alertas presos no painel", "Manut. de terceiro"],
+      obj: ["Unir alertas de falha", "Criar histórico de manut.", ["Meta: 100% alertas, 2 pilotos", "Meta: 100% alertas"]],
+      ben: ["Alertas num só lugar", "Histórico para decidir", ["Parada medida por máquina", "Parada por máquina"]],
+      prod: ["Gateway e painel central"],
+      req: ["Captar alertas via gateway", "Alertas em tempo real", "Registrar tempo de parada", "Registrar histórico", "Fase 2: ligar ao GC"],
+      stk: ["Ítalo Pinheiro, gerente", "§Jorge: papel", "§Técnico das máquinas", "§Técnico externo", "§Técnico do GC", "§TI"],
+      eq: ["§Alunos alocados", "Ítalo Pinheiro, gerente"],
+      prem: ["Máquinas já emitem alertas", "Gateway, empresa compra", "Software dos alunos", ["Independe de P1 e P2", "Livre de P1 e P2"], "Prazo fixo de 3 meses"],
+      ent: ["Mapa de modelos", "2 máq. piloto", "Gateway", "Painel central", "Mapa do elo GC"],
+      restr: [["Fabricantes distintos", "Marcas distintas"], "§Wi-Fi na fábrica", "Sem histórico hoje", "GC só pós-mês 3"],
+      risk: ["Alertas sem padrão", "Painel sem saída de dados", "Sem Wi-Fi, sem envio"],
+      lt: ["Mês 1: mapa e escolha", ["Mês 2: gateway em 2 máquinas", "Mês 2: gateway"], ["Mês 3: painel, meta 100%", "Mês 3: painel"], "Pós-mês 3: elo com GC"],
+      cust: ["§A definir", "Gateway e rede"],
+    },
+    date: "§22/09/26\nPOC no mês 3",
+  },
+  {
+    name: "P4 · Localização no almox.",
+    title: "PM Canvas — Empresa 09 — MaCherrie — P4: Localização no almoxarifado do DPA",
+    md: "MaCherrie/pm-canvas-empresa-09-localizacao-almox.md",
+    stickies: {
+      just: [["Peça existe, local ignorado", "Local ignorado"], "Sem endereços no almox.", "Picking pouco eficiente"],
+      obj: [["Rastrear local de cada caixa", "Rastrear cada caixa"], "Picking mais eficiente", "§Meta a definir"],
+      ben: ["Posição atual conhecida", "Histórico de trajeto", "Picking mais rápido"],
+      prod: ["Endereços e código de barras"],
+      req: ["Criar endereços do zero", "Etiquetar endereços e caixas", "Registrar posição atual", "Registrar trajeto", "RFID só como estudo"],
+      stk: ["Ítalo Pinheiro, gerente", "§Jorge: papel", "§Equipe do almox.", "§Técnico do GC", "§TI"],
+      eq: ["§Alunos alocados", "Ítalo Pinheiro, gerente"],
+      prem: ["Qualidade antes do DPA", "Tom de cor na separação", "Usa leitura do P1", "Software dos alunos", "Sem rede ok"],
+      ent: ["§Layout de endereços", "§Etiquetas", "§App de consulta", "§Estudo de RFID"],
+      restr: ["Sem endereços hoje", "Fora dos 3 meses", "RFID só como estudo", "§Wi-Fi na fábrica"],
+      risk: ["Etiqueta RFID cara", "Leitura RFID pode falhar", "Exige rigor do almox."],
+      lt: ["Mês 1-3: sem entrega", ["Pós-mês 3: endereços e barras", "Pós: endereços"], "Pós-mês 3: estudo de RFID", "§Meta a definir"],
+      cust: ["§A definir", "Etiquetas e leitores"],
+    },
+    date: "§22/09/26\nPós-mês 3",
+  },
+];
+const RENAME = {};
+const REMOVE = [];
+// ============================================================================
