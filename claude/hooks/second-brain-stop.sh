@@ -28,8 +28,11 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/claude-hooks/second-brain"
 marker="$state_dir/${session_id:-unknown}.reminded"
 [[ -n "$session_id" && -f "$marker" ]] && exit 0
 
-# Já houve sync (ou o lembrete já entrou no transcript)? Então nada a fazer.
-grep -qE 'vault_sync\.py|sb\.py sync|sb\.py candidate add' "$transcript" 2>/dev/null && exit 0
+# Já houve sync (comando real no transcript)? Então nada a fazer.
+# Só conta tool_use de Bash: o transcript também guarda o AGENTS.md injetado, que cita esses comandos.
+synced="$(jq -R -r 'fromjson? | select(.type == "assistant") | .message.content[]? | select(.type == "tool_use" and .name == "Bash")
+    | (.input.command // "") | select(test("vault_sync\\.py|sb\\.py (sync|candidate add)"))' "$transcript" 2>/dev/null | head -n1)"
+[[ -n "$synced" ]] && exit 0
 
 min_edits="${SECOND_BRAIN_MIN_EDITS:-5}"
 [[ "$min_edits" =~ ^[0-9]+$ ]] || min_edits=5
@@ -48,5 +51,5 @@ if [[ -n "$session_id" ]]; then
 fi
 
 msg="Esta sessão fez ${edits} edições (arquivos e comandos de escrita) e ainda não enfileirou nada para o second brain. Se a tarefa de dev terminou e gerou padrão, decisão ou armadilha reutilizável, acrescente candidatos à fila com sb.py candidate add (não escreva no vault; o usuário promove na revisão). Se não houve nada reutilizável, apenas encerre sem comentar."
-jq -cn --arg msg "$msg" '{hookSpecificOutput: {hookEventName: "Stop", additionalContext: $msg}}'
+jq -cn --arg msg "$msg" '{decision: "block", reason: $msg}'
 exit 0

@@ -27,17 +27,19 @@ expect() { # expect <nome> <obtido> <esperado>
 
 transcript "$tmp/t1" 5
 out="$(fire s1 "$tmp/t1")"
-[[ "$out" == *"second brain"* ]] && got=lembra || got=silencio
+[[ "$out" == *'"decision":"block"'* && "$out" == *"second brain"* ]] && got=lembra || got=silencio
 expect "5 edições sem sync lembram" "$got" lembra
-[[ "$out" == *"sb.py sync"* ]] && got=cita || got=nao
-expect "o lembrete cita sb.py sync" "$got" cita
+[[ "$out" == *"sb.py candidate add"* ]] && got=cita || got=nao
+expect "o lembrete cita sb.py candidate add" "$got" cita
 
 out="$(fire s1 "$tmp/t1")"; expect "lembra só uma vez por sessão" "$out" ""
 
-transcript "$tmp/t2" 5 '{"type":"user","message":"rodei python3 sb.py sync --note x"}'
+bash_line() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"%s"}}]}}' "$1"; }
+
+transcript "$tmp/t2" 5 "$(bash_line 'python3 sb.py sync --note x')"
 expect "sb.py sync no transcript silencia" "$(fire s2 "$tmp/t2")" ""
 
-transcript "$tmp/t3" 5 '{"type":"user","message":"rodei vault_sync.py --note x"}'
+transcript "$tmp/t3" 5 "$(bash_line 'python3 vault_sync.py --note x')"
 expect "vault_sync.py no transcript silencia" "$(fire s3 "$tmp/t3")" ""
 
 transcript "$tmp/t4" 4
@@ -45,5 +47,12 @@ expect "menos de 5 edições silencia" "$(fire s4 "$tmp/t4")" ""
 
 transcript "$tmp/t5" 5
 expect "desligado sem a variável" "$(fire s5 "$tmp/t5" SECOND_BRAIN_HOOKS=0)" ""
+
+transcript "$tmp/t6" 5 '{"type":"attachment","attachment":{"type":"instructions","content":"use sb.py candidate add, sb.py sync e vault_sync.py"}}'
+[[ "$(fire s6 "$tmp/t6")" == *second\ brain* ]] && got=lembra || got=silencio
+expect "texto injetado (AGENTS.md) não silencia" "$got" lembra
+
+transcript "$tmp/t7" 5 "$(bash_line 'python3 sb.py candidate add --kind trap')"
+expect "candidate add real silencia" "$(fire s7 "$tmp/t7")" ""
 
 [[ $fail -eq 0 ]] && echo "ok" || exit 1
