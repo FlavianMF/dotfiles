@@ -209,6 +209,7 @@
     "impeccable@impeccable": true,
     "github@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
+    "ste80@ste80": true,
     "ecc@ecc": false
   },
   "extraKnownMarketplaces": {
@@ -243,6 +244,13 @@
       "source": {
         "source": "github",
         "repo": "affaan-m/ECC"
+      },
+      "autoUpdate": false
+    },
+    "ste80": {
+      "source": {
+        "source": "github",
+        "repo": "FlavianMF/ste80"
       },
       "autoUpdate": false
     }
