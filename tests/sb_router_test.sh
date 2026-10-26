@@ -36,4 +36,30 @@ expect "subagente silencioso" "$(hit "$out")" nao
 expect "JSON inválido silencioso" "$(hit "$(printf 'xx' | env SECOND_BRAIN_STATE_DIR="$state" bash "$HOOK")")" nao
 expect "gap=1 sugere sempre" "$(hit "$(fire l "onde está definida a função parse_config neste repo?" SB_ROUTER_GAP=1)")$(hit "$(fire l "onde está definida a função parse_config neste repo?" SB_ROUTER_GAP=1)")" simsim
 
+# D4: router.jsonl
+log="$state/router.jsonl"
+rm -f "$log"
+fire n1 "onde está definida a função parse_config neste repo?" >/dev/null
+fire n2 "implemente o login com validação de e-mail" >/dev/null
+fire n3 "rename foo to bar across all the files in src" >/dev/null
+expect "log: 2 linhas" "$(wc -l <"$log")" 2
+expect "log: chaves exatas" "$(jq -sc 'map(keys)|unique' "$log")" '[["class","session_id","ts"]]'
+expect "log: classes" "$(jq -r .class "$log" | paste -sd,)" "busca ampla,tarefa mecânica"
+expect "log: ts ISO UTC" "$(jq -r .ts "$log" | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$')" 2
+expect "log: sem texto do prompt" "$(grep -c 'parse_config' "$log")" 0
+expect "log: modo 0600" "$(stat -c %a "$log")" 600
+# stdout identica a HEAD
+git -C "$(dirname "$HOOK")" show HEAD:claude/hooks/sb-router.sh >"$tmp/old.sh" 2>/dev/null
+if [[ -s "$tmp/old.sh" ]]; then
+    for p in "onde está definida a função parse_config neste repo?" "rename foo to bar across all the files in src" "implemente o login com validação de e-mail"; do
+        a="$(jq -cn --arg s z1 --arg p "$p" '{session_id:$s,prompt:$p}' | env SECOND_BRAIN_STATE_DIR="$tmp/s1" bash "$HOOK"; echo "rc=$?")"
+        b="$(jq -cn --arg s z1 --arg p "$p" '{session_id:$s,prompt:$p}' | env SECOND_BRAIN_STATE_DIR="$tmp/s2" bash "$tmp/old.sh"; echo "rc=$?")"
+        expect "stdout/exit igual a HEAD" "$a" "$b"
+    done
+fi
+# falha de escrita nao muda saida
+mkdir -p "$tmp/ro" && touch "$tmp/ro/router.jsonl" && chmod 400 "$tmp/ro/router.jsonl"
+out="$(fire o1 "onde está definida a função parse_config neste repo?" SECOND_BRAIN_STATE_DIR="$tmp/ro"; echo "rc=$?")"
+expect "falha de log nao muda saida" "$(grep -c additionalContext <<<"$out")$(grep -c 'rc=0' <<<"$out")" 11
+
 [[ $fail -eq 0 ]] && echo "ok" || exit 1
