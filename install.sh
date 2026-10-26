@@ -1077,6 +1077,9 @@ if [[ $OPENCODE_ACTIVE -eq 1 ]]; then
     # OpenCode doesn't rewrite opencode.json at runtime, so a symlink is safe.
     create_config_link "$REPO_DIR/opencode/opencode.json" "$HOME/.config/opencode/opencode.json"
     create_config_link "$REPO_DIR/agents/AGENTS.md" "$HOME/.config/opencode/AGENTS.md"
+    for agent_file in "$REPO_DIR"/opencode/agent/*.md; do
+        create_config_link "$agent_file" "$HOME/.config/opencode/agent/$(basename "$agent_file")"
+    done
     HARNESS_CHECKLIST+=(
         "OpenCode: opencode auth login (ou /connect no TUI) para o OpenCode Zen (modelo padrão opencode/big-pickle, grátis, exige conta)"
         "OpenCode: preencha OPENROUTER_API_KEY em ~/dotfiles/secrets/openrouter.env (ver .env.example)"
