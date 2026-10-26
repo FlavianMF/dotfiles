@@ -38,6 +38,20 @@ expect "update grava o sha256 do download" "$(cut -d' ' -f1 "$tmp/tr/SHA256")" "
 bash "$tmp/tr/install.sh" >/dev/null 2>&1; expect "install com hash certo" "$?" "0"
 [[ -x "$HOME/.local/opt/traycer/traycer.AppImage" && -x "$HOME/.local/bin/traycer" ]] || { echo "FALHA: arquivos instalados ausentes"; fail=1; }
 
+# Launcher: sem libfuse.so.2 liga APPIMAGE_EXTRACT_AND_RUN; com a biblioteca não liga.
+cat >"$HOME/.local/opt/traycer/traycer.AppImage" <<'FAKEAPP'
+#!/bin/bash
+echo "extract=${APPIMAGE_EXTRACT_AND_RUN:-0}"
+FAKEAPP
+if [[ -e /dev/fuse && -x /sbin/ldconfig ]]; then
+    # ldconfig falso via PATH não vale: o launcher chama /sbin/ldconfig; o teste só roda sem a lib real.
+    if ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+        expect "launcher sem libfuse2 extrai e roda" "$("$HOME/.local/bin/traycer")" "extract=1"
+    else
+        expect "launcher com libfuse2 monta" "$("$HOME/.local/bin/traycer")" "extract=0"
+    fi
+fi
+
 # Sem SHA256 o install falha.
 rm "$tmp/tr/SHA256"
 bash "$tmp/tr/install.sh" >/dev/null 2>&1; expect "sem SHA256 falha" "$?" "1"
@@ -64,7 +78,8 @@ FAKE
     CCR_PROFILE=outro zsh -c 'source "$1/zsh/ccr.zsh"; ccrc' zsh "$ROOT" >/dev/null 2>&1
     expect "CCR_PROFILE troca o perfil" "$(tail -1 "$CCR_LOG")" "ccr:outro cli --"
     rm "$tmp/bin/ccr"
-    out="$(zsh -c 'source "$1/zsh/ccr.zsh"; ccrc' zsh "$ROOT" 2>&1)"; rc=$?
+    # PATH enxuto: um ccr real em ~/.local/bin não pode vazar para o teste.
+    out="$(PATH=/usr/bin:/bin zsh -c 'source "$1/zsh/ccr.zsh"; ccrc' zsh "$ROOT" 2>&1)"; rc=$?
     expect "ccrc sem ccr falha" "$rc" "1"
     has "ccrc sem ccr avisa" "ccr ausente" "$out"
 fi

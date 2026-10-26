@@ -58,15 +58,22 @@ mkdir -p "$DEST" "$(dirname "$BIN")"
 install -m 755 "$tmp/$NAME" "$DEST/traycer.AppImage"
 cat > "$BIN" <<'WRAP'
 #!/bin/bash
-# Launcher for the pinned Traycer AppImage. Without FUSE, the AppImage extracts itself and runs.
+# Launcher for the pinned Traycer AppImage. The AppImage runtime mounts itself through libfuse.so.2
+# (package libfuse2, libfuse2t64 on Ubuntu 24.04+). fusermount3 alone is not enough. Without that
+# library or /dev/fuse, the AppImage extracts itself and runs instead.
 app="${TRAYCER_HOME:-$HOME/.local/opt/traycer}/traycer.AppImage"
-if [[ ! -e /dev/fuse ]] || ! { command -v fusermount3 || command -v fusermount; } >/dev/null 2>&1; then
+if [[ ! -e /dev/fuse ]] || ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
     export APPIMAGE_EXTRACT_AND_RUN=1
 fi
 exec "$app" "$@"
 WRAP
 chmod 755 "$BIN"
 echo "Installed Traycer to $DEST, launcher at $BIN"
+
+if ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+    echo "NOTE: libfuse.so.2 is missing, so the launcher extracts the AppImage on every run (slower start)." >&2
+    echo "To mount it instead, run: sudo apt install libfuse2t64   (Ubuntu 22.04 and older: libfuse2)" >&2
+fi
 
 if [[ "$(cat /proc/1/comm 2>/dev/null)" != systemd ]]; then
     echo "WARNING: systemd is not PID 1. Traycer's host needs it." >&2
