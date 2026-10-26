@@ -24,6 +24,26 @@ has "dry-run baixa" "download" "$out"
 has "dry-run instala o launcher" "$HOME/.local/bin/traycer" "$out"
 [[ ! -e "$HOME/.local/bin/traycer" ]] || { echo "FALHA: dry-run criou o launcher"; fail=1; }
 
+# apt e sudo falsos: registram a chamada. Só o caso sem libfuse.so.2 real instala o pacote.
+cat >"$tmp/bin/sudo" <<'FAKE'
+#!/bin/bash
+printf 'sudo:%s\n' "$*" >>"$APT_LOG"
+FAKE
+cat >"$tmp/bin/apt-get" <<'FAKE'
+#!/bin/bash
+printf 'apt-get:%s\n' "$*" >>"$APT_LOG"
+FAKE
+cat >"$tmp/bin/apt-cache" <<'FAKE'
+#!/bin/bash
+[[ "$2" == libfuse2t64 ]]
+FAKE
+chmod +x "$tmp/bin/sudo" "$tmp/bin/apt-get" "$tmp/bin/apt-cache"
+export APT_LOG="$tmp/apt.log"; : >"$APT_LOG"
+if ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+    out="$(bash "$ROOT/traycer/install.sh" --dry-run 2>&1)"
+    has "dry-run instala libfuse2t64" "apt-get install -y libfuse2t64" "$out"
+fi
+
 # Cópia do instalador com um SHA256 que não bate.
 cp -r "$ROOT/traycer" "$tmp/tr"
 out="$(bash "$tmp/tr/install.sh" 2>&1)"; rc=$?
@@ -36,6 +56,9 @@ bash "$tmp/tr/install.sh" --update >/dev/null 2>&1
 expect "update grava o sha256 do download" "$(cut -d' ' -f1 "$tmp/tr/SHA256")" "$(printf 'fake-appimage' | sha256sum | cut -d' ' -f1)"
 [[ ! -e "$HOME/.local/bin/traycer" ]] || { echo "FALHA: --update instalou"; fail=1; }
 bash "$tmp/tr/install.sh" >/dev/null 2>&1; expect "install com hash certo" "$?" "0"
+if ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
+    has "install pede libfuse2t64 via sudo apt-get" "sudo:apt-get install -y libfuse2t64" "$(cat "$APT_LOG")"
+fi
 [[ -x "$HOME/.local/opt/traycer/traycer.AppImage" && -x "$HOME/.local/bin/traycer" ]] || { echo "FALHA: arquivos instalados ausentes"; fail=1; }
 
 # Launcher: sem libfuse.so.2 liga APPIMAGE_EXTRACT_AND_RUN; com a biblioteca não liga.

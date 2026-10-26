@@ -22,11 +22,16 @@ done
 
 [[ "$(uname -m)" == x86_64 ]] || { echo "Traycer ships x86_64 builds only (this is $(uname -m))" >&2; exit 1; }
 
+has_libfuse2() { /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; }
+# Ubuntu 24.04+ and Debian 13+ renamed libfuse2 to libfuse2t64.
+fuse_pkg() { if apt-cache show libfuse2t64 >/dev/null 2>&1; then echo libfuse2t64; else echo libfuse2; fi; }
+
 if [[ $DRY_RUN -eq 1 ]]; then
     if [[ $UPDATE -eq 1 ]]; then
         echo "[dry-run] download $URL and write $ROOT/SHA256"
     else
         echo "[dry-run] download $URL, verify against $ROOT/SHA256"
+        has_libfuse2 || echo "[dry-run] sudo apt-get install -y $(fuse_pkg)"
         echo "[dry-run] install $DEST/traycer.AppImage and wrapper $BIN"
     fi
     exit 0
@@ -54,6 +59,14 @@ if [[ "$actual" != "$expected" ]]; then
     exit 1
 fi
 
+# The AppImage mounts itself through libfuse.so.2. Install it when apt is available.
+if ! has_libfuse2 && command -v apt-get >/dev/null 2>&1; then
+    pkg="$(fuse_pkg)"
+    echo "Installing $pkg (libfuse.so.2, needed to mount the AppImage)..."
+    if [[ $EUID -eq 0 ]]; then apt-get install -y "$pkg"; else sudo apt-get install -y "$pkg"; fi \
+        || echo "WARNING: could not install $pkg; the launcher falls back to extract-and-run." >&2
+fi
+
 mkdir -p "$DEST" "$(dirname "$BIN")"
 install -m 755 "$tmp/$NAME" "$DEST/traycer.AppImage"
 cat > "$BIN" <<'WRAP'
@@ -70,9 +83,9 @@ WRAP
 chmod 755 "$BIN"
 echo "Installed Traycer to $DEST, launcher at $BIN"
 
-if ! /sbin/ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; then
-    echo "NOTE: libfuse.so.2 is missing, so the launcher extracts the AppImage on every run (slower start)." >&2
-    echo "To mount it instead, run: sudo apt install libfuse2t64   (Ubuntu 22.04 and older: libfuse2)" >&2
+if ! has_libfuse2; then
+    echo "NOTE: libfuse.so.2 is still missing, so the launcher extracts the AppImage on every run (slower start)." >&2
+    echo "To mount it instead, run: sudo apt-get install -y $(fuse_pkg 2>/dev/null || echo libfuse2t64)" >&2
 fi
 
 if [[ "$(cat /proc/1/comm 2>/dev/null)" != systemd ]]; then
