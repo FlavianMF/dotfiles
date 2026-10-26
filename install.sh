@@ -132,6 +132,8 @@ declare -A OPTIONAL_COMPONENTS=(
     [claudeskills]="Claude Code plugins (from settings.json) + skills in ~/.agents/skills"
     [codex]="OpenAI Codex CLI (npm, ~/.local) + ~/.codex config"
     [opencode]="OpenCode CLI (npm, ~/.local) + ~/.config/opencode config"
+    [ccr]="Claude Code Router (npm, ~/.local, version in ccr/VERSION); providers and routes are set in its UI"
+    [traycer]="Traycer desktop (AppImage pinned by sha256 in traycer/SHA256, ~/.local/opt/traycer)"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
     [hopper]="Hopper Disassembler 6.4.2 demo (.deb pinned by size+SHA-1) + Xvfb deps, backend of the rea MCP"
     [jev]="jev-workflow (clone + npm ci + build in ~/projetos_claude/jev-workflow); the E hook in settings.json stays in shadow mode"
@@ -164,6 +166,8 @@ declare -A SELECTED_COMPONENTS=(
     [claudeskills]=1
     [codex]=0
     [opencode]=0
+    [ccr]=0
+    [traycer]=0
     [ecc]=0
     [jev]=0
     [nvim]=0
@@ -193,7 +197,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -831,6 +835,24 @@ install_npm_cli() {
 
 [[ ${SELECTED_COMPONENTS[codex]} -eq 1 ]] && install_npm_cli codex @openai/codex
 [[ ${SELECTED_COMPONENTS[opencode]} -eq 1 ]] && install_npm_cli opencode opencode-ai
+
+# --- Claude Code Router / Traycer (components off by default; scripts own the pins) ---
+sub_dry=()
+[[ $DRY_RUN -eq 1 ]] && sub_dry=(--dry-run)
+if [[ ${SELECTED_COMPONENTS[ccr]} -eq 1 ]]; then
+    log_info "Installing Claude Code Router (ccr/VERSION)..."
+    as_user bash "$REPO_DIR/ccr/install.sh" "${sub_dry[@]}" || log_warn "ccr install failed"
+    HARNESS_CHECKLIST+=(
+        "CCR: rode 'ccr ui', cadastre OpenRouter e NVIDIA Build, defina as rotas e crie o perfil 'Claude Code' no Agent Config (ver ccr/README.md); depois abra um shell novo e rode ccrc"
+    )
+fi
+if [[ ${SELECTED_COMPONENTS[traycer]} -eq 1 ]]; then
+    log_info "Installing Traycer (traycer/SHA256)..."
+    as_user bash "$REPO_DIR/traycer/install.sh" "${sub_dry[@]}" || log_warn "traycer install failed"
+    HARNESS_CHECKLIST+=(
+        "Traycer: systemd=true em /etc/wsl.conf (depois 'wsl --shutdown'), navegador padrão no WSL e login no primeiro 'traycer' (ver traycer/README.md)"
+    )
+fi
 
 CODEX_ACTIVE=0
 if [[ ${SELECTED_COMPONENTS[codex]} -eq 1 ]] || has_native_cmd codex || [[ -d "$HOME/.codex" ]]; then
