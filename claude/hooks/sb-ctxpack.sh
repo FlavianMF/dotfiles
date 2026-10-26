@@ -4,7 +4,7 @@
 #   finding SubagentStop: grava a conclusão do subagente (descartada se o scan achar segredo).
 #   render  SubagentStart: imprime o additionalContext JSON com o pacote (ou nada).
 #
-# Só roda com SECOND_BRAIN_HOOKS=1. Modo via SB_CTXPACK: active (padrão), shadow, 0. Sempre exit 0.
+# Só roda com SECOND_BRAIN_HOOKS=1. Modo via SB_CTXPACK: shadow (padrão desde a E3 da RFC-002), active, 0. Sempre exit 0.
 
 [[ "${SECOND_BRAIN_HOOKS:-0}" == "1" ]] || exit 0
 case "${SB_CTXPACK:-}" in 0|false|off|no) exit 0 ;; esac
