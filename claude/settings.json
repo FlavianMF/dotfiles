@@ -192,6 +192,38 @@
             "timeout": 2
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/sb-ctxpack.sh\" read",
+            "timeout": 4
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/sb-ctxpack.sh\" finding",
+            "timeout": 4
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/sb-ctxpack.sh\" render",
+            "timeout": 4
+          }
+        ]
       }
     ]
   },
