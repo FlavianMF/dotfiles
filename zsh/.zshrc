@@ -165,6 +165,9 @@ alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude
 # Teclado ABNT2 no WSLg (apps X11); ver zsh/wsl-keyboard.zsh
 [[ -r "$HOME/dotfiles/zsh/wsl-keyboard.zsh" ]] && source "$HOME/dotfiles/zsh/wsl-keyboard.zsh"
 
+# URL do Ollama do Windows para o opencode/Traycer; ver zsh/ollama.zsh
+[[ -r "$HOME/dotfiles/zsh/ollama.zsh" ]] && source "$HOME/dotfiles/zsh/ollama.zsh"
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'
