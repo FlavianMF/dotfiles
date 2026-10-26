@@ -159,6 +159,9 @@ alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude
 # ECC automático em projetos web/C/Node backend (função claude); ver zsh/ecc-auto.zsh
 [[ -r "$HOME/dotfiles/zsh/ecc-auto.zsh" ]] && source "$HOME/dotfiles/zsh/ecc-auto.zsh"
 
+# ccrc: Claude Code pelo Claude Code Router (componente opcional ccr); ver zsh/ccr.zsh
+[[ -r "$HOME/dotfiles/zsh/ccr.zsh" ]] && source "$HOME/dotfiles/zsh/ccr.zsh"
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'
