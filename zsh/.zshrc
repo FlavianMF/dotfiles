@@ -162,6 +162,9 @@ alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude
 # ccrc: Claude Code pelo Claude Code Router (componente opcional ccr); ver zsh/ccr.zsh
 [[ -r "$HOME/dotfiles/zsh/ccr.zsh" ]] && source "$HOME/dotfiles/zsh/ccr.zsh"
 
+# Teclado ABNT2 no WSLg (apps X11); ver zsh/wsl-keyboard.zsh
+[[ -r "$HOME/dotfiles/zsh/wsl-keyboard.zsh" ]] && source "$HOME/dotfiles/zsh/wsl-keyboard.zsh"
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'
