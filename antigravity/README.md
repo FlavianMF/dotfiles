@@ -32,12 +32,20 @@ only checks that the download matches what the manifest says.
 
 ## Second brain hooks
 
-Two hooks port the Claude ones. The scripts stay in `antigravity/hooks/` and are not copied.
+Four hooks port the Claude ones. The scripts stay in `antigravity/hooks/` and are not copied.
 
 - `second-brain-session-start.sh` (`SessionStart`) injects the vault notes for the repo of
   `workspacePaths[0]`. It prints `{"injectSteps":[...]}`, or `{}` when there is no note.
 - `second-brain-observe.sh` (`PostToolUse`) logs the tool name and file path through
   `sb.py observe record`. It never logs commands or content. It answers `{}`.
+- `second-brain-count.sh` (`PostToolUse`) counts the session's writes in
+  `~/.local/state/second-brain/agy/<conversationId>.state`. It stores one letter per event, never
+  the command. A write is an edit tool or a `run_command` that matches the Claude hook's regex.
+  A `run_command` with `vault_sync.py`, `sb.py sync` or `sb.py candidate add` marks the session as synced.
+- `second-brain-stop.sh` (`Stop`) reminds you once per session to queue candidates. It acts only
+  on a normal end (`terminationReason` is `NO_TOOL_CALL`), with at least `SECOND_BRAIN_MIN_EDITS`
+  writes (default 5) and no sync. It prints `{"decision":"continue","reason":...}`, so `agy` answers
+  the reminder before it stops. It deletes state files older than 7 days.
 
 The hooks run by default, because `agy` has no `env` block in its settings. Set
 `SECOND_BRAIN_HOOKS=0` in your shell to turn both off. Set `SB_OBSERVE=0` to turn off only the log.
@@ -45,7 +53,8 @@ The hooks run by default, because `agy` has no `env` block in its settings. Set
 Run `make antigravity-config` from the main checkout. The rendered `hooks.json` holds absolute
 paths into the checkout that ran it. A deleted worktree breaks those paths.
 
-Out of scope: `Stop`, `PreInvocation` and the prompt hint.
+Out of scope: `PreInvocation` and the prompt hint. `agy` has no stable transcript format, so the
+Stop hook counts through `second-brain-count.sh` and never parses `transcriptPath`.
 
 ## Differences from the other harnesses
 
