@@ -27,3 +27,8 @@ llama-bench-rtx5050() {
   local model="$1"; shift
   llama-bench -m "$model" -p 512 -n 128 -ngl 99 -r 5 "$@"
 }
+
+# Backend local único: llama-server no WSL2 (porta 8080). Veja bin/llm-serve.
+llm-serve() { "$HOME/dotfiles/bin/llm-serve" "$@"; }
+llm-health() { curl -fsS -m 2 "http://127.0.0.1:${LLM_PORT:-8080}/health" && echo; }
+llm-stop() { pkill -x llama-server && echo "llama-server parado" || echo "llama-server não estava rodando"; }

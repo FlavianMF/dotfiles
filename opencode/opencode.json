@@ -96,6 +96,25 @@
           }
         }
       }
+    },
+    "llamacpp": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "llama.cpp (WSL2, local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:8080/v1",
+        "apiKey": "llamacpp"
+      },
+      "models": {
+        "gpt-oss-20b": {
+          "name": "gpt-oss-20b MXFP4 (llama.cpp, MoE offload)",
+          "tool_call": true,
+          "reasoning": true,
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
     }
   },
   "mcp": {

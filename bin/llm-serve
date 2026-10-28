@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Sobe o llama-server no WSL2 como backend único dos agentes locais (opencode e Traycer).
+# Uso: llm-serve [main|ARQUIVO.gguf|USUARIO/REPO[:QUANT]] [args extras do llama-server]
+# Porta e host: LLM_PORT (8080) e 127.0.0.1. Um modelo residente por vez (-np 1).
+set -euo pipefail
+
+PORT="${LLM_PORT:-8080}"
+CTX="${LLM_CTX:-32768}"
+BASE="http://127.0.0.1:${PORT}"
+
+command -v llama-server >/dev/null || { echo "llama-server não está no PATH. Rode: llama-build-sm120a" >&2; exit 1; }
+
+# Já no ar: não suba uma segunda instância.
+if curl -fsS -m 2 "$BASE/health" >/dev/null 2>&1; then
+  echo "llama-server já responde em $BASE"
+  exit 0
+fi
+
+# Um modelo residente do Ollama no Windows disputa a mesma VRAM. Descarregue antes de subir.
+if loaded="$(curl -fsS -m 2 http://127.0.0.1:11434/api/ps 2>/dev/null)"; then
+  for m in $(jq -r '.models[].name' <<<"$loaded" 2>/dev/null); do
+    echo "Descarregando '$m' do Ollama para liberar a VRAM"
+    curl -fsS -m 10 http://127.0.0.1:11434/api/generate -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null || true
+  done
+fi
+
+spec="${1:-main}"
+[[ $# -gt 0 ]] && shift
+
+model_args=()
+alias_name=""
+case "$spec" in
+  main)
+    # Perfil principal: MoE de código com offload de experts. Valores iniciais; a Fase 1 mede e ajusta.
+    model_args=(-hf "${LLM_MAIN_HF:-ggml-org/gpt-oss-20b-GGUF}")
+    alias_name="${LLM_MAIN_ALIAS:-gpt-oss-20b}"
+    ;;
+  *.gguf)
+    [[ -f "$spec" ]] || { echo "Arquivo não existe: $spec" >&2; exit 1; }
+    model_args=(-m "$spec")
+    alias_name="$(basename "$spec" .gguf)"
+    ;;
+  */*)
+    model_args=(-hf "$spec")
+    alias_name="${spec##*/}"
+    ;;
+  *)
+    echo "Perfil desconhecido: $spec. Use main, um arquivo .gguf ou USUARIO/REPO[:QUANT]." >&2
+    exit 2
+    ;;
+esac
+
+# --fit ajusta o que ficou sem valor aos GB livres de VRAM. Fixe o offload com LLM_N_CPU_MOE=N.
+extra=()
+[[ -n "${LLM_N_CPU_MOE:-}" ]] && extra+=(--n-cpu-moe "$LLM_N_CPU_MOE")
+
+echo "llama-server em $BASE: modelo '$alias_name', contexto $CTX"
+exec llama-server "${model_args[@]}" --alias "$alias_name" \
+  --host 127.0.0.1 --port "$PORT" -np 1 -c "$CTX" \
+  -ngl 99 --fit on --threads 6 -fa on -ctk q8_0 -ctv q8_0 \
+  --jinja --no-webui "${extra[@]}" "$@"
