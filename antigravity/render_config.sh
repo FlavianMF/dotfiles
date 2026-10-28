@@ -4,7 +4,10 @@
 #   ~/.gemini/config/mcp_config.json            <- antigravity/mcp_config.base.json
 #   ~/.gemini/antigravity-cli/settings.json     <- antigravity/settings.base.json
 #   ~/.gemini/config/skills.json                <- antigravity/skills.base.json
+#   ~/.gemini/config/hooks.json                 <- antigravity/hooks.base.json
 # agy only accepts absolute paths in skills.json ("~" fails), so @HOME@ is expanded here.
+# hooks.json points at the scripts in this checkout: @REPO@ becomes the repo root. Run the
+# render from the main checkout, not from a worktree that you will delete.
 # Base entries win; keys that exist only on this machine (extra MCP servers, model,
 # trustedWorkspaces, grants agy persisted) are kept. permissions.* arrays are unioned.
 # Usage: antigravity/render_config.sh [--dry-run]
@@ -15,6 +18,7 @@ DRY_RUN=0
 MCP_TARGET="${AGY_MCP_CONFIG:-$HOME/.gemini/config/mcp_config.json}"
 SETTINGS_TARGET="${AGY_SETTINGS:-$HOME/.gemini/antigravity-cli/settings.json}"
 SKILLS_TARGET="${AGY_SKILLS:-$HOME/.gemini/config/skills.json}"
+HOOKS_TARGET="${AGY_HOOKS:-$HOME/.gemini/config/hooks.json}"
 
 command -v jq >/dev/null 2>&1 || { echo "jq not found (required package)" >&2; exit 1; }
 
@@ -41,7 +45,8 @@ render "$ROOT/mcp_config.base.json" "$MCP_TARGET" '$cur + {mcpServers: (($cur.mc
 
 settings_base="$(mktemp)"
 skills_base="$(mktemp)"
-trap 'rm -f "$settings_base" "$skills_base"' EXIT
+hooks_base="$(mktemp)"
+trap 'rm -f "$settings_base" "$skills_base" "$hooks_base"' EXIT
 sed "s|@HOME@|$HOME|g" "$ROOT/settings.base.json" > "$settings_base"
 render "$settings_base" "$SETTINGS_TARGET" '
   $cur + {permissions: (($cur.permissions // {}) + (
@@ -55,3 +60,10 @@ if [[ -L "$SKILLS_TARGET" && $DRY_RUN -eq 0 ]]; then
 fi
 sed "s|@HOME@|$HOME|g" "$ROOT/skills.base.json" > "$skills_base"
 render "$skills_base" "$SKILLS_TARGET" '$cur + {entries: ((($cur.entries // []) + $base.entries) | unique_by(.path))}'
+
+# Same symlink cleanup as skills.json: a link into the repo would make agy rewrite the base file.
+if [[ -L "$HOOKS_TARGET" && $DRY_RUN -eq 0 ]]; then
+    rm "$HOOKS_TARGET"
+fi
+sed "s|@REPO@|$(dirname "$ROOT")|g" "$ROOT/hooks.base.json" > "$hooks_base"
+render "$hooks_base" "$HOOKS_TARGET" '$cur + $base'

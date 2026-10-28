@@ -704,6 +704,7 @@ CONFIG_ITEMS=(
     "$HOME/.config/opencode/AGENTS.md"
     "$HOME/.gemini/config/AGENTS.md"
     "$HOME/.gemini/config/skills.json"
+    "$HOME/.gemini/config/hooks.json"
     "$HOME/.gemini/config/mcp_config.json"
     "$HOME/.gemini/antigravity-cli/settings.json"
 )
