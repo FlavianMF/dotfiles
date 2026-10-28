@@ -46,5 +46,13 @@ if [[ -n "$session" ]]; then
     find "$state/router" -name '*.count' -mtime +7 -delete 2>/dev/null
 fi
 
+# D4: log de disparos (ts, session_id, class; nunca o texto do prompt). Falha nunca altera saída/exit.
+(
+    umask 077
+    logdir="${SECOND_BRAIN_STATE_DIR:-$HOME/.local/state/second-brain}"
+    mkdir -p "$logdir" && jq -cn --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg s "$session" --arg c "$kind" \
+        '{ts:$ts, session_id:$s, class:$c}' >>"$logdir/router.jsonl"
+) >/dev/null 2>&1 || true
+
 jq -cn --arg k "$kind" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: ("Router de tokens (" + $k + "): delegue a localização/leitura ampla a um subagente de modelo menor (Explore, cavecrew-investigator ou cavecrew-builder) e traga só a conclusão, sem o dump. Ignore se o pedido exigir julgamento.")}}'
 exit 0
