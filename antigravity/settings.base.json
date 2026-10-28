@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "deny": [
+      "read_file(@HOME@/.ssh)",
+      "read_file(@HOME@/.aws)",
+      "read_file(@HOME@/dotfiles/secrets)",
+      "read_file(.env)",
+      "read_file(.env.local)",
+      "read_file(.env.development)",
+      "read_file(.env.production)",
+      "write_file(@HOME@/.ssh)",
+      "write_file(@HOME@/.aws)",
+      "write_file(@HOME@/dotfiles/secrets)",
+      "command(rm -rf)",
+      "command(rm -fr)",
+      "command(rm -Rf)",
+      "command(rm -rF)",
+      "command(rm -fR)",
+      "command(rm -FR)",
+      "command(rm -r -f)",
+      "command(rm -f -r)",
+      "command(sudo)",
+      "command(chmod 777)",
+      "command(chmod -R 777)",
+      "command(ssh)",
+      "command(scp)",
+      "command(nc)",
+      "command(regex:.*\\|\\s*(sudo\\s+)?(ba|z)?sh(\\s.*)?)"
+    ],
+    "ask": [
+      "command(curl)",
+      "command(wget)"
+    ]
+  }
+}

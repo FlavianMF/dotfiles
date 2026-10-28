@@ -7,7 +7,7 @@ Reproducible development environment configuration. Clone and run `install.sh` t
 - **Multiplexer**: tmux + Catppuccin theme + plugins
 - **Tools**: git, GitHub CLI (gh), Docker
 - **Tools (optional)**: shellcheck (component `shellcheck`, apt or GitHub release binary)
-- **AI harnesses**: Claude Code, Codex and OpenCode sharing one `AGENTS.md`, one skills dir and the same MCPs (see [AI harnesses](#ai-harnesses))
+- **AI harnesses**: Claude Code, Codex, OpenCode and Antigravity CLI sharing one `AGENTS.md`, one skills dir and the same MCPs (see [AI harnesses](#ai-harnesses))
 
 ## Quick Start
 
@@ -40,37 +40,38 @@ The script will:
 | `claude/settings.json` | Claude Code config | Model (opus/xhigh, subagents on sonnet), plugins, hooks, deny list, statusline |
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Imports `agents/AGENTS.md` + Claude-only notes |
 | `agents/AGENTS.md` | Codex / OpenCode / Claude | Shared instructions (performance, security, git, design skills) |
-| `codex/`, `opencode/` | `~/.codex`, `~/.config/opencode` | Only when the component is selected or the tool is installed |
+| `codex/`, `opencode/`, `antigravity/` | `~/.codex`, `~/.config/opencode`, `~/.gemini/config` | Only when the component is selected or the tool is installed |
 | `claude/hooks/jev-e.sh` | `~/.claude/hooks/` (directory link) | Runs only if jev-workflow is built (component `jev`) |
 | `vendor/ecc/`, `claude/rules/` | `~/.agents/skills`, `~/.claude/{agents,rules}` | Component `ecc` (off by default): selected ECC pieces, global |
 | `ecc@ecc` plugin, `vendor/ecc/upstream/` | Project `.claude/` | Full ECC, installed but off; `make ecc-on DIR=...` per project ([ECC](#ecc-affaan-mecc)) |
 
 ## AI harnesses
 
-One set of instructions, skills and MCPs for Claude Code, Codex and OpenCode.
+One set of instructions, skills and MCPs for Claude Code, Codex, OpenCode and Antigravity CLI.
 
 | Piece | Source of truth | How it gets installed |
 |-------|-----------------|-----------------------|
-| Instructions | `agents/AGENTS.md` | linked to `~/.codex/AGENTS.md` and `~/.config/opencode/AGENTS.md`; imported by `claude/CLAUDE.md` (`@~/dotfiles/agents/AGENTS.md`) |
+| Instructions | `agents/AGENTS.md` | linked to `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md` and `~/.gemini/config/AGENTS.md`; imported by `claude/CLAUDE.md` (`@~/dotfiles/agents/AGENTS.md`) |
 | Claude plugins | `enabledPlugins` + `extraKnownMarketplaces` in `claude/settings.json` | `install.sh` reconciles with `claude plugin list --json` (installs what's missing, warns about extras). A plugin declared `false` is installed but kept off at user scope, to be enabled per project. `make plugins-freeze` records versions in `claude/plugins.lock.json` |
-| Skills | `~/.agents/skills` (canonical, read by Codex and OpenCode) | `npx skills@<pinned> add ... -g`; shared skills get a link in `~/.claude/skills`. Skills Claude already gets from a plugin (impeccable, mattpocock, caveman, figma, typesafe) are installed for Codex/OpenCode only |
+| Skills | `~/.agents/skills` (canonical, read by Codex and OpenCode; Antigravity reads it through `~/.gemini/config/skills.json`) | `npx skills@<pinned> add ... -g`; shared skills get a link in `~/.claude/skills`. Skills Claude already gets from a plugin (impeccable, mattpocock, caveman, figma, typesafe) are installed for Codex/OpenCode/Antigravity only |
 | `second-brain-sync` | `~/obsidian_vault/00_META/skills/second-brain-sync` | `~/.agents/skills/second-brain-sync` → vault, `~/.claude/skills/second-brain-sync` → `~/.agents/skills/...` |
-| MCPs (Figma, Playwright, GitHub, rea) | Claude: plugins; Codex: `codex/config.base.toml`; OpenCode: `opencode/opencode.json` | GitHub MCP uses a PAT (`secrets/github-mcp.env`): the hosted server doesn't offer OAuth to these clients |
-| REA reverse engineering (`rea` MCP + `reverse-engineer-anything` skill) | Claude: `claude mcp add -s user` in `install.sh`; Codex: `codex/config.base.toml`; OpenCode: `opencode/opencode.json`; skill: `agents/skills/` | Pinned to `rea-agents@6.4.0`. The `hopper` component installs Hopper 6.4.2 demo (`/opt/hopper`), pinned by size + SHA-1, plus Xvfb deps; demo sessions last 30 min. Needs Ubuntu >= 24.04. ~170 tools: all exposed, no allowlist |
+| MCPs (Figma, Playwright, GitHub, rea) | Claude: plugins; Codex: `codex/config.base.toml`; OpenCode: `opencode/opencode.json`; Antigravity: `antigravity/mcp_config.base.json` (no GitHub) | GitHub MCP uses a PAT (`secrets/github-mcp.env`): the hosted server doesn't offer OAuth to these clients. Antigravity has no GitHub MCP: its docs don't say whether `mcp_config.json` expands env vars, and a literal token would land in a file on disk |
+| REA reverse engineering (`rea` MCP + `reverse-engineer-anything` skill) | Claude: `claude mcp add -s user` in `install.sh`; Codex: `codex/config.base.toml`; OpenCode: `opencode/opencode.json`; Antigravity: `antigravity/mcp_config.base.json`; skill: `agents/skills/` | Pinned to `rea-agents@6.4.0`. The `hopper` component installs Hopper 6.4.2 demo (`/opt/hopper`), pinned by size + SHA-1, plus Xvfb deps; demo sessions last 30 min. Needs Ubuntu >= 24.04. ~170 tools: all exposed, no allowlist |
 | Claude Code Router (`ccr` component) | `ccr/VERSION`, `ccr/install.sh`, `zsh/ccr.zsh` | Off by default. npm package pinned in `ccr/VERSION`, installed into `~/.local`. Providers, keys and routes live in CCR's own UI (SQLite), outside git. `ccrc` launches the `Claude Code` profile. See `ccr/README.md` |
 | Traycer (`traycer` component) | `traycer/install.sh`, `traycer/SHA256` | Off by default. AppImage in `~/.local/opt/traycer`, pinned by sha256 because upstream publishes no version. Needs systemd in WSL. See `traycer/README.md` |
+| Antigravity CLI (`antigravity` component) | `antigravity/install.sh`, `antigravity/*.base.json`, `antigravity/skills.json`, `antigravity/render_config.sh` | Off by default. `agy` in `~/.local/bin`, sha512 checked against the upstream manifest. `agy` self-updates, so there is no version pin. Rules and `skills.json` are linked into `~/.gemini/config`; `mcp_config.json` and `settings.json` are merged (agy rewrites them). See `antigravity/README.md` |
 | Codex config | `codex/config.base.toml` (+ `codex/yolo.config.toml` profile) | rendered into `~/.codex/config.toml`, keeping machine-only keys such as `[projects.*]`. `make codex-drift` shows differences |
 | OpenCode config | `opencode/opencode.json` | symlinked (OpenCode doesn't rewrite it). `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` in `.zshrc` avoids loading skills twice |
 
-Components `codex` and `opencode` are **off by default** (`./install.sh --with=codex,opencode`); both install from npm into `~/.local` and are skipped if already installed. Logins are manual: the install prints a checklist at the end.
+Components `codex`, `opencode` and `antigravity` are **off by default** (`./install.sh --with=codex,opencode,antigravity`); `codex` and `opencode` install from npm into `~/.local`, `antigravity` downloads a native binary into `~/.local/bin`, and all are skipped if already installed. Logins are manual: the install prints a checklist at the end.
 
 Claude Code extras (all in `claude/`): `statusline.sh` (model, cwd, git branch/dirty, % context left, caveman badge), `hooks/` (compact suggestion after ~50 tool calls, opt-in format/typecheck on Stop, second-brain hints/reminder behind `SECOND_BRAIN_HOOKS=1`) and `contexts/` (session modes via the `claude-dev`, `claude-review`, `claude-research` aliases).
 
 **Jev tools** (component `jev`, off by default): `./install.sh --harness-only --with=jev` clones (private repo) and builds [jev-workflow](https://github.com/FlavianMF/jev-workflow) in `~/projetos_claude/jev-workflow` (override with `JEV_WORKFLOW_HOME`). `claude/hooks/jev-e.sh` is wired on `UserPromptSubmit` (timeout 2 s, `JEV_MODE_E=shadow` in `settings.json` `env`): in shadow mode it only appends a decision to `~/.local/state/jev-tools/log.jsonl` and prints nothing; it is a silent no-op without the build, without `TYPESAFE_API_KEY`, or when `JEV_TOOLS=0` / `JEV_TOOL_E=0` / the `DISABLED` marker is set.
 
-**Deny lists** (same intent in the 3 harnesses): secrets reads (`~/.ssh`, `~/.aws`, `.env*`, `secrets/`), `curl | bash`, `ssh`/`scp`/`nc`, `rm -rf` (and variants), `sudo`, `chmod 777`. Claude: `permissions.deny`; OpenCode: `permission.bash`/`read`; Codex: sandbox + `codex/dotfiles.rules` (execpolicy, linked as `~/.codex/rules/dotfiles.rules`).
+**Deny lists** (same intent in the 4 harnesses): secrets reads (`~/.ssh`, `~/.aws`, `.env*`, `secrets/`), `curl | bash`, `ssh`/`scp`/`nc`, `rm -rf` (and variants), `sudo`, `chmod 777`. Claude: `permissions.deny`; OpenCode: `permission.bash`/`read`; Codex: sandbox + `codex/dotfiles.rules` (execpolicy, linked as `~/.codex/rules/dotfiles.rules`); Antigravity: `permissions.deny`/`ask` in `antigravity/settings.base.json`, merged into `~/.gemini/antigravity-cli/settings.json`.
 
-Useful targets: `make harness`, `make harness-dry-run`, `make plugins-freeze`, `make plugins-update`, `make codex-drift`, `make audit` (AgentShield, pinned, via npx), `make lint`, and the ECC ones below (`make ecc-on|ecc-off|ecc-status DIR=...`, `make ecc-rules`).
+Useful targets: `make harness`, `make harness-dry-run`, `make plugins-freeze`, `make plugins-update`, `make codex-drift`, `make antigravity-config`, `make audit` (AgentShield, pinned, via npx), `make lint`, and the ECC ones below (`make ecc-on|ecc-off|ecc-status DIR=...`, `make ecc-rules`).
 
 ### ECC (affaan-m/ECC)
 

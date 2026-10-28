@@ -1,7 +1,7 @@
-# Instruções globais (Claude Code, Codex, OpenCode)
+# Instruções globais (Claude Code, Codex, OpenCode, Antigravity CLI)
 
-Fonte única: `~/dotfiles/agents/AGENTS.md`. Linkado em `~/.codex/AGENTS.md` e
-`~/.config/opencode/AGENTS.md`; importado por `~/.claude/CLAUDE.md`. Regras de projeto
+Fonte única: `~/dotfiles/agents/AGENTS.md`. Linkado em `~/.codex/AGENTS.md`,
+`~/.config/opencode/AGENTS.md` e `~/.gemini/config/AGENTS.md`; importado por `~/.claude/CLAUDE.md`. Regras de projeto
 (`AGENTS.md` / `CLAUDE.md` do repo) vencem estas em caso de conflito.
 
 ## Performance e contexto

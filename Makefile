@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -13,7 +13,7 @@ help:
 	@echo "  make clean        - Remove links simbólicos"
 	@echo "  make help         - Mostra esta mensagem"
 	@echo ""
-	@echo "AI harnesses (Claude Code / Codex / OpenCode):"
+	@echo "AI harnesses (Claude Code / Codex / OpenCode / Antigravity CLI):"
 	@echo "  make harness          - Só links + harnesses (./install.sh --harness-only)"
 	@echo "  make harness-dry-run  - Mostra o que o install faria nos harnesses, sem mudar nada"
 	@echo "  make plugins-freeze   - Grava claude/plugins.lock.json (versões instaladas)"
@@ -31,6 +31,8 @@ help:
 	@echo "  make ccr-update VERSION=x.y.z - Troca o pin em ccr/VERSION e instala"
 	@echo "  make traycer-install  - Instala o Traycer (AppImage conferido por traycer/SHA256)"
 	@echo "  make traycer-update   - Baixa o build atual e regrava traycer/SHA256 (revise o diff antes de instalar)"
+	@echo "  make antigravity-install - Instala o Antigravity CLI (agy) em ~/.local/bin, sha512 do manifesto conferido"
+	@echo "  make antigravity-config  - Reaplica MCPs e permissões do agy em ~/.gemini (merge, não link)"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
@@ -114,10 +116,10 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh antigravity/install.sh antigravity/render_config.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
-	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json; do jq empty "$$f" || exit 1; done
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh antigravity/install.sh antigravity/render_config.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
 	@python3 opencode/render_agents.py vendor/ecc/agents .cache/lint-agents --dry-run > /dev/null
@@ -135,6 +137,12 @@ traycer-install:
 
 traycer-update:
 	./traycer/install.sh --update
+
+antigravity-install:
+	./antigravity/install.sh
+
+antigravity-config:
+	./antigravity/render_config.sh
 
 test:
 	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" || exit 1; done

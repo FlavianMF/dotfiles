@@ -47,7 +47,7 @@ Options:
                        Implies --harness-only
   --harness-only       Skip system packages, Oh My Zsh, tmux, git identity and
                        shell change; only link configs and set up the AI
-                       harnesses (Claude Code, Codex, OpenCode)
+                       harnesses (Claude Code, Codex, OpenCode, Antigravity CLI)
   --with=a,b           Force-select components (e.g. --with=codex,opencode)
   --without=a,b        Force-deselect components (e.g. --without=claudeskills)
   -h, --help           Show this help
@@ -132,6 +132,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [claudeskills]="Claude Code plugins (from settings.json) + skills in ~/.agents/skills"
     [codex]="OpenAI Codex CLI (npm, ~/.local) + ~/.codex config"
     [opencode]="OpenCode CLI (npm, ~/.local) + ~/.config/opencode config"
+    [antigravity]="Antigravity CLI (agy, ~/.local/bin, self-updating) + ~/.gemini/config and ~/.gemini/antigravity-cli config"
     [ccr]="Claude Code Router (npm, ~/.local, version in ccr/VERSION); providers and routes are set in its UI"
     [traycer]="Traycer desktop (AppImage pinned by sha256 in traycer/SHA256, ~/.local/opt/traycer)"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
@@ -166,6 +167,7 @@ declare -A SELECTED_COMPONENTS=(
     [claudeskills]=1
     [codex]=0
     [opencode]=0
+    [antigravity]=0
     [ccr]=0
     [traycer]=0
     [ecc]=0
@@ -197,7 +199,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode antigravity ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -700,6 +702,10 @@ CONFIG_ITEMS=(
     "$HOME/.claude/rules/local"
     "$HOME/.config/opencode/opencode.json"
     "$HOME/.config/opencode/AGENTS.md"
+    "$HOME/.gemini/config/AGENTS.md"
+    "$HOME/.gemini/config/skills.json"
+    "$HOME/.gemini/config/mcp_config.json"
+    "$HOME/.gemini/antigravity-cli/settings.json"
 )
 
 # Keep the path relative to $HOME inside the backup, so same-named files
@@ -792,7 +798,7 @@ link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-eng
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
 
-# ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode =====
+# ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode, Antigravity CLI =====
 # Declarative, not symlinked where the tool keeps machine state:
 # installed_plugins.json/.skill-lock.json carry absolute paths and machine
 # metadata, and Codex rewrites its own config.toml. So plugins are reconciled
@@ -836,9 +842,13 @@ install_npm_cli() {
 [[ ${SELECTED_COMPONENTS[codex]} -eq 1 ]] && install_npm_cli codex @openai/codex
 [[ ${SELECTED_COMPONENTS[opencode]} -eq 1 ]] && install_npm_cli opencode opencode-ai
 
-# --- Claude Code Router / Traycer (components off by default; scripts own the pins) ---
+# --- Claude Code Router / Traycer / Antigravity CLI (components off by default; scripts own the pins) ---
 sub_dry=()
 [[ $DRY_RUN -eq 1 ]] && sub_dry=(--dry-run)
+if [[ ${SELECTED_COMPONENTS[antigravity]} -eq 1 ]]; then
+    log_info "Installing Antigravity CLI (agy)..."
+    as_user bash "$REPO_DIR/antigravity/install.sh" "${sub_dry[@]}" || log_warn "antigravity install failed"
+fi
 if [[ ${SELECTED_COMPONENTS[ccr]} -eq 1 ]]; then
     log_info "Installing Claude Code Router (ccr/VERSION)..."
     as_user bash "$REPO_DIR/ccr/install.sh" "${sub_dry[@]}" || log_warn "ccr install failed"
@@ -861,6 +871,11 @@ fi
 OPENCODE_ACTIVE=0
 if [[ ${SELECTED_COMPONENTS[opencode]} -eq 1 ]] || has_native_cmd opencode || [[ -d "$HOME/.config/opencode" ]]; then
     OPENCODE_ACTIVE=1
+fi
+
+ANTIGRAVITY_ACTIVE=0
+if [[ ${SELECTED_COMPONENTS[antigravity]} -eq 1 ]] || has_native_cmd agy || [[ -d "$HOME/.gemini/config" ]]; then
+    ANTIGRAVITY_ACTIVE=1
 fi
 
 # --- rea MCP (user scope), pinned like the Codex/OpenCode entries ---
@@ -964,11 +979,11 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
         skills_add tenfoldmarc/llm-council-skill --skill llm-council -a claude-code codex opencode
 
         # Skills Claude Code already gets from its plugins: install the upstream
-        # skills-CLI equivalent for Codex/OpenCode only. They land in
+        # skills-CLI equivalent for Codex/OpenCode/Antigravity only. They land in
         # ~/.agents/skills without a ~/.claude/skills link, so Claude doesn't load
         # them twice.
-        if [[ $CODEX_ACTIVE -eq 1 || $OPENCODE_ACTIVE -eq 1 ]]; then
-            log_info "Installing Codex/OpenCode equivalents of Claude plugin skills..."
+        if [[ $CODEX_ACTIVE -eq 1 || $OPENCODE_ACTIVE -eq 1 || $ANTIGRAVITY_ACTIVE -eq 1 ]]; then
+            log_info "Installing Codex/OpenCode/Antigravity equivalents of Claude plugin skills..."
             skills_add pbakaus/impeccable --skill impeccable -a codex opencode
             skills_add mattpocock/skills --skill diagnosing-bugs tdd prototype research domain-modeling \
                 codebase-design code-review wizard grilling writing-for-agents -a codex opencode
@@ -1068,6 +1083,26 @@ if [[ $CODEX_ACTIVE -eq 1 ]]; then
         "Codex: codex login (conta ChatGPT)"
         "Codex: codex mcp login figma (OAuth do MCP do Figma)"
         "Codex: GitHub MCP usa PAT — preencha ~/dotfiles/secrets/github-mcp.env (ver .env.example)"
+    )
+fi
+
+# --- Antigravity CLI config ---
+if [[ $ANTIGRAVITY_ACTIVE -eq 1 ]]; then
+    log_info "Configuring Antigravity CLI (~/.gemini/config)..."
+    # Rules and the skills manifest are read-only for agy, so they are linked. Skills stay in
+    # ~/.agents/skills (skills.json points there). Files agy rewrites itself (mcp_config.json,
+    # settings.json) are merged by render_config.sh, never linked.
+    create_config_link "$REPO_DIR/agents/AGENTS.md" "$HOME/.gemini/config/AGENTS.md"
+    create_config_link "$REPO_DIR/antigravity/skills.json" "$HOME/.gemini/config/skills.json"
+    if [[ $DRY_RUN -eq 1 ]]; then
+        bash "$REPO_DIR/antigravity/render_config.sh" --dry-run
+    else
+        as_user bash "$REPO_DIR/antigravity/render_config.sh" || log_warn "Antigravity config render failed"
+    fi
+    HARNESS_CHECKLIST+=(
+        "Antigravity: rode 'agy' e entre com a conta Google no primeiro uso"
+        "Antigravity: o MCP do GitHub não está no agy (o PAT iria em texto puro para mcp_config.json); veja antigravity/README.md"
+        "Antigravity: autentique o MCP do Figma (OAuth) em /mcp ou Customizations no agy"
     )
 fi
 
@@ -1184,6 +1219,7 @@ echo "✓ rea MCP registered for Claude Code (user scope)"
 [[ $CODEX_ACTIVE -eq 1 ]] && echo "✓ Codex configured (~/.codex/config.toml rendered, AGENTS.md linked)"
 [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
 [[ $OPENCODE_ACTIVE -eq 1 ]] && echo "✓ OpenCode configured (~/.config/opencode/opencode.json + AGENTS.md linked)"
+[[ $ANTIGRAVITY_ACTIVE -eq 1 ]] && echo "✓ Antigravity CLI configured (~/.gemini/config AGENTS.md + skills.json linked, MCPs and permissions rendered)"
 if [[ $HARNESS_ONLY -eq 0 ]]; then
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"

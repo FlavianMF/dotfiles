@@ -126,16 +126,17 @@ docker build -t dev-env .
 docker run -it dev-env
 ```
 
-## 🤖 Harnesses de IA (Claude Code, Codex, OpenCode)
+## 🤖 Harnesses de IA (Claude Code, Codex, OpenCode, Antigravity CLI)
 
 ```bash
 ./install.sh --dry-run                      # mostra o que mudaria nos harnesses, sem mudar nada
 ./install.sh --harness-only                 # só links + harnesses (sem apt, shell, tmux)
 ./install.sh --harness-only --with=codex,opencode   # instala também Codex e OpenCode (npm, ~/.local)
+./install.sh --harness-only --with=antigravity      # instala o agy (~/.local/bin) e aplica a config em ~/.gemini
 ```
 
 - **Instruções**: edite só `agents/AGENTS.md`. O Claude importa via `claude/CLAUDE.md`;
-  Codex e OpenCode leem o link.
+  Codex, OpenCode e Antigravity leem o link.
 - **Plugins do Claude**: declare em `claude/settings.json` (`enabledPlugins` +
   `extraKnownMarketplaces`) e rode `make harness`. Depois `make plugins-freeze` e commite
   `claude/plugins.lock.json`. Para atualizar: `make plugins-update` e revise o diff do lock.
@@ -144,6 +145,10 @@ docker run -it dev-env
   `-a claude-code`).
 - **Codex**: edite `codex/config.base.toml`, rode `make harness` e confira `make codex-drift`.
   Perfil sem sandbox: `codex --profile yolo`.
+- **Antigravity CLI** (`agy`): edite `antigravity/mcp_config.base.json` ou
+  `antigravity/settings.base.json` e rode `make antigravity-config` (merge: o que o `agy`
+  gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json`. Sem MCP do
+  GitHub; veja `antigravity/README.md`.
 - **Modos de sessão**: `claude-dev`, `claude-review`, `claude-research`.
 - **Hooks opcionais por projeto** (em `.claude/settings.local.json` do projeto):
   `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}` liga format/typecheck no fim do turno;
