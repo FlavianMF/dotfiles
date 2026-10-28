@@ -1,0 +1,15 @@
+{
+  "second-brain": {
+    "SessionStart": [
+      { "type": "command", "command": "@REPO@/antigravity/hooks/second-brain-session-start.sh" }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "command": "@REPO@/antigravity/hooks/second-brain-observe.sh" }
+        ]
+      }
+    ]
+  }
+}
