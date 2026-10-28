@@ -4,7 +4,8 @@
 # Só roda dentro do Traycer (TRAYCER_EPIC_ID definido). Lê apenas o frontmatter
 # (title, kind, status) de ~/.traycer/epics/<id>/artifacts/*/index.md e dos filhos
 # diretos (*/*/index.md). Não lê o corpo nem .comments/. Imprime no máximo 10
-# artifacts, um por linha: `título (kind, status) — caminho relativo`.
+# artifacts, um por linha: `título (kind, status) — caminho relativo — atualizado AAAA-MM-DD`.
+# A data é o mtime do index.md (`date -r`, ou `stat -f` no macOS); se os dois falharem, omite o trecho.
 # Silencioso se não houver artifacts. Desligue com TRAYCER_EPIC_HOOK=0. Sempre exit 0.
 
 [[ "${TRAYCER_EPIC_HOOK:-1}" == "0" ]] && exit 0
@@ -45,7 +46,10 @@ for file in "$root"/*/index.md "$root"/*/*/index.md; do
     [[ -n "$title" ]] || title="$(basename "$(dirname "$rel")")"
     label="${kind:-?}"
     [[ -n "$status" ]] && label="$label, $status"
-    lines+="$title ($label) — $rel"$'\n'
+    mtime="$(date -r "$file" +%F 2>/dev/null || stat -f %Sm -t %F "$file" 2>/dev/null)"
+    line="$title ($label) — $rel"
+    [[ "$mtime" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && line+=" — atualizado $mtime"
+    lines+="$line"$'\n'
     ((++count >= max)) && break
 done
 

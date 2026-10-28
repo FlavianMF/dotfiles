@@ -6,7 +6,7 @@ tmp="$(mktemp -d)"
 trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 fail=0
 expect() { if [[ "$2" != "$3" ]]; then echo "FALHA: $1 (obtido '$2', esperado '$3')"; fail=1; fi; }
-has() { if ! grep -q -- "$2" <<<"$3"; then echo "FALHA: $1 (faltou '$2' em: $3)"; fail=1; fi; }
+has() { if ! grep -Eq -- "$2" <<<"$3"; then echo "FALHA: $1 (faltou '$2' em: $3)"; fail=1; fi; }
 
 HOOK="$ROOT/claude/hooks/traycer-epic-context.sh"
 HDR="Traycer: artifacts do épico atual"
@@ -50,9 +50,9 @@ expect "normal: sem stderr" "$err" ""
 first="$(head -n1 <<<"$out")"
 expect "normal: cabeçalho" "${first:0:${#HDR}}" "$HDR"
 expect "normal: 3 artifacts" "$(tail -n +2 <<<"$out" | wc -l)" "3"
-has "normal: spec sem status" "^Alpha (spec) — a/index.md$" "$out"
-has "normal: ticket com status" "^B (ticket, 1) — b/index.md$" "$out"
-has "normal: filho direto" "^Filho (spec) — b/c/index.md$" "$out"
+has "normal: spec sem status" "^Alpha \(spec\) — a/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
+has "normal: ticket com status" "^B \(ticket, 1\) — b/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
+has "normal: filho direto" "^Filho \(spec\) — b/c/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
 
 # 4) 12 artifacts: máximo 10 linhas
 for i in $(seq -w 1 12); do art e4 "n$i" $'---\nkind: spec\ntitle: T'"$i"$'\n---\n'; done
@@ -71,8 +71,8 @@ expect "quebrado: sem stderr" "$err" ""
 for bad in Corpo Inventado; do
     if grep -q -- "$bad" <<<"$out"; then echo "FALHA: quebrado inventou '$bad' em: $out"; fail=1; fi
 done
-has "quebrado: título cai para o diretório" "^vazio (?) — vazio/index.md$" "$out"
-has "quebrado: sem-dash usa diretório" "^sem-dash (?) — sem-dash/index.md$" "$out"
+has "quebrado: título cai para o diretório" "^vazio \(\?\) — vazio/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
+has "quebrado: sem-dash usa diretório" "^sem-dash \(\?\) — sem-dash/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
 
 # 6) TRAYCER_EPIC_HOOK=0
 run_hook TRAYCER_EPIC_ID=e3 TRAYCER_EPIC_HOOK=0
@@ -84,7 +84,7 @@ art e7 x $'---\nkind: spec\ntitle: Real\n---\ntitle: Falso\nkind: ticket\nstatus
 mkdir -p "$HOME/.traycer/epics/e7/artifacts/x/.comments"
 printf '%s\n' $'---\ntitle: Comentario\n---' >"$HOME/.traycer/epics/e7/artifacts/x/.comments/t.md"
 run_hook -u TRAYCER_EPIC_HOOK TRAYCER_EPIC_ID=e7
-has "corpo: título real" "^Real (spec) — x/index.md$" "$out"
+has "corpo: título real" "^Real \(spec\) — x/index.md — atualizado [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$out"
 for bad in Falso Comentario .comments; do
     if grep -q -- "$bad" <<<"$out"; then echo "FALHA: vazou '$bad' em: $out"; fail=1; fi
 done
@@ -96,6 +96,22 @@ printf '%s\n' $'---\ntitle: Vazou\n---' >"$HOME/.traycer/x/artifacts/z/index.md"
 run_hook -u TRAYCER_EPIC_HOOK 'TRAYCER_EPIC_ID=../x'
 expect "id malicioso: silêncio" "$out" ""
 expect "id malicioso: rc 0" "$rc" "0"
+
+# 9) data = mtime do index.md
+art e9 d $'---\nkind: spec\ntitle: Datado\n---\n'
+touch -t 202601020000 "$HOME/.traycer/epics/e9/artifacts/d/index.md"
+run_hook -u TRAYCER_EPIC_HOOK TRAYCER_EPIC_ID=e9
+has "data: mtime do index.md" "^Datado \(spec\) — d/index.md — atualizado 2026-01-02$" "$out"
+
+# 10) sem date nem stat: o trecho de data some
+fake="$tmp/fakebin"
+mkdir -p "$fake"
+for c in bash awk head basename dirname; do ln -s "$(command -v "$c")" "$fake/$c"; done
+for c in date stat; do printf '#!/bin/bash\nexit 1\n' >"$fake/$c"; chmod +x "$fake/$c"; done
+out="$(env -u TRAYCER_EPIC_HOOK TRAYCER_EPIC_ID=e9 PATH="$fake" "$fake/bash" "$HOOK" </dev/null 2>"$tmp/err")"; rc=$?
+expect "sem date/stat: rc 0" "$rc" "0"
+has "sem date/stat: linha sem data" "^Datado \(spec\) — d/index.md$" "$out"
+if grep -q -- "atualizado" <<<"$out"; then echo "FALHA: sufixo de data presente sem date/stat: $out"; fail=1; fi
 
 [[ $fail -eq 0 ]] && echo "traycer_epic_context_test: ok"
 exit $fail
