@@ -32,7 +32,7 @@ help:
 	@echo "  make traycer-install  - Instala o Traycer (AppImage conferido por traycer/SHA256)"
 	@echo "  make traycer-update   - Baixa o build atual e regrava traycer/SHA256 (revise o diff antes de instalar)"
 	@echo "  make antigravity-install - Instala o Antigravity CLI (agy) em ~/.local/bin, sha512 do manifesto conferido"
-	@echo "  make antigravity-config  - Reaplica MCPs e permissões do agy em ~/.gemini (merge, não link)"
+	@echo "  make antigravity-config  - Reaplica MCPs, permissões, skills e hooks do agy em ~/.gemini (merge, não link)"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"

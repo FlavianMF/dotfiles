@@ -32,12 +32,10 @@ only checks that the download matches what the manifest says.
 
 ## Second brain hooks
 
-Four hooks port the Claude ones. The scripts stay in `antigravity/hooks/` and are not copied.
+Three hooks port the Claude ones. A fourth script, `second-brain-observe.sh`, stays off. The scripts stay in `antigravity/hooks/` and are not copied.
 
 - `second-brain-session-start.sh` (`SessionStart`) injects the vault notes for the repo of
   `workspacePaths[0]`. It prints `{"injectSteps":[...]}`, or `{}` when there is no note.
-- `second-brain-observe.sh` (`PostToolUse`) logs the tool name and file path through
-  `sb.py observe record`. It never logs commands or content. It answers `{}`.
 - `second-brain-count.sh` (`PostToolUse`) counts the session's writes in
   `~/.local/state/second-brain/agy/<conversationId>.state`. It stores one letter per event, never
   the command. A write is an edit tool or a `run_command` that matches the Claude hook's regex.
@@ -48,10 +46,17 @@ Four hooks port the Claude ones. The scripts stay in `antigravity/hooks/` and ar
   the reminder before it stops. It deletes state files older than 7 days.
 
 The hooks run by default, because `agy` has no `env` block in its settings. Set
-`SECOND_BRAIN_HOOKS=0` in your shell to turn both off. Set `SB_OBSERVE=0` to turn off only the log.
+`SECOND_BRAIN_HOOKS=0` in your shell to turn all of them off.
+
+`second-brain-observe.sh` (`PostToolUse`) is not in `hooks.base.json`. It logs through
+`sb.py observe record`, but nothing summarizes the log in `agy`. The `observe.py` rules also match
+only the Claude tool name `Read`, and `agy` sends `read_file`. Turn it on after a full port:
+map `read_file` to `Read` and call `sb.py observe summarize` from the Stop hook. The script and
+its tests stay in the repo until then.
 
 Run `make antigravity-config` from the main checkout. The rendered `hooks.json` holds absolute
-paths into the checkout that ran it. A deleted worktree breaks those paths.
+paths into the checkout that ran it. A deleted worktree breaks those paths. The render warns on stderr when the checkout is a
+linked worktree or when a rendered command is not executable. The warning does not fail the render.
 
 Out of scope: `PreInvocation` and the prompt hint. `agy` has no stable transcript format, so the
 Stop hook counts through `second-brain-count.sh` and never parses `transcriptPath`.
