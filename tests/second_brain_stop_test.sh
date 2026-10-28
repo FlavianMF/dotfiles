@@ -3,7 +3,7 @@
 set -u
 HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/claude/hooks/second-brain-stop.sh"
 tmp="$(mktemp -d)"
-trap 'rm -r "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 mkdir -p "$tmp/vault"
 fail=0
 
