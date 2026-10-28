@@ -7,9 +7,13 @@
       {
         "matcher": "*",
         "hooks": [
-          { "command": "@REPO@/antigravity/hooks/second-brain-observe.sh" }
+          { "command": "@REPO@/antigravity/hooks/second-brain-observe.sh" },
+          { "command": "@REPO@/antigravity/hooks/second-brain-count.sh" }
         ]
       }
+    ],
+    "Stop": [
+      { "type": "command", "command": "@REPO@/antigravity/hooks/second-brain-stop.sh" }
     ]
   }
 }
