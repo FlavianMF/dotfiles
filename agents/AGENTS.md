@@ -99,6 +99,18 @@ trap|pattern|decision|concept --title "..." --summary "..."`. A fila é estado l
 usuário, na revisão. Não rode `/promote`, `/evolve`, `/instinct-import` nem `/prune` por conta
 própria.
 
+## Traycer: handoff entre chats
+
+Vale se `TRAYCER_EPIC_ID` existe ou se as ferramentas `traycer_*` estão disponíveis.
+
+- Antes de abrir um chat novo para um follow-up, grave um artifact `spec` de até 30 linhas:
+  decisão, estado e próximo passo. Aponte o chat novo para ele.
+- No início de um chat do épico, leia o índice de artifacts que o hook injeta.
+  Só depois leia o transcript de outro agente.
+- Git mecânico segue a regra do `git-ops` (seção Git). Se a sessão já tem o contexto,
+  não crie subagente para um único commit simples.
+- Não crie subagente para o que cabe em uma chamada de ferramenta.
+
 ## ECC por projeto
 
 O plugin `ecc@ecc` custa ~45 mil tokens por sessão; fica desligado no escopo de usuário. Política permanente do

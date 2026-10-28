@@ -39,7 +39,7 @@ The script will:
 | `git/ignore` | Global gitignore (`.config/git/ignore`) | Excludes Claude local settings |
 | `claude/settings.json` | Claude Code config | Model (opus/xhigh, subagents on sonnet), plugins, hooks, deny list, statusline |
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Imports `agents/AGENTS.md` + Claude-only notes |
-| `agents/AGENTS.md` | Codex / OpenCode / Claude | Shared instructions (performance, security, git, design skills) |
+| `agents/AGENTS.md` | Codex / OpenCode / Claude | Shared instructions (performance, security, git, Traycer handoff, design skills) |
 | `codex/`, `opencode/`, `antigravity/` | `~/.codex`, `~/.config/opencode`, `~/.gemini/config` | Only when the component is selected or the tool is installed |
 | `claude/hooks/jev-e.sh` | `~/.claude/hooks/` (directory link) | Runs only if jev-workflow is built (component `jev`) |
 | `vendor/ecc/`, `claude/rules/` | `~/.agents/skills`, `~/.claude/{agents,rules}` | Component `ecc` (off by default): selected ECC pieces, global |
