@@ -93,6 +93,8 @@ expect "skills.json migrado" "$(jq -c '.entries' "$K")" '[{"path":"'"$HOME"'/.ag
 H="$HOME/.gemini/config/hooks.json"
 expect "hooks: SessionStart aponta para o repo" "$(jq -r '."second-brain".SessionStart[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-session-start.sh"
 expect "hooks: PostToolUse aponta para o repo" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-observe.sh"
+expect "hooks: PostToolUse tem o handler de contagem" "$(jq -r '."second-brain".PostToolUse[0].hooks[1].command' "$H")" "$ROOT/antigravity/hooks/second-brain-count.sh"
+expect "hooks: Stop aponta para o repo" "$(jq -r '."second-brain".Stop[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-stop.sh"
 expect "hooks: sem @REPO@ sobrando" "$(grep -c '@REPO@' "$H")" "0"
 
 echo '{"outro":{"x":1}}' >"$H"
@@ -184,6 +186,108 @@ out="$(SECOND_BRAIN_VAULT="$tmp/sem-vault" bash "$OB" <<<'lixo{')"; rc=$?
 expect "observe: vault sem sb.py dá {}" "$out" "{}"; expect "observe: vault sem sb.py exit 0" "$rc" "0"
 out="$(bash "$OB" <<<'lixo{')"; rc=$?
 expect "observe: stdin lixo dá {}" "$out" "{}"; expect "observe: stdin lixo exit 0" "$rc" "0"
+
+# --- hooks count e Stop (estado e vault falsos) ---
+CNT="$ROOT/antigravity/hooks/second-brain-count.sh"
+STP="$ROOT/antigravity/hooks/second-brain-stop.sh"
+AS="$tmp/state/agy"
+cnt() { # $1 = sessão, $2 = ferramenta, $3 = CommandLine (opcional)
+    jq -cn --arg s "$1" --arg t "$2" --arg c "${3:-}" \
+        '{conversationId: $s, toolCall: {name: $t, args: (if $c == "" then {} else {CommandLine: $c} end)}}' | bash "$CNT"
+}
+stp() { # $1 = sessão, $2 = terminationReason (padrão NO_TOOL_CALL)
+    jq -cn --arg s "$1" --arg r "${2-NO_TOOL_CALL}" '{conversationId: $s, terminationReason: $r}' | bash "$STP"
+}
+writes() { for _ in $(seq "$2"); do cnt "$1" write_file >/dev/null; done; }
+n() { grep -cx "$2" "$AS/$1.state" 2>/dev/null; }
+
+unset SECOND_BRAIN_MIN_EDITS
+# 1. contagem
+for t in write_file edit_file write_to_file replace_file_content multi_replace_file_content apply_patch create_file delete_file edit_notebook; do
+    out="$(cnt k1 "$t")"; expect "count: $t responde {}" "$out" "{}"
+done
+expect "count: 9 tools de edição viram w" "$(n k1 w)" "9"
+cnt k1 run_command 'echo x > /tmp/f' >/dev/null
+cnt k1 run_command 'rm a' >/dev/null
+cnt k1 run_command 'sed -i s/a/b/ f' >/dev/null
+expect "count: run_command de escrita vira w" "$(n k1 w)" "12"
+cnt k1 run_command 'ls -la' >/dev/null
+cnt k1 read_file >/dev/null
+expect "count: ls e read_file não contam" "$(n k1 w)" "12"
+expect "count: sem s" "$(n k1 s)" "0"
+expect "count: só uma letra por linha" "$(grep -cvx '[ws]' "$AS/k1.state")" "0"
+
+# 2. synced
+cnt k2 run_command 'python3 vault_sync.py' >/dev/null
+expect "count: vault_sync vira s" "$(n k2 s)" "1"
+cnt k2 run_command 'python3 sb.py sync' >/dev/null
+expect "count: sb.py sync vira s" "$(n k2 s)" "2"
+expect "count: s tem precedência sobre w" "$(n k2 w)" "0"
+writes k3 5
+cnt k3 run_command 'python3 sb.py candidate add --kind trap --title x > /dev/null' >/dev/null
+expect "count: candidate add com redirecionamento vira s" "$(n k3 s)" "1"
+expect "stop: candidate add impede o lembrete" "$(stp k3)" "{}"
+[[ ! -e "$AS/k3.reminded" ]] || { echo "FALHA: stop criou marker com synced"; fail=1; }
+
+# 3. limiar
+writes k4 4
+expect "stop: 4 escritas dá {}" "$(stp k4)" "{}"
+writes k5 5
+out="$(stp k5)"; rc=$?
+expect "stop: 5 escritas exit 0" "$rc" "0"
+expect "stop: 5 escritas pede continue" "$(jq -r '.decision' <<<"$out")" "continue"
+has "stop: reason cita a contagem" "Esta sessão fez 5 edições" "$(jq -r '.reason' <<<"$out")"
+writes k6 2
+expect "stop: MIN_EDITS=2 lembra com 2" "$(SECOND_BRAIN_MIN_EDITS=2 stp k6 | jq -r '.decision')" "continue"
+writes k7 1
+expect "stop: MIN_EDITS=2 com 1 dá {}" "$(SECOND_BRAIN_MIN_EDITS=2 stp k7)" "{}"
+writes k8 4
+expect "stop: MIN_EDITS=abc cai no padrão (4 dá {})" "$(SECOND_BRAIN_MIN_EDITS=abc stp k8)" "{}"
+writes k8 1
+expect "stop: MIN_EDITS=abc cai no padrão (5 lembra)" "$(SECOND_BRAIN_MIN_EDITS=abc stp k8 | jq -r '.decision')" "continue"
+
+# 4. uma vez só
+[[ -e "$AS/k5.reminded" ]] || { echo "FALHA: stop não criou o marker"; fail=1; }
+expect "stop: segunda chamada dá {}" "$(stp k5)" "{}"
+
+# 5. terminationReason
+writes k9 6
+expect "stop: MAX_STEPS dá {}" "$(stp k9 MAX_STEPS)" "{}"
+expect "stop: sem terminationReason dá {}" "$(jq -cn '{conversationId:"k9"}' | bash "$STP")" "{}"
+[[ ! -e "$AS/k9.reminded" ]] || { echo "FALHA: stop criou marker sem NO_TOOL_CALL"; fail=1; }
+expect "stop: NO_TOOL_CALL ainda lembra depois" "$(stp k9 | jq -r '.decision')" "continue"
+
+# 6. gate desligado
+out="$(SECOND_BRAIN_HOOKS=0 cnt k10 write_file)"
+expect "count: HOOKS=0 dá {}" "$out" "{}"
+[[ ! -e "$AS/k10.state" ]] || { echo "FALHA: HOOKS=0 gravou estado"; fail=1; }
+writes k11 6
+expect "stop: HOOKS=0 dá {}" "$(SECOND_BRAIN_HOOKS=0 stp k11)" "{}"
+[[ ! -e "$AS/k11.reminded" ]] || { echo "FALHA: HOOKS=0 criou marker"; fail=1; }
+expect "stop: vault ausente dá {}" "$(SECOND_BRAIN_VAULT="$tmp/sem-vault" stp k11)" "{}"
+
+# 7. isolamento e sanitização
+writes k12 5
+expect "stop: outra sessão sem estado dá {}" "$(stp k13)" "{}"
+expect "stop: sessão k12 lembra sem afetar k13" "$(stp k12 | jq -r '.decision')" "continue"
+[[ ! -e "$AS/k13.reminded" ]] || { echo "FALHA: marker vazou para outra sessão"; fail=1; }
+cnt '../x' write_file >/dev/null
+[[ -f "$AS/x.state" ]] || { echo "FALHA: conversationId '../x' não foi sanitizado"; fail=1; }
+[[ ! -e "$tmp/state/x.state" && ! -e "$tmp/x.state" ]] || { echo "FALHA: '../x' escapou do diretório de estado"; fail=1; }
+cnt 'a/../b' write_file >/dev/null
+[[ -f "$AS/ab.state" ]] || { echo "FALHA: 'a/../b' não virou 'ab'"; fail=1; }
+
+# estados com mais de 7 dias somem quando o lembrete dispara
+echo w >"$AS/velha.state"; touch -d '10 days ago' "$AS/velha.state"
+writes k14 5
+stp k14 >/dev/null
+[[ ! -e "$AS/velha.state" ]] || { echo "FALHA: estado antigo não foi apagado"; fail=1; }
+[[ -f "$AS/k14.state" ]] || { echo "FALHA: limpeza apagou o estado novo"; fail=1; }
+
+for s in "$CNT" "$STP"; do
+    out="$(bash "$s" <<<'lixo{')"; rc=$?
+    expect "$(basename "$s"): stdin lixo dá {}" "$out" "{}"; expect "$(basename "$s"): stdin lixo exit 0" "$rc" "0"
+done
 unset SECOND_BRAIN_VAULT SECOND_BRAIN_STATE_DIR SEEN
 
 # JSON inválido no alvo: não sobrescreve
