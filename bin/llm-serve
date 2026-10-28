@@ -10,18 +10,28 @@ BASE="http://127.0.0.1:${PORT}"
 
 command -v llama-server >/dev/null || { echo "llama-server não está no PATH. Rode: llama-build-sm120a" >&2; exit 1; }
 
-# Já no ar: não suba uma segunda instância.
+# Já no ar: não suba uma segunda instância. O /health devolve 503 enquanto o -hf baixa e o
+# modelo carrega, então confira também o processo.
 if curl -fsS -m 2 "$BASE/health" >/dev/null 2>&1; then
   echo "llama-server já responde em $BASE"
   exit 0
 fi
+if pgrep -x llama-server >/dev/null; then
+  echo "llama-server já está rodando, mas ainda não responde (baixando ou carregando o modelo). Aguarde e rode llm-health." >&2
+  exit 0
+fi
 
 # Um modelo residente do Ollama no Windows disputa a mesma VRAM. Descarregue antes de subir.
-if loaded="$(curl -fsS -m 2 http://127.0.0.1:11434/api/ps 2>/dev/null)"; then
+# zsh/ollama.zsh resolve OLLAMA_BASE_URL (localhost com rede espelhada, gateway sem ela).
+OLLAMA_URL="${OLLAMA_BASE_URL:-http://127.0.0.1:11434/v1}"
+OLLAMA_URL="${OLLAMA_URL%/v1}"
+if loaded="$(curl -fsS -m 2 "$OLLAMA_URL/api/ps" 2>/dev/null)"; then
   for m in $(jq -r '.models[].name' <<<"$loaded" 2>/dev/null); do
     echo "Descarregando '$m' do Ollama para liberar a VRAM"
-    curl -fsS -m 10 http://127.0.0.1:11434/api/generate -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null || true
+    curl -fsS -m 10 "$OLLAMA_URL/api/generate" -d "{\"model\":\"$m\",\"keep_alive\":0}" >/dev/null || true
   done
+else
+  echo "Aviso: o Ollama não respondeu em $OLLAMA_URL. Se ele mantiver um modelo na VRAM, rode 'ollama stop' no Windows." >&2
 fi
 
 spec="${1:-main}"
@@ -50,12 +60,13 @@ case "$spec" in
     ;;
 esac
 
-# --fit ajusta o que ficou sem valor aos GB livres de VRAM. Fixe o offload com LLM_N_CPU_MOE=N.
+# Sem -ngl nem --n-cpu-moe, o --fit (padrão: ligado) ajusta camadas e experts à VRAM livre.
+# Fixar um deles faz o --fit abortar: com LLM_N_CPU_MOE=N, desligue o --fit.
 extra=()
-[[ -n "${LLM_N_CPU_MOE:-}" ]] && extra+=(--n-cpu-moe "$LLM_N_CPU_MOE")
+[[ -n "${LLM_N_CPU_MOE:-}" ]] && extra+=(--n-cpu-moe "$LLM_N_CPU_MOE" -fit off)
 
 echo "llama-server em $BASE: modelo '$alias_name', contexto $CTX"
 exec llama-server "${model_args[@]}" --alias "$alias_name" \
   --host 127.0.0.1 --port "$PORT" -np 1 -c "$CTX" \
-  -ngl 99 --fit on --threads 6 -fa on -ctk q8_0 -ctv q8_0 \
-  --jinja --no-webui "${extra[@]}" "$@"
+  --threads 6 -fa on -ctk q8_0 -ctv q8_0 \
+  --no-webui "${extra[@]}" "$@"

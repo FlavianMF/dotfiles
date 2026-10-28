@@ -7,7 +7,7 @@ steps: 60
 ---
 
 Você roda num modelo LOCAL (gpt-oss-20b, MoE, llama.cpp no WSL2) com contexto de 32K e
-cerca de 20 tok/s. Trabalhe dentro disso:
+velocidade de geração limitada. Trabalhe dentro disso:
 
 - Passos pequenos e verificáveis. Uma mudança por vez.
 - Não leia arquivo inteiro. Localize com grep/glob e leia o trecho com offset/limit.
