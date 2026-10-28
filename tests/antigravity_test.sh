@@ -89,6 +89,103 @@ bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
 expect "cópia do repo intacta" "$(cat "$tmp/legacy_skills.json")" '{"entries":[{"path":"~/.agents/skills"}]}'
 expect "skills.json migrado" "$(jq -c '.entries' "$K")" '[{"path":"'"$HOME"'/.agents/skills"}]'
 
+# --- hooks.json ---
+H="$HOME/.gemini/config/hooks.json"
+expect "hooks: SessionStart aponta para o repo" "$(jq -r '."second-brain".SessionStart[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-session-start.sh"
+expect "hooks: PostToolUse aponta para o repo" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-observe.sh"
+expect "hooks: sem @REPO@ sobrando" "$(grep -c '@REPO@' "$H")" "0"
+
+echo '{"outro":{"x":1}}' >"$H"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+expect "hooks: mantém chave alheia" "$(jq -c '.outro' "$H")" '{"x":1}'
+expect "hooks: base presente após merge" "$(jq -r 'has("second-brain")' "$H")" "true"
+before="$(sha1sum "$H")"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+expect "hooks: render idempotente" "$(sha1sum "$H")" "$before"
+
+rm "$H"; ln -s "$tmp/legacy_hooks.json" "$H"
+echo '{"legado":true}' >"$tmp/legacy_hooks.json"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+[[ ! -L "$H" ]] || { echo "FALHA: hooks.json continuou link"; fail=1; }
+expect "hooks: alvo do link intacto" "$(cat "$tmp/legacy_hooks.json")" '{"legado":true}'
+expect "hooks: migrado para arquivo real" "$(jq -r 'has("second-brain")' "$H")" "true"
+
+out="$(AGY_HOOKS="$tmp/dry/hooks.json" bash "$ROOT/antigravity/render_config.sh" --dry-run 2>&1)"
+has "hooks: dry-run cita o alvo" "$tmp/dry/hooks.json" "$out"
+[[ ! -e "$tmp/dry/hooks.json" ]] || { echo "FALHA: dry-run criou hooks.json"; fail=1; }
+
+echo '{broken' >"$tmp/bad_hooks.json"
+AGY_HOOKS="$tmp/bad_hooks.json" bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1; rc=$?
+expect "hooks: JSON inválido falha" "$rc" "1"
+expect "hooks: JSON inválido fica intacto" "$(cat "$tmp/bad_hooks.json")" "{broken"
+
+# --- hooks do second brain (vault e estado falsos) ---
+V="$tmp/vault"; SCRIPTS="$V/00_META/skills/second-brain-sync/scripts"
+mkdir -p "$SCRIPTS" "$tmp/state" "$V/sub"
+cat >"$SCRIPTS/session_hint.sh" <<'FAKE'
+#!/bin/bash
+[[ -n "${HINT_EMPTY:-}" ]] && exit 0
+echo "nota um"; echo "nota dois"; echo "repo=$1"
+FAKE
+cat >"$SCRIPTS/sb.py" <<'FAKE'
+import json, os, sys
+with open(os.environ["SEEN"], "w") as f:
+    json.dump({"argv": sys.argv[1:], "stdin": sys.stdin.read()}, f)
+FAKE
+export SECOND_BRAIN_VAULT="$V" SECOND_BRAIN_STATE_DIR="$tmp/state" SEEN="$tmp/seen.json"
+unset SECOND_BRAIN_HOOKS SB_OBSERVE
+SS="$ROOT/antigravity/hooks/second-brain-session-start.sh"
+OB="$ROOT/antigravity/hooks/second-brain-observe.sh"
+GIT=(git -c user.name=t -c user.email=t@t)
+mkdir "$tmp/proj-repo"
+git -C "$tmp/proj-repo" init -q
+"${GIT[@]}" -C "$tmp/proj-repo" commit -q --allow-empty -m init
+"${GIT[@]}" -C "$tmp/proj-repo" worktree add -q "$tmp/proj-wt" -b wt
+
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | bash "$SS")"; rc=$?
+expect "start: exit 0" "$rc" "0"
+msg="$(jq -r '.injectSteps[0].systemMessage.systemMessage' <<<"$out")"
+has "start: nome do repo no texto" 'notas do vault relacionadas a "proj-repo"' "$msg"
+has "start: linhas da dica" "nota dois" "$msg"
+has "start: dica recebe o repo em \$1" "repo=proj-repo" "$msg"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-wt" | bash "$SS")"
+has "start: worktree usa o repo principal" "repo=proj-repo" "$(jq -r '.injectSteps[0].systemMessage.systemMessage' <<<"$out")"
+
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | HINT_EMPTY=1 bash "$SS")"; rc=$?
+expect "start: dica vazia dá {}" "$out" "{}"; expect "start: dica vazia exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | SECOND_BRAIN_VAULT="$tmp/sem-vault" bash "$SS")"; rc=$?
+expect "start: vault ausente dá {}" "$out" "{}"; expect "start: vault ausente exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | SECOND_BRAIN_HOOKS=0 bash "$SS")"; rc=$?
+expect "start: HOOKS=0 dá {}" "$out" "{}"; expect "start: HOOKS=0 exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$V/sub" | bash "$SS")"; rc=$?
+expect "start: cwd no vault dá {}" "$out" "{}"; expect "start: cwd no vault exit 0" "$rc" "0"
+
+PAYLOAD='{"conversationId":"c1","toolCall":{"name":"read_file","args":{"Path":"/x/y.md","Content":"segredo"}}}'
+out="$(bash "$OB" <<<"$PAYLOAD")"; rc=$?
+expect "observe: stdout {}" "$out" "{}"; expect "observe: exit 0" "$rc" "0"
+expect "observe: argv" "$(jq -c '.argv' "$tmp/seen.json")" '["observe","record"]'
+expect "observe: stdin sem conteúdo" "$(jq -c '.stdin | fromjson' "$tmp/seen.json")" '{"session_id":"c1","tool_name":"read_file","tool_input":{"file_path":"/x/y.md"}}'
+
+for k in AbsolutePath path; do
+    rm -f "$tmp/seen.json"
+    bash "$OB" <<<"{\"conversationId\":\"c2\",\"toolCall\":{\"name\":\"t\",\"args\":{\"$k\":\"/a/b\"}}}" >/dev/null
+    expect "observe: $k vira file_path" "$(jq -r '.stdin | fromjson | .tool_input.file_path' "$tmp/seen.json")" "/a/b"
+done
+
+rm -f "$tmp/seen.json"
+out="$(SECOND_BRAIN_HOOKS=0 bash "$OB" <<<"$PAYLOAD")"
+expect "observe: HOOKS=0 dá {}" "$out" "{}"
+[[ ! -e "$tmp/seen.json" ]] || { echo "FALHA: HOOKS=0 chamou o sb.py"; fail=1; }
+out="$(SB_OBSERVE=0 bash "$OB" <<<"$PAYLOAD")"
+expect "observe: SB_OBSERVE=0 dá {}" "$out" "{}"
+[[ ! -e "$tmp/seen.json" ]] || { echo "FALHA: SB_OBSERVE=0 chamou o sb.py"; fail=1; }
+
+out="$(SECOND_BRAIN_VAULT="$tmp/sem-vault" bash "$OB" <<<'lixo{')"; rc=$?
+expect "observe: vault sem sb.py dá {}" "$out" "{}"; expect "observe: vault sem sb.py exit 0" "$rc" "0"
+out="$(bash "$OB" <<<'lixo{')"; rc=$?
+expect "observe: stdin lixo dá {}" "$out" "{}"; expect "observe: stdin lixo exit 0" "$rc" "0"
+unset SECOND_BRAIN_VAULT SECOND_BRAIN_STATE_DIR SEEN
+
 # JSON inválido no alvo: não sobrescreve
 echo '{broken' >"$S"
 bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1; rc=$?
