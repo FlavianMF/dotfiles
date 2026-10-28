@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Transparent stdio proxy for Traycer's agy_acp_server.
+
+Traycer's ACP `initialize` omits `clientInfo`, so agy_acp_server hides the Claude and
+GPT-OSS models (it offers them only to JetBrains, Zed and Xcode). This wrapper adds a
+clientInfo to `initialize` when absent, then execs the real server. Everything else passes
+through unchanged. Install with traycer/install_agy_wrapper.sh.
+
+Env:
+  AGY_ACP_REAL            path of the real agy_acp_server (default: the pack in current.json)
+  TRAYCER_AGY_CLIENT_NAME clientInfo.name to send (default: zed)
+  TRAYCER_AGY_CLIENT_VERSION clientInfo.version to send (default: 1.0.0)
+"""
+import json
+import os
+import signal
+import subprocess
+import sys
+
+
+def real_server():
+    override = os.environ.get("AGY_ACP_REAL")
+    if override:
+        return override
+    base = os.path.join(os.environ.get("TRAYCER_HOME_DIR", os.path.expanduser("~/.traycer")),
+                        "host", "providers", "antigravity", "linux-x64")
+    with open(os.path.join(base, "current.json"), encoding="utf-8") as fh:
+        version = json.load(fh)["version"]
+    return os.path.join(base, version, "agy_acp_server")
+
+
+def patch(line):
+    try:
+        msg = json.loads(line)
+    except ValueError:
+        return line
+    if not isinstance(msg, dict) or msg.get("method") != "initialize":
+        return line
+    params = msg.get("params")
+    if not isinstance(params, dict) or params.get("clientInfo"):
+        return line
+    params["clientInfo"] = {
+        "name": os.environ.get("TRAYCER_AGY_CLIENT_NAME", "zed"),
+        "version": os.environ.get("TRAYCER_AGY_CLIENT_VERSION", "1.0.0"),
+    }
+    return (json.dumps(msg, separators=(",", ":")) + "\n").encode()
+
+
+def main():
+    try:
+        server = real_server()
+    except (OSError, KeyError, ValueError) as err:
+        sys.stderr.write("agy-acp-wrapper: cannot locate the real agy_acp_server: %s\n" % err)
+        return 127
+    # The child inherits stdout and stderr, so only the client-to-server stream is proxied.
+    child = subprocess.Popen([server] + sys.argv[1:], stdin=subprocess.PIPE)
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda s, _f: child.send_signal(s))
+    try:
+        for line in sys.stdin.buffer:
+            child.stdin.write(patch(line))
+            child.stdin.flush()
+    except (BrokenPipeError, OSError):
+        pass
+    try:
+        child.stdin.close()
+    except OSError:
+        pass
+    return child.wait()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
