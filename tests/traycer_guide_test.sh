@@ -108,5 +108,10 @@ has "guia cita haiku" "haiku" "$guide"
 has "guia cita low" "low" "$guide"
 has "guia cita artifact" "artifact" "$guide"
 
+# --- 9. camada local do guia ---
+for term in "llamacpp" "Local first" "Escalate" "8080" "one local agent"; do
+  has "guia cita '$term'" "$term" "$guide"
+done
+
 [[ $fail -eq 0 ]] && echo "traycer_guide_test: ok"
 exit $fail

@@ -29,7 +29,9 @@ Login and state live in `~`. Nothing from Traycer goes into git.
 
 ## Agent selection guide
 
-`traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes mechanical tasks (commit, merge, formatting, renaming) to `claude` `haiku` with `low` reasoning and sets the artifact handoff rule.
+`traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes work local first: `opencode` with `llamacpp:gpt-oss-20b`, served by `llama-server` in WSL2 (`bin/llm-serve main`, `llm-health`, `llm-stop`). It lists the escalation triggers to the cloud, keeps orchestration, second opinions and security review in the cloud, and sets the artifact handoff rule. Cloud and `claude` `haiku` `low` stay as fallback.
+
+The local tier turns itself off: if `traycer_list_harness_models` shows no `llamacpp:*` model, the guide tells the agent to skip it. The provider lives in `opencode/opencode.json` and needs `opencode/opencode.json` linked at `~/.config/opencode/`.
 
 `traycer/install.sh` calls `traycer/install_guide.sh`, which needs no network. It runs `cp` and never creates a symlink. The Traycer app can rewrite the guide, so a link could turn into a plain file or change the repo. `~/.traycer/.agent-selection-guide.meta.json` is not touched.
 
