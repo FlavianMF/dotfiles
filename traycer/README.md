@@ -26,3 +26,19 @@ changes the build, the install fails with a mismatch. Review the new build, run
 ## State
 
 Login and state live in `~`. Nothing from Traycer goes into git.
+
+## Agent selection guide
+
+`traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes mechanical tasks (commit, merge, formatting, renaming) to `claude` `haiku` with `low` reasoning and sets the artifact handoff rule.
+
+`traycer/install.sh` calls `traycer/install_guide.sh`, which needs no network. It runs `cp` and never creates a symlink. The Traycer app can rewrite the guide, so a link could turn into a plain file or change the repo. `~/.traycer/.agent-selection-guide.meta.json` is not touched.
+
+- If the destination is identical, the script does nothing.
+- If the destination differs or is a symlink, the script keeps a `agent-selection-guide.md.bak.YYYYMMDD-HHMMSS` copy before it overwrites.
+- `--dry-run` prints the actions and changes nothing.
+
+To bring edits made in the Traycer UI back to the repo, compare the two files and copy what you want to keep:
+
+```bash
+diff ~/.traycer/agent-selection-guide.md traycer/agent-selection-guide.md
+```

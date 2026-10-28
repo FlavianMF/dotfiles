@@ -1,5 +1,6 @@
 #!/bin/bash
 # Installs the Traycer desktop AppImage into ~/.local/opt/traycer, pinned by sha256.
+# It also copies the agent selection guide to ~/.traycer through traycer/install_guide.sh.
 # Usage: traycer/install.sh [--dry-run] [--update]
 #   --update  download the current "latest" build and rewrite traycer/SHA256, without installing.
 #             Review the diff, then run the installer again.
@@ -19,6 +20,13 @@ for arg in "$@"; do
         *) echo "Unknown option: $arg" >&2; exit 2 ;;
     esac
 done
+
+# The agent selection guide is a local copy and needs no network, so it runs before the download.
+if [[ $UPDATE -eq 0 ]]; then
+    guide_args=()
+    [[ $DRY_RUN -eq 1 ]] && guide_args=(--dry-run)
+    bash "$ROOT/install_guide.sh" "${guide_args[@]}" || echo "WARNING: could not install the agent selection guide." >&2
+fi
 
 [[ "$(uname -m)" == x86_64 ]] || { echo "Traycer ships x86_64 builds only (this is $(uname -m))" >&2; exit 1; }
 
