@@ -91,10 +91,9 @@ expect "skills.json migrado" "$(jq -c '.entries' "$K")" '[{"path":"'"$HOME"'/.ag
 
 # --- hooks.json ---
 H="$HOME/.gemini/config/hooks.json"
-expect "hooks: SessionStart aponta para o repo" "$(jq -r '."second-brain".SessionStart[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-session-start.sh"
-expect "hooks: PostToolUse aponta para o repo" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-observe.sh"
-expect "hooks: PostToolUse tem o handler de contagem" "$(jq -r '."second-brain".PostToolUse[0].hooks[1].command' "$H")" "$ROOT/antigravity/hooks/second-brain-count.sh"
-expect "hooks: Stop aponta para o repo" "$(jq -r '."second-brain".Stop[0].command' "$H")" "$ROOT/antigravity/hooks/second-brain-stop.sh"
+expect "hooks: SessionStart aponta para o repo" "$(jq -r '."second-brain".SessionStart[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-session-start.sh\""
+expect "hooks: PostToolUse tem o handler de contagem" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-count.sh\""
+expect "hooks: Stop aponta para o repo" "$(jq -r '."second-brain".Stop[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-stop.sh\""
 expect "hooks: sem @REPO@ sobrando" "$(grep -c '@REPO@' "$H")" "0"
 
 echo '{"outro":{"x":1}}' >"$H"

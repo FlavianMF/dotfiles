@@ -1092,8 +1092,12 @@ if [[ $ANTIGRAVITY_ACTIVE -eq 1 ]]; then
     log_info "Configuring Antigravity CLI (~/.gemini/config)..."
     # Rules are read-only for agy, so they are linked. Skills stay in ~/.agents/skills. Files agy
     # rewrites itself (mcp_config.json, settings.json) and skills.json (needs an absolute path,
-    # so @HOME@ is expanded) are rendered by render_config.sh, never linked.
+    # so @HOME@ is expanded) and hooks.json (points at the scripts in this checkout) are rendered
+    # by render_config.sh, never linked.
     create_config_link "$REPO_DIR/agents/AGENTS.md" "$HOME/.gemini/config/AGENTS.md"
+    if [[ "$(git -C "$REPO_DIR" rev-parse --path-format=absolute --git-dir 2>/dev/null)" != "$(git -C "$REPO_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" ]]; then
+        log_warn "$REPO_DIR is a linked worktree: hooks.json will point at it. Render again from the main checkout before you delete it."
+    fi
     if [[ $DRY_RUN -eq 1 ]]; then
         bash "$REPO_DIR/antigravity/render_config.sh" --dry-run
     else
