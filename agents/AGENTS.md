@@ -47,6 +47,7 @@ Fonte única: `~/dotfiles/agents/AGENTS.md`. Linkado em `~/.codex/AGENTS.md`,
   (ex.: "abra um PR").
 - Antes de commitar: rode os testes/lint do escopo alterado e confira `git diff
   --staged`. Não commite arquivo gerado, segredo ou lixo de editor.
+- Operação git mecânica (commit, merge, push, status, rebase) vai para o agente `git-ops` (Claude Code, haiku).
 - PR: título em Conventional Commits, corpo com resumo, decisões e checklist manual.
 
 ## Skills de design de interface

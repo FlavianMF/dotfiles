@@ -781,6 +781,7 @@ create_config_link "$REPO_DIR/claude/settings.json" "$HOME/.claude/settings.json
 create_config_link "$REPO_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 create_config_link "$REPO_DIR/claude/statusline.sh" "$HOME/.claude/statusline.sh"
 create_config_link "$REPO_DIR/claude/hooks" "$HOME/.claude/hooks"
+create_config_link "$REPO_DIR/claude/agents/git-ops.md" "$HOME/.claude/agents/git-ops.md"
 
 # second-brain-sync skill lives in the obsidian_vault repo itself, not here
 # (keeps the skill's source versioned alongside the vault it manages). It is
