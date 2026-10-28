@@ -111,6 +111,52 @@ bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
 expect "hooks: alvo do link intacto" "$(cat "$tmp/legacy_hooks.json")" '{"legado":true}'
 expect "hooks: migrado para arquivo real" "$(jq -r 'has("second-brain")' "$H")" "true"
 
+# base sem o observe; todo command renderizado é executável
+expect "hooks: base sem second-brain-observe" "$(grep -c 'second-brain-observe' "$ROOT/antigravity/hooks.base.json")" "0"
+expect "hooks: PostToolUse[0] tem só um handler" "$(jq -r '."second-brain".PostToolUse[0].hooks | length' "$H")" "1"
+while IFS= read -r cmd; do
+    cmd="${cmd#\"}"; cmd="${cmd%\"}"
+    [[ -x "$cmd" ]] || { echo "FALHA: hooks: command não executável: $cmd"; fail=1; }
+done < <(jq -r '.. | objects | .command? // empty' "$H")
+
+# render com "&" e espaço no caminho do checkout (main checkout, sem aviso de worktree)
+AB="$tmp/a&b c"
+mkdir -p "$AB"
+git -C "$AB" init -q
+cp -r "$ROOT/antigravity" "$AB/antigravity"
+chmod +x "$AB"/antigravity/hooks/*.sh
+AB_ENV=(AGY_HOOKS="$tmp/ab/hooks.json" AGY_MCP_CONFIG="$tmp/ab/mcp.json" AGY_SETTINGS="$tmp/ab/settings.json" AGY_SKILLS="$tmp/ab/skills.json")
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$AB/antigravity/render_config.sh" >/dev/null 2>"$tmp/ab.err"; rc=$?
+expect "render com & e espaço: exit 0" "$rc" "0"
+AH="$tmp/ab/hooks.json"
+expect "render com & e espaço: SessionStart" "$(jq -r '."second-brain".SessionStart[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-session-start.sh\""
+expect "render com & e espaço: PostToolUse" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-count.sh\""
+expect "render com & e espaço: Stop" "$(jq -r '."second-brain".Stop[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-stop.sh\""
+expect "render com & e espaço: sem @REPO@" "$(grep -c '@REPO@' "$AH")" "0"
+expect "render com & e espaço: sem aviso em checkout principal" "$(grep -c 'warning' "$tmp/ab.err")" "0"
+cmd="$(jq -r '."second-brain".Stop[0].command' "$AH")"
+expect "render com & e espaço: sh -c executa o hook" "$(sh -c "$cmd" </dev/null)" "{}"
+
+# avisos do render: worktree linkado e command sem +x (nunca falham)
+GITQ=(env GIT_CONFIG_GLOBAL=/dev/null git -c user.name=t -c user.email=t@t)
+mkdir "$tmp/main"
+"${GITQ[@]}" -C "$tmp/main" init -q
+"${GITQ[@]}" -C "$tmp/main" commit -q --allow-empty -m init
+"${GITQ[@]}" -C "$tmp/main" worktree add -q "$tmp/wt" -b wtwarn
+cp -r "$ROOT/antigravity" "$tmp/main/antigravity"
+cp -r "$ROOT/antigravity" "$tmp/wt/antigravity"
+chmod +x "$tmp/main"/antigravity/hooks/*.sh "$tmp/wt"/antigravity/hooks/*.sh
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/wt/antigravity/render_config.sh" >/dev/null 2>"$tmp/wt.err"; rc=$?
+expect "aviso: worktree linkado exit 0" "$rc" "0"
+has "aviso: worktree linkado" "linked worktree" "$(cat "$tmp/wt.err")"
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/main/antigravity/render_config.sh" >/dev/null 2>"$tmp/main.err"; rc=$?
+expect "aviso: checkout principal exit 0" "$rc" "0"
+expect "aviso: checkout principal sem 'linked worktree'" "$(grep -c 'linked worktree' "$tmp/main.err")" "0"
+chmod -x "$tmp/main/antigravity/hooks/second-brain-stop.sh"
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/main/antigravity/render_config.sh" >/dev/null 2>"$tmp/main.err"; rc=$?
+expect "aviso: sem +x exit 0" "$rc" "0"
+has "aviso: sem +x" "not executable" "$(cat "$tmp/main.err")"
+
 out="$(AGY_HOOKS="$tmp/dry/hooks.json" bash "$ROOT/antigravity/render_config.sh" --dry-run 2>&1)"
 has "hooks: dry-run cita o alvo" "$tmp/dry/hooks.json" "$out"
 [[ ! -e "$tmp/dry/hooks.json" ]] || { echo "FALHA: dry-run criou hooks.json"; fail=1; }
@@ -160,6 +206,15 @@ out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | SECOND_BRAIN_HOOKS=
 expect "start: HOOKS=0 dá {}" "$out" "{}"; expect "start: HOOKS=0 exit 0" "$rc" "0"
 out="$(printf '{"workspacePaths":["%s"]}' "$V/sub" | bash "$SS")"; rc=$?
 expect "start: cwd no vault dá {}" "$out" "{}"; expect "start: cwd no vault exit 0" "$rc" "0"
+
+# sem workspacePaths[0] válido: {} e nenhuma chamada ao session_hint.sh (sem fallback para $PWD)
+rm -f "$tmp/hint_called"
+printf '#!/bin/bash\ntouch "%s"\necho nota\n' "$tmp/hint_called" >"$SCRIPTS/session_hint.sh"
+for in_ in '' 'lixo{' '{}' '{"workspacePaths":[]}' '{"workspacePaths":["/não/existe"]}'; do
+    out="$(printf '%s' "$in_" | bash "$SS")"; rc=$?
+    expect "start: sem workspace válido ('$in_') dá {}" "$out" "{}"; expect "start: sem workspace válido ('$in_') exit 0" "$rc" "0"
+done
+[[ ! -e "$tmp/hint_called" ]] || { echo "FALHA: start chamou o session_hint.sh sem workspace válido"; fail=1; }
 
 PAYLOAD='{"conversationId":"c1","toolCall":{"name":"read_file","args":{"Path":"/x/y.md","Content":"segredo"}}}'
 out="$(bash "$OB" <<<"$PAYLOAD")"; rc=$?
@@ -282,6 +337,25 @@ writes k14 5
 stp k14 >/dev/null
 [[ ! -e "$AS/velha.state" ]] || { echo "FALHA: estado antigo não foi apagado"; fail=1; }
 [[ -f "$AS/k14.state" ]] || { echo "FALHA: limpeza apagou o estado novo"; fail=1; }
+
+# estado sem escrita: o marker não nasce, então o Stop nunca lembra
+if [[ "$(id -u)" != 0 ]]; then
+    writes k15 5
+    chmod 500 "$AS"
+    for i in 1 2 3; do
+        expect "stop: estado sem escrita dá {} ($i)" "$(stp k15)" "{}"
+    done
+    chmod 700 "$AS"
+else
+    echo "aviso: root ignora chmod; teste de estado sem escrita pulado"
+fi
+
+# Stops concorrentes: o marker atômico deixa passar exatamente um lembrete
+writes k16 5
+for i in $(seq 10); do stp k16 >"$tmp/par.$i" & done
+wait
+expect "stop: 10 paralelos dão um só continue" "$(cat "$tmp"/par.* | grep -c '"decision":"continue"')" "1"
+expect "stop: 10 paralelos, o resto dá {}" "$(cat "$tmp"/par.* | grep -cx '{}')" "9"
 
 for s in "$CNT" "$STP"; do
     out="$(bash "$s" <<<'lixo{')"; rc=$?
