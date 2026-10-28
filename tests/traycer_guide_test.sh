@@ -113,5 +113,20 @@ for term in "llamacpp" "Local first" "Escalate" "8080" "one local agent"; do
   has "guia cita '$term'" "$term" "$guide"
 done
 
+# Amarre o id do guia ao provider do opencode e aos padrões do llm-serve.
+SERVE="$ROOT/bin/llm-serve"
+OPENCODE="$ROOT/opencode/opencode.json"
+model_id="$(grep -o 'llamacpp:[A-Za-z0-9._-]*' <<<"$guide" | head -n1)"
+model_key="${model_id#llamacpp:}"
+[[ -n "$model_key" ]] || { echo "FALHA: guia sem id llamacpp:<modelo>"; fail=1; }
+expect "provider llamacpp tem o modelo do guia" \
+  "$(jq -r --arg k "$model_key" '.provider.llamacpp.models | has($k)' "$OPENCODE")" "true"
+serve_alias="$(sed -n 's/.*LLM_MAIN_ALIAS:-\([^}]*\)}.*/\1/p' "$SERVE" | head -n1)"
+expect "alias padrão do llm-serve é o modelo do guia" "$serve_alias" "$model_key"
+serve_port="$(sed -n 's/^PORT="${LLM_PORT:-\([0-9]*\)}"/\1/p' "$SERVE")"
+guide_port="$(grep -o '127\.0\.0\.1:[0-9]*' <<<"$guide" | head -n1 | cut -d: -f2)"
+[[ -n "$serve_port" ]] || { echo "FALHA: llm-serve sem LLM_PORT padrão"; fail=1; }
+expect "porta do guia é o LLM_PORT padrão do llm-serve" "$guide_port" "$serve_port"
+
 [[ $fail -eq 0 ]] && echo "traycer_guide_test: ok"
 exit $fail

@@ -11,8 +11,10 @@ The local model is harness `opencode`, model `llamacpp:gpt-oss-20b`, reasoning `
 Do this before the first local agent of a session:
 
 1. Run `curl -fsS http://127.0.0.1:8080/health`.
-2. If it fails, start the server with `traycer_run_shell`: `~/dotfiles/bin/llm-serve main`, with `monitor` false. Poll the health URL until it answers.
-3. Never start a second `llama-server`. The GPU has 8 GB and the server has one slot.
+2. If it fails and `pgrep -x llama-server` finds a process, the server is still loading. Wait and poll. Do not start another one.
+3. If it fails and there is no process, ask the user to start `llm-serve main` in a terminal. If the user is away, start it with `traycer_run_shell`, with `monitor` false. That shell belongs to this chat, so the server stops when the chat stops.
+4. The first start downloads the model (about 12 GB) before the port opens. This is not a failure and not an escalation trigger. If no GGUF is cached in `~/.cache/llama.cpp`, tell the user instead of waiting.
+5. Never start a second `llama-server`. The GPU has 8 GB and the server has one slot.
 
 ### Concurrency
 
@@ -24,9 +26,12 @@ Run one local agent at a time. Queue the other local tasks. Cloud agents may run
 - Test writing.
 - Mechanical tasks: commit, merge, formatting and renaming.
 - Reading, searching, summaries and docs.
-- Review of a diff up to 150 lines, by a fresh agent that did not write it. The reviewer uses the `traycer-review` skill.
+- Review of a diff up to 150 lines that touches none of the topics in the secrets trigger below, by a fresh agent that did not write it. The reviewer uses the `traycer-review` skill.
+- Commit and merge, only when the handoff asks for them.
 
 The local agent uses the `traycer-implement` skill for implementation. Give it an artifact path and at most 15 lines of text. The local context is 32K tokens, and the Traycer prompt already uses part of it.
+
+The orchestrator creates the test-writing agent after the implementer finishes. A local implementer does not create agents. The test-writing agent is local too, by the rules above.
 
 ### Escalate to the cloud
 
@@ -56,7 +61,7 @@ For implementation tasks that escalated, complete the work yourself if it is cor
 1. `claude` - latest Sonnet model - `high` reasoning
 2. `opencode` - latest GPT Terra model - `xhigh` reasoning
 
-Delegate test writing to another Traycer agent. If you implemented the change yourself, delegate the test writing to a Traycer agent. If you are handing the implementation to a Traycer agent, include this in the initial handoff, so that after implementing, it should delegate the test writing to its own Traycer agent. The test-writing agent should use the `traycer-implement` skill with one of the following combinationss.
+For test writing that escalated, delegate to another Traycer agent. If you implemented the change yourself, delegate the test writing to a Traycer agent. If you are handing the implementation to a Traycer agent, include this in the initial handoff, so that after implementing, it should delegate the test writing to its own Traycer agent. The test-writing agent should use the `traycer-implement` skill with one of the following combinationss.
 
 1. `claude` - latest Sonnet model - `medium` reasoning
 2. `opencode` - latest GPT Luna model - `high` reasoning
@@ -74,7 +79,7 @@ If you run into doubts or ambiguities during execution and need a second opinion
 
 For any delegated task, if the Traycer agent hits an error that prevents it from continuing, such as a rate limit, network issue, harness failure, or similar blocking error, update the configuration with a different available combination instead of retrying the same combination or getting stuck.
 
-For mechanical tasks that the local model cannot take, use one Traycer agent with this combination instead of Sonnet or Opus. Mechanical tasks are commit, merge, formatting and renaming. They need no design judgment.
+For mechanical tasks, when the local server is down or an escalation trigger fires, use one Traycer agent with this combination instead of Sonnet or Opus. Mechanical tasks are commit, merge, formatting and renaming. They need no design judgment.
 
 1. `claude` - `haiku` model - `low` reasoning
 
