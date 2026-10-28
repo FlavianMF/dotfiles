@@ -35,7 +35,9 @@ edits="$(grep -cx w "$state" 2>/dev/null)"
 [[ "$edits" =~ ^[0-9]+$ ]] || none
 (( edits >= min_edits )) || none
 
-(umask 077; : >"$marker") 2>/dev/null
+# O marker é a única proteção contra repetição (o agy não manda stop_hook_active).
+# noclobber cria o arquivo de forma atômica: se ele existe ou não dá para criá-lo, não lembre.
+( umask 077; set -C; : >"$marker" ) 2>/dev/null || none
 find "$state_dir" -type f -mtime +7 -delete 2>/dev/null
 
 msg="Esta sessão fez ${edits} edições (arquivos e comandos de escrita) e ainda não enfileirou nada para o second brain. Se a tarefa de dev terminou e gerou padrão, decisão ou armadilha reutilizável, acrescente candidatos à fila com sb.py candidate add (não escreva no vault; o usuário promove na revisão). Se não houve nada reutilizável, apenas encerre sem comentar."
