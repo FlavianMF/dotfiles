@@ -146,9 +146,10 @@ docker run -it dev-env
 - **Codex**: edite `codex/config.base.toml`, rode `make harness` e confira `make codex-drift`.
   Perfil sem sandbox: `codex --profile yolo`.
 - **Antigravity CLI** (`agy`): edite `antigravity/mcp_config.base.json` ou
-  `antigravity/settings.base.json` e rode `make antigravity-config` (merge: o que o `agy`
-  gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json` (renderizado com caminho absoluto). Sem MCP do
-  GitHub; veja `antigravity/README.md`.
+  `antigravity/settings.base.json` (ou `antigravity/hooks.base.json`) e rode `make antigravity-config` (merge: o que o `agy`
+  gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json` (renderizado com caminho absoluto). Os hooks do second brain
+  (`SessionStart`, `PostToolUse`) rodam por padrão no `agy`; `SECOND_BRAIN_HOOKS=0` no shell os desliga.
+  Rode o `make antigravity-config` no checkout principal. Sem MCP do GitHub; veja `antigravity/README.md`.
 - **Modos de sessão**: `claude-dev`, `claude-review`, `claude-research`.
 - **Hooks opcionais por projeto** (em `.claude/settings.local.json` do projeto):
   `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}` liga format/typecheck no fim do turno;
