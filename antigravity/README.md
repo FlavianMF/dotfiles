@@ -24,10 +24,28 @@ only checks that the download matches what the manifest says.
 | Instructions | `agents/AGENTS.md` | `~/.gemini/config/AGENTS.md` | link |
 | Skills | `antigravity/skills.base.json` | `~/.gemini/config/skills.json` | render; points at `$HOME/.agents/skills` (agy rejects `~`) |
 | MCPs | `antigravity/mcp_config.base.json` | `~/.gemini/config/mcp_config.json` | merge (`agy mcp add` rewrites it) |
+| Hooks | `antigravity/hooks.base.json` | `~/.gemini/config/hooks.json` | render; `@REPO@` becomes the repo root |
 | Permissions | `antigravity/settings.base.json` | `~/.gemini/antigravity-cli/settings.json` | merge (agy persists grants there) |
 
 `render_config.sh` keeps keys that exist only on the machine and unions the
 `permissions.deny`/`ask` arrays. It never removes a rule, so delete retired ones by hand.
+
+## Second brain hooks
+
+Two hooks port the Claude ones. The scripts stay in `antigravity/hooks/` and are not copied.
+
+- `second-brain-session-start.sh` (`SessionStart`) injects the vault notes for the repo of
+  `workspacePaths[0]`. It prints `{"injectSteps":[...]}`, or `{}` when there is no note.
+- `second-brain-observe.sh` (`PostToolUse`) logs the tool name and file path through
+  `sb.py observe record`. It never logs commands or content. It answers `{}`.
+
+The hooks run by default, because `agy` has no `env` block in its settings. Set
+`SECOND_BRAIN_HOOKS=0` in your shell to turn both off. Set `SB_OBSERVE=0` to turn off only the log.
+
+Run `make antigravity-config` from the main checkout. The rendered `hooks.json` holds absolute
+paths into the checkout that ran it. A deleted worktree breaks those paths.
+
+Out of scope: `Stop`, `PreInvocation` and the prompt hint.
 
 ## Differences from the other harnesses
 
@@ -44,10 +62,9 @@ only checks that the download matches what the manifest says.
 
 ## Not verified
 
-These came from the binary's embedded docs and the public docs, not from a signed-in session:
-that `skills.json` follows the symlinked skill directories in `~/.agents/skills`, and that the
-regex deny rule matches `curl x | bash`. Run `/skills` and `/permissions` in `agy` to check.
+The regex deny rule may not match `curl x | bash`. Run `/permissions` in `agy` to check.
 
 `skills.json` once held `~/.agents/skills`. agy logged `must be an absolute path` and `/skills`
 listed only the built-in skills. `render_config.sh` now writes the absolute path and replaces
-the old symlink.
+the old symlink. After the fix, `agy -p` listed 60 skills, including the symlinked ones
+(`second-brain-sync`, `search-first`, `eval-harness`), so agy follows the symlinks.
