@@ -29,9 +29,14 @@ Login and state live in `~`. Nothing from Traycer goes into git.
 
 ## Agent selection guide
 
-`traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes work local first: `opencode` with `llamacpp:gpt-oss-20b`, served by `llama-server` in WSL2 (`bin/llm-serve main`, `llm-health`, `llm-stop`). It lists the escalation triggers to the cloud, keeps orchestration, second opinions and security review in the cloud, and sets the artifact handoff rule. Cloud and `claude` `haiku` `low` stay as fallback.
+`traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes work by quota. The `claude` Pro plan goes first, then the `antigravity` Google AI Pro plan, then paid OpenRouter models after the user says yes. The decisions behind it live in the epic artifact `traycer-quota-routing`.
 
-The local tier turns itself off: if `traycer_list_harness_models` shows no `llamacpp:*` model, the guide tells the agent to skip it. The provider lives in `opencode/opencode.json` and needs `opencode/opencode.json` linked at `~/.config/opencode/`.
+- One table maps each role to a harness, model, effort and pool. The orchestrator runs on `sonnet` and moves to `opus` only on a trigger.
+- Coupled work stays inline. Bounded tasks and web research go to `gemini-3.8-flash`, implementation to `sonnet`, mechanical tasks to `haiku`, and review to `claude-opus-5.5` on `antigravity`.
+- Sessions stay under 100k tokens. Near 80k, the session writes a `spec` artifact and continues in a new chat.
+- A quota guard reads both pools before a fan-out. The `antigravity` Claude models need the wrapper below, and the guide drops that pool when they are not listed.
+- The local model is opt-in: `opencode` with `llamacpp:gpt-oss-20b`, served by `llama-server` in WSL2 (`bin/llm-serve main`, `llm-health`, `llm-stop`). It takes mechanical or reading tasks only when the server is already up. The provider lives in `opencode/opencode.json` and needs `opencode/opencode.json` linked at `~/.config/opencode/`.
+- The guide stays under 5 KB, because the orchestrator reads all of it on each call. `tests/traycer_guide_test.sh` checks the size.
 
 `traycer/install.sh` calls `traycer/install_guide.sh`, which needs no network. It runs `cp` and never creates a symlink. The Traycer app can rewrite the guide, so a link could turn into a plain file or change the repo. `~/.traycer/.agent-selection-guide.meta.json` is not touched.
 

@@ -108,10 +108,18 @@ has "guia cita haiku" "haiku" "$guide"
 has "guia cita low" "low" "$guide"
 has "guia cita artifact" "artifact" "$guide"
 
-# --- 9. camada local do guia ---
-for term in "llamacpp" "Local first" "Escalate" "8080" "one local agent"; do
+# --- 9. roteamento por cota e camada local opt-in ---
+for term in "Quota guard" "80%" "95%" "100k" "gemini-3.8-flash" "claude-opus-5.5" \
+  "claude-sonnet-5.5" "fable" "50 diff lines" "150 lines" "Local (opt-in)" "llamacpp" \
+  "8080" "one local agent" "Do not start the server"; do
   has "guia cita '$term'" "$term" "$guide"
 done
+# Combinações GPT e o nome inexistente "Mythos" ficam fora enquanto o codex está sem login.
+for term in "GPT Sol" "GPT Terra" "GPT Luna" "Mythos" "Local first"; do
+  if grep -q -- "$term" <<<"$guide"; then echo "FALHA: guia ainda cita '$term'"; fail=1; fi
+done
+size="$(wc -c <"$SRC" | tr -d ' ')"
+(( size <= 5120 )) || { echo "FALHA: guia com $size bytes, teto de 5120"; fail=1; }
 
 # Amarre o id do guia ao provider do opencode e aos padrões do llm-serve.
 SERVE="$ROOT/bin/llm-serve"

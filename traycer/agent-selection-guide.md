@@ -1,87 +1,59 @@
 # Agent Selection Guide
 
-## Local first
+Spend quota in this order: the `claude` Pro plan, then the `antigravity` Google AI Pro plan, then dollars. Use OpenRouter (paid `opencode` models) only after the user says yes.
 
-Run work on the local model whenever the rules below allow it. The local model costs nothing and runs on this machine.
+## Roles
 
-The local model is harness `opencode`, model `llamacpp:gpt-oss-20b`, reasoning `medium`. It runs on `llama-server` in WSL2. If `traycer_list_harness_models` shows no `llamacpp:*` model, skip this section and use the cloud sections below.
+| Role | Harness | Model | Effort | Pool |
+| --- | --- | --- | --- | --- |
+| Orchestrator | `claude` | `sonnet` | `medium` | Pro |
+| Orchestrator, on a trigger | `claude` | `opus` | `high` | Pro |
+| Self-contained implementation, tests included | `claude` | `sonnet` | `high` | Pro |
+| Bounded task, web research | `antigravity` | `gemini-3.8-flash` | `medium` | Gemini |
+| Mechanical task | `claude` | `haiku` | `low` | Pro |
+| Review | `antigravity` | `claude-opus-5.5` | `high` | 3p |
+| Second opinion | `claude` | `fable` | `high` | Pro |
+| Second opinion, alternatives | `antigravity` | `claude-opus-5.5` or `gemini-4-argon` | `high` | 3p or Gemini |
 
-### Preflight
+- Orchestrator triggers for `opus`: an architecture decision, a debug stuck after 2 attempts, or the final review of a sensitive change. Return to `sonnet` afterwards.
+- Mechanical tasks are commit, merge, formatting and renaming.
+- Sensitive topics are secrets, authentication, payments, migrations, deploy and CI.
+- Implementers and reviewers use the `traycer-implement` and `traycer-review` skills.
 
-Do this before the first local agent of a session:
+## Delegation
 
-1. Run `curl -fsS http://127.0.0.1:8080/health`.
-2. If it fails and `pgrep -x llama-server` finds a process, the server is still loading. Wait and poll. Do not start another one.
-3. If it fails and there is no process, ask the user to start `llm-serve main` in a terminal. If the user is away, start it with `traycer_run_shell`, with `monitor` false. That shell belongs to this chat, so the server stops when the chat stops.
-4. The first start downloads the model (about 12 GB) before the port opens. This is not a failure and not an escalation trigger. If no GGUF is cached in `~/.cache/llama.cpp`, tell the user instead of waiting.
-5. Never start a second `llama-server`. The GPU has 8 GB and the server has one slot.
+- Do coupled, sequential work inline. Delegate only self-contained or parallel tasks.
+- The implementer writes the tests. Do not create a separate test agent.
+- Create a separate reviewer only for a diff above 150 lines or a sensitive change.
+- Give `gemini-3.8-flash` a task only if all hold: at most 2 files, at most 50 diff lines, an acceptance check in the handoff, no design decision, no sensitive topic. Otherwise use `sonnet`.
+- Flash runs the acceptance check and returns the result with `git diff --stat`. Read its diff yourself before the commit. One Flash failure moves the task to `sonnet`.
+- If the `antigravity` agent has no web search tool, send web research to `sonnet` with `WebSearch`.
 
-### Concurrency
+## Sessions
 
-Run one local agent at a time. Queue the other local tasks. Cloud agents may run in parallel with the local agent.
+- Plan the work in slices that fit in 100k tokens. The limit applies to every session, the orchestrator included.
+- Near 80k tokens, finish the current step, write a `spec` artifact and continue in a new chat. Do not rely on auto-compaction.
 
-### What goes local
+## Quota guard
 
-- Implementation of a self-contained task, up to 3 files.
-- Test writing.
-- Mechanical tasks: commit, merge, formatting and renaming.
-- Reading, searching, summaries and docs.
-- Review of a diff up to 150 lines that touches none of the topics in the secrets trigger below, by a fresh agent that did not write it. The reviewer uses the `traycer-review` skill.
-- Commit and merge, only when the handoff asks for them.
+Before you create more than one agent, read `traycer_get_provider_profile_rate_limits` for `claude` and `antigravity`.
 
-The local agent uses the `traycer-implement` skill for implementation. Give it an artifact path and at most 15 lines of text. The local context is 32K tokens, and the Traycer prompt already uses part of it.
+The thresholds apply to the 5h window and to the 7-day window. The higher one decides.
 
-The orchestrator creates the test-writing agent after the implementer finishes. A local implementer does not create agents. The test-writing agent is local too, by the rules above.
+- Pro above 80%: no fan-out. Delegated `sonnet` moves to `antigravity` `claude-sonnet-5.5` `high`.
+- Pro above 95% or rate limited: reading and mechanical tasks go to `gemini-3.8-flash`. Implementation waits for the window or goes to OpenRouter after the user says yes.
+- 3p above 95% or rate limited: review moves to `claude` `opus` `high`, and delegated `sonnet` work stays inline.
+- Gemini pool also exhausted: reading and mechanical tasks go to a free `opencode` model, such as `opencode:deepseek-v4.1-flash-free`.
+- Before you use the 3p pool, check `traycer_list_harness_models antigravity`. If no `claude-*` model is listed, drop that pool for the session and tell the user.
+- On a blocking error (rate limit, network, harness failure), switch to another combination. Do not retry the same one.
 
-### Escalate to the cloud
+## Local (opt-in)
 
-Escalate when any of these triggers fires:
+Harness `opencode`, model `llamacpp:gpt-oss-20b`, effort `medium`, on `llama-server` at `127.0.0.1:8080`. 32K context.
 
-- Two failed attempts in a row: red tests, a tool-call error or a malformed diff.
-- The agent loops or repeats the same call.
-- The context is above 80%.
-- The task touches secrets, authentication, payments, migrations, deploy or CI.
-- The diff is above 150 lines or touches more than 3 files.
-- The task needs a design decision with several valid options.
-- The server is down and does not restart within 2 minutes.
-
-To escalate, reconfigure the agent with `traycer_configure_agent` to one of the cloud combinations below. Write one line in the artifact with the trigger, so the next agent starts from the artifact.
-
-### Always cloud
-
-- The orchestrator chat.
-- Second opinions. A local model cannot judge its own doubt.
-- Security review.
-- The final review of any escalated change and of any diff above 150 lines.
-
-## Cloud
-
-For implementation tasks that escalated, complete the work yourself if it is core work or likely to drift because a Traycer agent may not have enough context. Otherwise, if the task is self-contained and all required context can be passed through the query and artifact references, delegate using one of the following harness, model, and reasoning-effort combinations. Ask the Traycer agent to use the `traycer-implement` skill.
-
-1. `claude` - latest Sonnet model - `high` reasoning
-2. `opencode` - latest GPT Terra model - `xhigh` reasoning
-
-For test writing that escalated, delegate to another Traycer agent. If you implemented the change yourself, delegate the test writing to a Traycer agent. If you are handing the implementation to a Traycer agent, include this in the initial handoff, so that after implementing, it should delegate the test writing to its own Traycer agent. The test-writing agent should use the `traycer-implement` skill with one of the following combinationss.
-
-1. `claude` - latest Sonnet model - `medium` reasoning
-2. `opencode` - latest GPT Luna model - `high` reasoning
-
-For review of implemented tasks that the local rules send to the cloud, use one of the following combinations. In the handoff, ask the Traycer agent to use the `traycer-review` skill.
-
-1. `opencode` - latest GPT Sol model - `max` reasoning
-2. `claude` - latest Opus model - `xhigh` reasoning
-
-If you run into doubts or ambiguities during execution and need a second opinion, ask for one from a different agent using one of the following combinations.
-
-1. `claude` - latest Fable/Mythos model - `high` reasoning
-2. `opencode` - latest GPT Sol model - `max` reasoning
-3. `claude` - latest Opus model - `xhigh` reasoning
-
-For any delegated task, if the Traycer agent hits an error that prevents it from continuing, such as a rate limit, network issue, harness failure, or similar blocking error, update the configuration with a different available combination instead of retrying the same combination or getting stuck.
-
-For mechanical tasks, when the local server is down or an escalation trigger fires, use one Traycer agent with this combination instead of Sonnet or Opus. Mechanical tasks are commit, merge, formatting and renaming. They need no design judgment.
-
-1. `claude` - `haiku` model - `low` reasoning
+- Use it only for mechanical or reading tasks, and only if `curl -fsS http://127.0.0.1:8080/health` already passes. Do not start the server.
+- When the health check passes, you may use it instead of `haiku` or Flash. It spends no quota.
+- Run one local agent at a time. One failure moves the task to `haiku` (mechanical) or `sonnet` (reading).
 
 ## Handoff
 
