@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Clona/atualiza o llama.cpp e compila para Blackwell (sm_120a): NVFP4/MXFP4 MMQ e --n-cpu-moe.
+set -euo pipefail
+SRC="${LLAMA_CPP_SRC:-$HOME/.local/src/llama.cpp}"
+PREFIX="${LLAMA_CPP_PREFIX:-$HOME/.local}"
+
+# Pré-requisitos: falhe cedo e diga o que falta.
+export PATH="$HOME/.local/cuda-12.8/bin:/usr/local/cuda/bin:$PATH"
+for tool in git cmake gcc nvcc; do
+  command -v "$tool" >/dev/null || { echo "Falta '$tool'. Para nvcc: CUDA 12.8 em ~/.local/cuda-12.8 ou cuda-toolkit do repo wsl-ubuntu, sem cuda-drivers." >&2; exit 1; }
+done
+nvcc --version | grep -oE 'release [0-9.]+' | awk '{ split($2,v,"."); if (v[1]<12 || (v[1]==12 && v[2]<8)) { print "CUDA " $2 " < 12.8: sem sm_120a." > "/dev/stderr"; exit 1 } }'
+
+if [[ -d "$SRC/.git" ]]; then
+  git -C "$SRC" pull --ff-only
+else
+  mkdir -p "$(dirname "$SRC")"
+  git clone https://github.com/ggml-org/llama.cpp "$SRC"
+fi
+
+cmake -S "$SRC" -B "$SRC/build" -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES="120a-real" -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache
+cmake --build "$SRC/build" --config Release -j"${LLAMA_CPP_JOBS:-8}"
+
+mkdir -p "$PREFIX/bin"
+for b in llama-server llama-cli llama-bench llama-quantize; do
+  install -m 755 "$SRC/build/bin/$b" "$PREFIX/bin/$b"
+done
+echo "Instalado em $PREFIX/bin: llama-server llama-cli llama-bench llama-quantize"

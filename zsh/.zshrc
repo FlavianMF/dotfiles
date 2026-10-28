@@ -140,6 +140,8 @@ export VISUAL='nvim'
 export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.cargo/bin"
+[[ -d /usr/lib/wsl/lib ]] && export PATH="/usr/lib/wsl/lib:$PATH"
+[[ -d /usr/local/cuda/bin ]] && export PATH="/usr/local/cuda/bin:$PATH"
 
 # Local secrets (gitignored, per-machine — see dotfiles/secrets/)
 for _secret_env in "$HOME/dotfiles/secrets/"*.env(N); do
@@ -167,6 +169,9 @@ alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude
 
 # URL do Ollama do Windows para o opencode/Traycer; ver zsh/ollama.zsh
 [[ -r "$HOME/dotfiles/zsh/ollama.zsh" ]] && source "$HOME/dotfiles/zsh/ollama.zsh"
+
+# Helpers de LLM local (RTX 5050 / llama.cpp); ver zsh/llm-blackwell.zsh
+[[ -r "$HOME/dotfiles/zsh/llm-blackwell.zsh" ]] && source "$HOME/dotfiles/zsh/llm-blackwell.zsh"
 
 # Aliases
 alias vim='nvim'
