@@ -16,7 +16,8 @@ hint="$vault/00_META/skills/second-brain-sync/scripts/session_hint.sh"
 [[ -f "$hint" ]] || none
 
 cwd="$(jq -r '.workspacePaths[0] // empty' 2>/dev/null)"
-[[ -d "$cwd" ]] || cwd="$PWD"
+# Sem workspace conhecido não há dica a dar: o cwd do agy é o diretório do hooks.json.
+[[ -d "$cwd" ]] || none
 
 # Nome do repo principal, mesmo dentro de um worktree (mesma lógica do hook do Claude).
 repo=""
