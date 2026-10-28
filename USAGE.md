@@ -147,7 +147,7 @@ docker run -it dev-env
   Perfil sem sandbox: `codex --profile yolo`.
 - **Antigravity CLI** (`agy`): edite `antigravity/mcp_config.base.json` ou
   `antigravity/settings.base.json` e rode `make antigravity-config` (merge: o que o `agy`
-  gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json`. Sem MCP do
+  gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json` (renderizado com caminho absoluto). Sem MCP do
   GitHub; veja `antigravity/README.md`.
 - **Modos de sessão**: `claude-dev`, `claude-review`, `claude-research`.
 - **Hooks opcionais por projeto** (em `.claude/settings.local.json` do projeto):

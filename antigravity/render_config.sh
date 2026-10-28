@@ -3,6 +3,8 @@
 # merged instead of symlinked into the repo:
 #   ~/.gemini/config/mcp_config.json            <- antigravity/mcp_config.base.json
 #   ~/.gemini/antigravity-cli/settings.json     <- antigravity/settings.base.json
+#   ~/.gemini/config/skills.json                <- antigravity/skills.base.json
+# agy only accepts absolute paths in skills.json ("~" fails), so @HOME@ is expanded here.
 # Base entries win; keys that exist only on this machine (extra MCP servers, model,
 # trustedWorkspaces, grants agy persisted) are kept. permissions.* arrays are unioned.
 # Usage: antigravity/render_config.sh [--dry-run]
@@ -12,6 +14,7 @@ DRY_RUN=0
 [[ "${1:-}" == --dry-run ]] && DRY_RUN=1
 MCP_TARGET="${AGY_MCP_CONFIG:-$HOME/.gemini/config/mcp_config.json}"
 SETTINGS_TARGET="${AGY_SETTINGS:-$HOME/.gemini/antigravity-cli/settings.json}"
+SKILLS_TARGET="${AGY_SKILLS:-$HOME/.gemini/config/skills.json}"
 
 command -v jq >/dev/null 2>&1 || { echo "jq not found (required package)" >&2; exit 1; }
 
@@ -37,9 +40,18 @@ render() {
 render "$ROOT/mcp_config.base.json" "$MCP_TARGET" '$cur + {mcpServers: (($cur.mcpServers // {}) + $base.mcpServers)}'
 
 settings_base="$(mktemp)"
-trap 'rm -f "$settings_base"' EXIT
+skills_base="$(mktemp)"
+trap 'rm -f "$settings_base" "$skills_base"' EXIT
 sed "s|@HOME@|$HOME|g" "$ROOT/settings.base.json" > "$settings_base"
 render "$settings_base" "$SETTINGS_TARGET" '
   $cur + {permissions: (($cur.permissions // {}) + (
     $base.permissions | with_entries(.value = ((($cur.permissions[.key] // []) + .value) | unique))
   ))}'
+
+# Older installs symlinked skills.json into the repo, where "~" is not absolute. Drop the link
+# so the render below writes a real file instead of overwriting the repo copy.
+if [[ -L "$SKILLS_TARGET" && $DRY_RUN -eq 0 ]]; then
+    rm "$SKILLS_TARGET"
+fi
+sed "s|@HOME@|$HOME|g" "$ROOT/skills.base.json" > "$skills_base"
+render "$skills_base" "$SKILLS_TARGET" '$cur + {entries: ((($cur.entries // []) + $base.entries) | unique_by(.path))}'

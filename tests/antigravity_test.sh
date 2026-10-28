@@ -75,9 +75,19 @@ expect "une deny da máquina e da base" "$(jq -r '.permissions.deny | index("com
 expect "expande HOME no deny" "$(jq -r '.permissions.deny | index("read_file('"$HOME"'/.ssh)") != null' "$S")" "true"
 expect "sem @HOME@ sobrando" "$(grep -c '@HOME@' "$S")" "0"
 expect "MCPs da base + da máquina" "$(jq -c '.mcpServers | keys' "$M")" '["figma","mine","playwright","rea"]'
-before="$(sha1sum "$S" "$M")"
+K="$HOME/.gemini/config/skills.json"
+expect "skills.json com caminho absoluto" "$(jq -r '.entries[0].path' "$K")" "$HOME/.agents/skills"
+before="$(sha1sum "$S" "$M" "$K")"
 bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
-expect "render idempotente" "$(sha1sum "$S" "$M")" "$before"
+expect "render idempotente" "$(sha1sum "$S" "$M" "$K")" "$before"
+
+# skills.json antigo: link para o repo com "~" vira arquivo real, sem tocar o repo
+rm "$K"; ln -s "$tmp/legacy_skills.json" "$K"
+echo '{"entries":[{"path":"~/.agents/skills"}]}' >"$tmp/legacy_skills.json"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+[[ ! -L "$K" ]] || { echo "FALHA: skills.json continuou link"; fail=1; }
+expect "cópia do repo intacta" "$(cat "$tmp/legacy_skills.json")" '{"entries":[{"path":"~/.agents/skills"}]}'
+expect "skills.json migrado" "$(jq -c '.entries' "$K")" '[{"path":"'"$HOME"'/.agents/skills"}]'
 
 # JSON inválido no alvo: não sobrescreve
 echo '{broken' >"$S"

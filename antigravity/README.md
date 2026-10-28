@@ -22,7 +22,7 @@ only checks that the download matches what the manifest says.
 | Piece | Source | Target | How |
 |-------|--------|--------|-----|
 | Instructions | `agents/AGENTS.md` | `~/.gemini/config/AGENTS.md` | link |
-| Skills | `antigravity/skills.json` | `~/.gemini/config/skills.json` | link; points at `~/.agents/skills` |
+| Skills | `antigravity/skills.base.json` | `~/.gemini/config/skills.json` | render; points at `$HOME/.agents/skills` (agy rejects `~`) |
 | MCPs | `antigravity/mcp_config.base.json` | `~/.gemini/config/mcp_config.json` | merge (`agy mcp add` rewrites it) |
 | Permissions | `antigravity/settings.base.json` | `~/.gemini/antigravity-cli/settings.json` | merge (agy persists grants there) |
 
@@ -46,5 +46,8 @@ only checks that the download matches what the manifest says.
 
 These came from the binary's embedded docs and the public docs, not from a signed-in session:
 that `skills.json` follows the symlinked skill directories in `~/.agents/skills`, and that the
-regex deny rule matches `curl x | bash`. After the first login, run `/skills` and
-`/permissions` in `agy` to check.
+regex deny rule matches `curl x | bash`. Run `/skills` and `/permissions` in `agy` to check.
+
+`skills.json` once held `~/.agents/skills`. agy logged `must be an absolute path` and `/skills`
+listed only the built-in skills. `render_config.sh` now writes the absolute path and replaces
+the old symlink.

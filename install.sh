@@ -1089,11 +1089,10 @@ fi
 # --- Antigravity CLI config ---
 if [[ $ANTIGRAVITY_ACTIVE -eq 1 ]]; then
     log_info "Configuring Antigravity CLI (~/.gemini/config)..."
-    # Rules and the skills manifest are read-only for agy, so they are linked. Skills stay in
-    # ~/.agents/skills (skills.json points there). Files agy rewrites itself (mcp_config.json,
-    # settings.json) are merged by render_config.sh, never linked.
+    # Rules are read-only for agy, so they are linked. Skills stay in ~/.agents/skills. Files agy
+    # rewrites itself (mcp_config.json, settings.json) and skills.json (needs an absolute path,
+    # so @HOME@ is expanded) are rendered by render_config.sh, never linked.
     create_config_link "$REPO_DIR/agents/AGENTS.md" "$HOME/.gemini/config/AGENTS.md"
-    create_config_link "$REPO_DIR/antigravity/skills.json" "$HOME/.gemini/config/skills.json"
     if [[ $DRY_RUN -eq 1 ]]; then
         bash "$REPO_DIR/antigravity/render_config.sh" --dry-run
     else
@@ -1219,7 +1218,7 @@ echo "✓ rea MCP registered for Claude Code (user scope)"
 [[ $CODEX_ACTIVE -eq 1 ]] && echo "✓ Codex configured (~/.codex/config.toml rendered, AGENTS.md linked)"
 [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
 [[ $OPENCODE_ACTIVE -eq 1 ]] && echo "✓ OpenCode configured (~/.config/opencode/opencode.json + AGENTS.md linked)"
-[[ $ANTIGRAVITY_ACTIVE -eq 1 ]] && echo "✓ Antigravity CLI configured (~/.gemini/config AGENTS.md + skills.json linked, MCPs and permissions rendered)"
+[[ $ANTIGRAVITY_ACTIVE -eq 1 ]] && echo "✓ Antigravity CLI configured (~/.gemini/config AGENTS.md linked; skills.json, MCPs and permissions rendered)"
 if [[ $HARNESS_ONLY -eq 0 ]]; then
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"
