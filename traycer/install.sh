@@ -26,6 +26,10 @@ if [[ $UPDATE -eq 0 ]]; then
     guide_args=()
     [[ $DRY_RUN -eq 1 ]] && guide_args=(--dry-run)
     bash "$ROOT/install_guide.sh" "${guide_args[@]}" || echo "WARNING: could not install the agent selection guide." >&2
+    # The wrapper needs the Antigravity pack that Traycer downloads, so a missing pack only warns.
+    wrapper_args=()
+    [[ $DRY_RUN -eq 1 ]] && wrapper_args=(--dry-run)
+    bash "$ROOT/install_agy_wrapper.sh" "${wrapper_args[@]}" || echo "WARNING: could not install the agy_acp_server wrapper." >&2
 fi
 
 [[ "$(uname -m)" == x86_64 ]] || { echo "Traycer ships x86_64 builds only (this is $(uname -m))" >&2; exit 1; }

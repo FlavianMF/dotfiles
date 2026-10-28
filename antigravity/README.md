@@ -24,10 +24,42 @@ only checks that the download matches what the manifest says.
 | Instructions | `agents/AGENTS.md` | `~/.gemini/config/AGENTS.md` | link |
 | Skills | `antigravity/skills.base.json` | `~/.gemini/config/skills.json` | render; points at `$HOME/.agents/skills` (agy rejects `~`) |
 | MCPs | `antigravity/mcp_config.base.json` | `~/.gemini/config/mcp_config.json` | merge (`agy mcp add` rewrites it) |
+| Hooks | `antigravity/hooks.base.json` | `~/.gemini/config/hooks.json` | render; `@REPO@` becomes the repo root |
 | Permissions | `antigravity/settings.base.json` | `~/.gemini/antigravity-cli/settings.json` | merge (agy persists grants there) |
 
 `render_config.sh` keeps keys that exist only on the machine and unions the
 `permissions.deny`/`ask` arrays. It never removes a rule, so delete retired ones by hand.
+
+## Second brain hooks
+
+Three hooks port the Claude ones. A fourth script, `second-brain-observe.sh`, stays off. The scripts stay in `antigravity/hooks/` and are not copied.
+
+- `second-brain-session-start.sh` (`SessionStart`) injects the vault notes for the repo of
+  `workspacePaths[0]`. It prints `{"injectSteps":[...]}`, or `{}` when there is no note.
+- `second-brain-count.sh` (`PostToolUse`) counts the session's writes in
+  `~/.local/state/second-brain/agy/<conversationId>.state`. It stores one letter per event, never
+  the command. A write is an edit tool or a `run_command` that matches the Claude hook's regex.
+  A `run_command` with `vault_sync.py`, `sb.py sync` or `sb.py candidate add` marks the session as synced.
+- `second-brain-stop.sh` (`Stop`) reminds you once per session to queue candidates. It acts only
+  on a normal end (`terminationReason` is `NO_TOOL_CALL`), with at least `SECOND_BRAIN_MIN_EDITS`
+  writes (default 5) and no sync. It prints `{"decision":"continue","reason":...}`, so `agy` answers
+  the reminder before it stops. It deletes state files older than 7 days.
+
+The hooks run by default, because `agy` has no `env` block in its settings. Set
+`SECOND_BRAIN_HOOKS=0` in your shell to turn all of them off.
+
+`second-brain-observe.sh` (`PostToolUse`) is not in `hooks.base.json`. It logs through
+`sb.py observe record`, but nothing summarizes the log in `agy`. The `observe.py` rules also match
+only the Claude tool name `Read`, and `agy` sends `read_file`. Turn it on after a full port:
+map `read_file` to `Read` and call `sb.py observe summarize` from the Stop hook. The script and
+its tests stay in the repo until then.
+
+Run `make antigravity-config` from the main checkout. The rendered `hooks.json` holds absolute
+paths into the checkout that ran it. A deleted worktree breaks those paths. The render warns on stderr when the checkout is a
+linked worktree or when a rendered command is not executable. The warning does not fail the render.
+
+Out of scope: `PreInvocation` and the prompt hint. `agy` has no stable transcript format, so the
+Stop hook counts through `second-brain-count.sh` and never parses `transcriptPath`.
 
 ## Differences from the other harnesses
 
@@ -44,10 +76,9 @@ only checks that the download matches what the manifest says.
 
 ## Not verified
 
-These came from the binary's embedded docs and the public docs, not from a signed-in session:
-that `skills.json` follows the symlinked skill directories in `~/.agents/skills`, and that the
-regex deny rule matches `curl x | bash`. Run `/skills` and `/permissions` in `agy` to check.
+The regex deny rule may not match `curl x | bash`. Run `/permissions` in `agy` to check.
 
 `skills.json` once held `~/.agents/skills`. agy logged `must be an absolute path` and `/skills`
 listed only the built-in skills. `render_config.sh` now writes the absolute path and replaces
-the old symlink.
+the old symlink. After the fix, `agy -p` listed 60 skills, including the symlinked ones
+(`second-brain-sync`, `search-first`, `eval-harness`), so agy follows the symlinks.

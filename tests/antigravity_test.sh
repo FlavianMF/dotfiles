@@ -89,6 +89,280 @@ bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
 expect "cópia do repo intacta" "$(cat "$tmp/legacy_skills.json")" '{"entries":[{"path":"~/.agents/skills"}]}'
 expect "skills.json migrado" "$(jq -c '.entries' "$K")" '[{"path":"'"$HOME"'/.agents/skills"}]'
 
+# --- hooks.json ---
+H="$HOME/.gemini/config/hooks.json"
+expect "hooks: SessionStart aponta para o repo" "$(jq -r '."second-brain".SessionStart[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-session-start.sh\""
+expect "hooks: PostToolUse tem o handler de contagem" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-count.sh\""
+expect "hooks: Stop aponta para o repo" "$(jq -r '."second-brain".Stop[0].command' "$H")" "\"$ROOT/antigravity/hooks/second-brain-stop.sh\""
+expect "hooks: sem @REPO@ sobrando" "$(grep -c '@REPO@' "$H")" "0"
+
+echo '{"outro":{"x":1}}' >"$H"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+expect "hooks: mantém chave alheia" "$(jq -c '.outro' "$H")" '{"x":1}'
+expect "hooks: base presente após merge" "$(jq -r 'has("second-brain")' "$H")" "true"
+before="$(sha1sum "$H")"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+expect "hooks: render idempotente" "$(sha1sum "$H")" "$before"
+
+rm "$H"; ln -s "$tmp/legacy_hooks.json" "$H"
+echo '{"legado":true}' >"$tmp/legacy_hooks.json"
+bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1
+[[ ! -L "$H" ]] || { echo "FALHA: hooks.json continuou link"; fail=1; }
+expect "hooks: alvo do link intacto" "$(cat "$tmp/legacy_hooks.json")" '{"legado":true}'
+expect "hooks: migrado para arquivo real" "$(jq -r 'has("second-brain")' "$H")" "true"
+
+# base sem o observe; todo command renderizado é executável
+expect "hooks: base sem second-brain-observe" "$(grep -c 'second-brain-observe' "$ROOT/antigravity/hooks.base.json")" "0"
+expect "hooks: PostToolUse[0] tem só um handler" "$(jq -r '."second-brain".PostToolUse[0].hooks | length' "$H")" "1"
+while IFS= read -r cmd; do
+    cmd="${cmd#\"}"; cmd="${cmd%\"}"
+    [[ -x "$cmd" ]] || { echo "FALHA: hooks: command não executável: $cmd"; fail=1; }
+done < <(jq -r '.. | objects | .command? // empty' "$H")
+
+# render com "&" e espaço no caminho do checkout (main checkout, sem aviso de worktree)
+AB="$tmp/a&b c"
+mkdir -p "$AB"
+git -C "$AB" init -q
+cp -r "$ROOT/antigravity" "$AB/antigravity"
+chmod +x "$AB"/antigravity/hooks/*.sh
+AB_ENV=(AGY_HOOKS="$tmp/ab/hooks.json" AGY_MCP_CONFIG="$tmp/ab/mcp.json" AGY_SETTINGS="$tmp/ab/settings.json" AGY_SKILLS="$tmp/ab/skills.json")
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$AB/antigravity/render_config.sh" >/dev/null 2>"$tmp/ab.err"; rc=$?
+expect "render com & e espaço: exit 0" "$rc" "0"
+AH="$tmp/ab/hooks.json"
+expect "render com & e espaço: SessionStart" "$(jq -r '."second-brain".SessionStart[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-session-start.sh\""
+expect "render com & e espaço: PostToolUse" "$(jq -r '."second-brain".PostToolUse[0].hooks[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-count.sh\""
+expect "render com & e espaço: Stop" "$(jq -r '."second-brain".Stop[0].command' "$AH")" "\"$AB/antigravity/hooks/second-brain-stop.sh\""
+expect "render com & e espaço: sem @REPO@" "$(grep -c '@REPO@' "$AH")" "0"
+expect "render com & e espaço: sem aviso em checkout principal" "$(grep -c 'warning' "$tmp/ab.err")" "0"
+cmd="$(jq -r '."second-brain".Stop[0].command' "$AH")"
+expect "render com & e espaço: sh -c executa o hook" "$(sh -c "$cmd" </dev/null)" "{}"
+
+# avisos do render: worktree linkado e command sem +x (nunca falham)
+GITQ=(env GIT_CONFIG_GLOBAL=/dev/null git -c user.name=t -c user.email=t@t)
+mkdir "$tmp/main"
+"${GITQ[@]}" -C "$tmp/main" init -q
+"${GITQ[@]}" -C "$tmp/main" commit -q --allow-empty -m init
+"${GITQ[@]}" -C "$tmp/main" worktree add -q "$tmp/wt" -b wtwarn
+cp -r "$ROOT/antigravity" "$tmp/main/antigravity"
+cp -r "$ROOT/antigravity" "$tmp/wt/antigravity"
+chmod +x "$tmp/main"/antigravity/hooks/*.sh "$tmp/wt"/antigravity/hooks/*.sh
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/wt/antigravity/render_config.sh" >/dev/null 2>"$tmp/wt.err"; rc=$?
+expect "aviso: worktree linkado exit 0" "$rc" "0"
+has "aviso: worktree linkado" "linked worktree" "$(cat "$tmp/wt.err")"
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/main/antigravity/render_config.sh" >/dev/null 2>"$tmp/main.err"; rc=$?
+expect "aviso: checkout principal exit 0" "$rc" "0"
+expect "aviso: checkout principal sem 'linked worktree'" "$(grep -c 'linked worktree' "$tmp/main.err")" "0"
+chmod -x "$tmp/main/antigravity/hooks/second-brain-stop.sh"
+GIT_CONFIG_GLOBAL=/dev/null env "${AB_ENV[@]}" bash "$tmp/main/antigravity/render_config.sh" >/dev/null 2>"$tmp/main.err"; rc=$?
+expect "aviso: sem +x exit 0" "$rc" "0"
+has "aviso: sem +x" "not executable" "$(cat "$tmp/main.err")"
+
+out="$(AGY_HOOKS="$tmp/dry/hooks.json" bash "$ROOT/antigravity/render_config.sh" --dry-run 2>&1)"
+has "hooks: dry-run cita o alvo" "$tmp/dry/hooks.json" "$out"
+[[ ! -e "$tmp/dry/hooks.json" ]] || { echo "FALHA: dry-run criou hooks.json"; fail=1; }
+
+echo '{broken' >"$tmp/bad_hooks.json"
+AGY_HOOKS="$tmp/bad_hooks.json" bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1; rc=$?
+expect "hooks: JSON inválido falha" "$rc" "1"
+expect "hooks: JSON inválido fica intacto" "$(cat "$tmp/bad_hooks.json")" "{broken"
+
+# --- hooks do second brain (vault e estado falsos) ---
+V="$tmp/vault"; SCRIPTS="$V/00_META/skills/second-brain-sync/scripts"
+mkdir -p "$SCRIPTS" "$tmp/state" "$V/sub"
+cat >"$SCRIPTS/session_hint.sh" <<'FAKE'
+#!/bin/bash
+[[ -n "${HINT_EMPTY:-}" ]] && exit 0
+echo "nota um"; echo "nota dois"; echo "repo=$1"
+FAKE
+cat >"$SCRIPTS/sb.py" <<'FAKE'
+import json, os, sys
+with open(os.environ["SEEN"], "w") as f:
+    json.dump({"argv": sys.argv[1:], "stdin": sys.stdin.read()}, f)
+FAKE
+export SECOND_BRAIN_VAULT="$V" SECOND_BRAIN_STATE_DIR="$tmp/state" SEEN="$tmp/seen.json"
+unset SECOND_BRAIN_HOOKS SB_OBSERVE
+SS="$ROOT/antigravity/hooks/second-brain-session-start.sh"
+OB="$ROOT/antigravity/hooks/second-brain-observe.sh"
+GIT=(git -c user.name=t -c user.email=t@t)
+mkdir "$tmp/proj-repo"
+git -C "$tmp/proj-repo" init -q
+"${GIT[@]}" -C "$tmp/proj-repo" commit -q --allow-empty -m init
+"${GIT[@]}" -C "$tmp/proj-repo" worktree add -q "$tmp/proj-wt" -b wt
+
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | bash "$SS")"; rc=$?
+expect "start: exit 0" "$rc" "0"
+msg="$(jq -r '.injectSteps[0].systemMessage.systemMessage' <<<"$out")"
+has "start: nome do repo no texto" 'notas do vault relacionadas a "proj-repo"' "$msg"
+has "start: linhas da dica" "nota dois" "$msg"
+has "start: dica recebe o repo em \$1" "repo=proj-repo" "$msg"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-wt" | bash "$SS")"
+has "start: worktree usa o repo principal" "repo=proj-repo" "$(jq -r '.injectSteps[0].systemMessage.systemMessage' <<<"$out")"
+
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | HINT_EMPTY=1 bash "$SS")"; rc=$?
+expect "start: dica vazia dá {}" "$out" "{}"; expect "start: dica vazia exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | SECOND_BRAIN_VAULT="$tmp/sem-vault" bash "$SS")"; rc=$?
+expect "start: vault ausente dá {}" "$out" "{}"; expect "start: vault ausente exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$tmp/proj-repo" | SECOND_BRAIN_HOOKS=0 bash "$SS")"; rc=$?
+expect "start: HOOKS=0 dá {}" "$out" "{}"; expect "start: HOOKS=0 exit 0" "$rc" "0"
+out="$(printf '{"workspacePaths":["%s"]}' "$V/sub" | bash "$SS")"; rc=$?
+expect "start: cwd no vault dá {}" "$out" "{}"; expect "start: cwd no vault exit 0" "$rc" "0"
+
+# sem workspacePaths[0] válido: {} e nenhuma chamada ao session_hint.sh (sem fallback para $PWD)
+rm -f "$tmp/hint_called"
+printf '#!/bin/bash\ntouch "%s"\necho nota\n' "$tmp/hint_called" >"$SCRIPTS/session_hint.sh"
+for in_ in '' 'lixo{' '{}' '{"workspacePaths":[]}' '{"workspacePaths":["/não/existe"]}'; do
+    out="$(printf '%s' "$in_" | bash "$SS")"; rc=$?
+    expect "start: sem workspace válido ('$in_') dá {}" "$out" "{}"; expect "start: sem workspace válido ('$in_') exit 0" "$rc" "0"
+done
+[[ ! -e "$tmp/hint_called" ]] || { echo "FALHA: start chamou o session_hint.sh sem workspace válido"; fail=1; }
+
+PAYLOAD='{"conversationId":"c1","toolCall":{"name":"read_file","args":{"Path":"/x/y.md","Content":"segredo"}}}'
+out="$(bash "$OB" <<<"$PAYLOAD")"; rc=$?
+expect "observe: stdout {}" "$out" "{}"; expect "observe: exit 0" "$rc" "0"
+expect "observe: argv" "$(jq -c '.argv' "$tmp/seen.json")" '["observe","record"]'
+expect "observe: stdin sem conteúdo" "$(jq -c '.stdin | fromjson' "$tmp/seen.json")" '{"session_id":"c1","tool_name":"read_file","tool_input":{"file_path":"/x/y.md"}}'
+
+for k in AbsolutePath path; do
+    rm -f "$tmp/seen.json"
+    bash "$OB" <<<"{\"conversationId\":\"c2\",\"toolCall\":{\"name\":\"t\",\"args\":{\"$k\":\"/a/b\"}}}" >/dev/null
+    expect "observe: $k vira file_path" "$(jq -r '.stdin | fromjson | .tool_input.file_path' "$tmp/seen.json")" "/a/b"
+done
+
+rm -f "$tmp/seen.json"
+out="$(SECOND_BRAIN_HOOKS=0 bash "$OB" <<<"$PAYLOAD")"
+expect "observe: HOOKS=0 dá {}" "$out" "{}"
+[[ ! -e "$tmp/seen.json" ]] || { echo "FALHA: HOOKS=0 chamou o sb.py"; fail=1; }
+out="$(SB_OBSERVE=0 bash "$OB" <<<"$PAYLOAD")"
+expect "observe: SB_OBSERVE=0 dá {}" "$out" "{}"
+[[ ! -e "$tmp/seen.json" ]] || { echo "FALHA: SB_OBSERVE=0 chamou o sb.py"; fail=1; }
+
+out="$(SECOND_BRAIN_VAULT="$tmp/sem-vault" bash "$OB" <<<'lixo{')"; rc=$?
+expect "observe: vault sem sb.py dá {}" "$out" "{}"; expect "observe: vault sem sb.py exit 0" "$rc" "0"
+out="$(bash "$OB" <<<'lixo{')"; rc=$?
+expect "observe: stdin lixo dá {}" "$out" "{}"; expect "observe: stdin lixo exit 0" "$rc" "0"
+
+# --- hooks count e Stop (estado e vault falsos) ---
+CNT="$ROOT/antigravity/hooks/second-brain-count.sh"
+STP="$ROOT/antigravity/hooks/second-brain-stop.sh"
+AS="$tmp/state/agy"
+cnt() { # $1 = sessão, $2 = ferramenta, $3 = CommandLine (opcional)
+    jq -cn --arg s "$1" --arg t "$2" --arg c "${3:-}" \
+        '{conversationId: $s, toolCall: {name: $t, args: (if $c == "" then {} else {CommandLine: $c} end)}}' | bash "$CNT"
+}
+stp() { # $1 = sessão, $2 = terminationReason (padrão NO_TOOL_CALL)
+    jq -cn --arg s "$1" --arg r "${2-NO_TOOL_CALL}" '{conversationId: $s, terminationReason: $r}' | bash "$STP"
+}
+writes() { for _ in $(seq "$2"); do cnt "$1" write_file >/dev/null; done; }
+n() { grep -cx "$2" "$AS/$1.state" 2>/dev/null; }
+
+unset SECOND_BRAIN_MIN_EDITS
+# 1. contagem
+for t in write_file edit_file write_to_file replace_file_content multi_replace_file_content apply_patch create_file delete_file edit_notebook; do
+    out="$(cnt k1 "$t")"; expect "count: $t responde {}" "$out" "{}"
+done
+expect "count: 9 tools de edição viram w" "$(n k1 w)" "9"
+cnt k1 run_command 'echo x > /tmp/f' >/dev/null
+cnt k1 run_command 'rm a' >/dev/null
+cnt k1 run_command 'sed -i s/a/b/ f' >/dev/null
+expect "count: run_command de escrita vira w" "$(n k1 w)" "12"
+cnt k1 run_command 'ls -la' >/dev/null
+cnt k1 read_file >/dev/null
+expect "count: ls e read_file não contam" "$(n k1 w)" "12"
+expect "count: sem s" "$(n k1 s)" "0"
+expect "count: só uma letra por linha" "$(grep -cvx '[ws]' "$AS/k1.state")" "0"
+
+# 2. synced
+cnt k2 run_command 'python3 vault_sync.py' >/dev/null
+expect "count: vault_sync vira s" "$(n k2 s)" "1"
+cnt k2 run_command 'python3 sb.py sync' >/dev/null
+expect "count: sb.py sync vira s" "$(n k2 s)" "2"
+expect "count: s tem precedência sobre w" "$(n k2 w)" "0"
+writes k3 5
+cnt k3 run_command 'python3 sb.py candidate add --kind trap --title x > /dev/null' >/dev/null
+expect "count: candidate add com redirecionamento vira s" "$(n k3 s)" "1"
+expect "stop: candidate add impede o lembrete" "$(stp k3)" "{}"
+[[ ! -e "$AS/k3.reminded" ]] || { echo "FALHA: stop criou marker com synced"; fail=1; }
+
+# 3. limiar
+writes k4 4
+expect "stop: 4 escritas dá {}" "$(stp k4)" "{}"
+writes k5 5
+out="$(stp k5)"; rc=$?
+expect "stop: 5 escritas exit 0" "$rc" "0"
+expect "stop: 5 escritas pede continue" "$(jq -r '.decision' <<<"$out")" "continue"
+has "stop: reason cita a contagem" "Esta sessão fez 5 edições" "$(jq -r '.reason' <<<"$out")"
+writes k6 2
+expect "stop: MIN_EDITS=2 lembra com 2" "$(SECOND_BRAIN_MIN_EDITS=2 stp k6 | jq -r '.decision')" "continue"
+writes k7 1
+expect "stop: MIN_EDITS=2 com 1 dá {}" "$(SECOND_BRAIN_MIN_EDITS=2 stp k7)" "{}"
+writes k8 4
+expect "stop: MIN_EDITS=abc cai no padrão (4 dá {})" "$(SECOND_BRAIN_MIN_EDITS=abc stp k8)" "{}"
+writes k8 1
+expect "stop: MIN_EDITS=abc cai no padrão (5 lembra)" "$(SECOND_BRAIN_MIN_EDITS=abc stp k8 | jq -r '.decision')" "continue"
+
+# 4. uma vez só
+[[ -e "$AS/k5.reminded" ]] || { echo "FALHA: stop não criou o marker"; fail=1; }
+expect "stop: segunda chamada dá {}" "$(stp k5)" "{}"
+
+# 5. terminationReason
+writes k9 6
+expect "stop: MAX_STEPS dá {}" "$(stp k9 MAX_STEPS)" "{}"
+expect "stop: sem terminationReason dá {}" "$(jq -cn '{conversationId:"k9"}' | bash "$STP")" "{}"
+[[ ! -e "$AS/k9.reminded" ]] || { echo "FALHA: stop criou marker sem NO_TOOL_CALL"; fail=1; }
+expect "stop: NO_TOOL_CALL ainda lembra depois" "$(stp k9 | jq -r '.decision')" "continue"
+
+# 6. gate desligado
+out="$(SECOND_BRAIN_HOOKS=0 cnt k10 write_file)"
+expect "count: HOOKS=0 dá {}" "$out" "{}"
+[[ ! -e "$AS/k10.state" ]] || { echo "FALHA: HOOKS=0 gravou estado"; fail=1; }
+writes k11 6
+expect "stop: HOOKS=0 dá {}" "$(SECOND_BRAIN_HOOKS=0 stp k11)" "{}"
+[[ ! -e "$AS/k11.reminded" ]] || { echo "FALHA: HOOKS=0 criou marker"; fail=1; }
+expect "stop: vault ausente dá {}" "$(SECOND_BRAIN_VAULT="$tmp/sem-vault" stp k11)" "{}"
+
+# 7. isolamento e sanitização
+writes k12 5
+expect "stop: outra sessão sem estado dá {}" "$(stp k13)" "{}"
+expect "stop: sessão k12 lembra sem afetar k13" "$(stp k12 | jq -r '.decision')" "continue"
+[[ ! -e "$AS/k13.reminded" ]] || { echo "FALHA: marker vazou para outra sessão"; fail=1; }
+cnt '../x' write_file >/dev/null
+[[ -f "$AS/x.state" ]] || { echo "FALHA: conversationId '../x' não foi sanitizado"; fail=1; }
+[[ ! -e "$tmp/state/x.state" && ! -e "$tmp/x.state" ]] || { echo "FALHA: '../x' escapou do diretório de estado"; fail=1; }
+cnt 'a/../b' write_file >/dev/null
+[[ -f "$AS/ab.state" ]] || { echo "FALHA: 'a/../b' não virou 'ab'"; fail=1; }
+
+# estados com mais de 7 dias somem quando o lembrete dispara
+echo w >"$AS/velha.state"; touch -d '10 days ago' "$AS/velha.state"
+writes k14 5
+stp k14 >/dev/null
+[[ ! -e "$AS/velha.state" ]] || { echo "FALHA: estado antigo não foi apagado"; fail=1; }
+[[ -f "$AS/k14.state" ]] || { echo "FALHA: limpeza apagou o estado novo"; fail=1; }
+
+# estado sem escrita: o marker não nasce, então o Stop nunca lembra
+if [[ "$(id -u)" != 0 ]]; then
+    writes k15 5
+    chmod 500 "$AS"
+    for i in 1 2 3; do
+        expect "stop: estado sem escrita dá {} ($i)" "$(stp k15)" "{}"
+    done
+    chmod 700 "$AS"
+else
+    echo "aviso: root ignora chmod; teste de estado sem escrita pulado"
+fi
+
+# Stops concorrentes: o marker atômico deixa passar exatamente um lembrete
+writes k16 5
+for i in $(seq 10); do stp k16 >"$tmp/par.$i" & done
+wait
+expect "stop: 10 paralelos dão um só continue" "$(cat "$tmp"/par.* | grep -c '"decision":"continue"')" "1"
+expect "stop: 10 paralelos, o resto dá {}" "$(cat "$tmp"/par.* | grep -cx '{}')" "9"
+
+for s in "$CNT" "$STP"; do
+    out="$(bash "$s" <<<'lixo{')"; rc=$?
+    expect "$(basename "$s"): stdin lixo dá {}" "$out" "{}"; expect "$(basename "$s"): stdin lixo exit 0" "$rc" "0"
+done
+unset SECOND_BRAIN_VAULT SECOND_BRAIN_STATE_DIR SEEN
+
 # JSON inválido no alvo: não sobrescreve
 echo '{broken' >"$S"
 bash "$ROOT/antigravity/render_config.sh" >/dev/null 2>&1; rc=$?

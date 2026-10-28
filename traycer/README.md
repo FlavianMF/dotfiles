@@ -44,3 +44,19 @@ To bring edits made in the Traycer UI back to the repo, compare the two files an
 ```bash
 diff ~/.traycer/agent-selection-guide.md traycer/agent-selection-guide.md
 ```
+
+## Antigravity: Claude and GPT-OSS models
+
+Traycer's ACP handshake sends no `clientInfo`, so `agy_acp_server` hides the non-Gemini models.
+It offers them only to clients named JetBrains, Zed or Xcode. `traycer/agy-acp-wrapper` adds
+`clientInfo: {name: "zed"}` to `initialize` and passes everything else through. It identifies
+Traycer as Zed, so Google can change that rule at any time.
+
+`traycer/install.sh` runs `traycer/install_agy_wrapper.sh`. The script puts the wrapper in
+`~/.local/bin/agy_acp_server`, with a `localharness_external` symlink beside it. It touches
+nothing under `~/.traycer`. Rerun it after Traycer installs a new Antigravity pack.
+
+Then, in Traycer, open Settings → Providers → Antigravity, select the PATH install and restart
+the host. The choice lands in `~/.traycer/host/config/provider-overrides.json` as
+`"selected": {"kind": "path"}`. The default is `{"kind": "bundled"}`, which ignores the wrapper.
+Env overrides: `TRAYCER_AGY_CLIENT_NAME`, `TRAYCER_AGY_CLIENT_VERSION`, `AGY_ACP_REAL`.

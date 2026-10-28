@@ -1,0 +1,18 @@
+{
+  "second-brain": {
+    "SessionStart": [
+      { "type": "command", "command": "\"@REPO@/antigravity/hooks/second-brain-session-start.sh\"" }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "command": "\"@REPO@/antigravity/hooks/second-brain-count.sh\"" }
+        ]
+      }
+    ],
+    "Stop": [
+      { "type": "command", "command": "\"@REPO@/antigravity/hooks/second-brain-stop.sh\"" }
+    ]
+  }
+}
