@@ -4,7 +4,7 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 command -v zsh >/dev/null || { echo "zsh ausente: teste ignorado"; exit 0; }
 tmp="$(mktemp -d)"
-trap 'rm -r "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 fail=0
 
 export CLAUDE_CONFIG_DIR="$tmp/userconf"; mkdir -p "$CLAUDE_CONFIG_DIR"

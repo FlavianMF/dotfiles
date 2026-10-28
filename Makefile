@@ -145,4 +145,4 @@ antigravity-config:
 	./antigravity/render_config.sh
 
 test:
-	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" || exit 1; done
+	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" </dev/null || exit 1; done

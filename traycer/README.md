@@ -27,6 +27,18 @@ changes the build, the install fails with a mismatch. Review the new build, run
 
 Login and state live in `~`. Nothing from Traycer goes into git.
 
+## Voice dictation (STT)
+
+Traycer's local speech-to-text engine (`sherpa-onnx-node`) needs the `parakeet-tdt-0.6b-v3` model in `~/.traycer/models/stt/parakeet-tdt-0.6b-v3/`. The folder holds `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx` and `tokens.txt`.
+
+By default, `ai.traycer.host.service` downloads these files from `huggingface.co` when they are missing. Some networks block that host or intercept its TLS with a CA that Node does not trust. The host log then shows `unable to verify the first certificate` and the model never installs.
+
+`traycer/install.sh` avoids the problem. If any of the four files is missing or empty, it downloads the upstream `k2-fsa/sherpa-onnx` release archive from GitHub (about 487 MB). Then it checks the SHA-256 and extracts the four files into the folder above. If the download or the check fails, the script only warns and the AppImage install still succeeds.
+
+- `TRAYCER_STT_SHA256` overrides the pinned SHA-256, for example after upstream re-publishes the archive.
+- `--dry-run` reports whether the model is already installed.
+- The install needs about 1.2 GB of free space in `$TMPDIR` (default `/tmp`).
+
 ## Agent selection guide
 
 `traycer/agent-selection-guide.md` is the versioned copy of `~/.traycer/agent-selection-guide.md`. It routes work local first: `opencode` with `llamacpp:gpt-oss-20b`, served by `llama-server` in WSL2 (`bin/llm-serve main`, `llm-health`, `llm-stop`). It lists the escalation triggers to the cloud, keeps orchestration, second opinions and security review in the cloud, and sets the artifact handoff rule. Cloud and `claude` `haiku` `low` stay as fallback.

@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/claude/hooks/ecc-session-start.sh"
 ECC="$ROOT/claude/ecc-project.sh"
 tmp="$(mktemp -d)"
-trap 'rm -r "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 fail=0
 
 export CLAUDE_CONFIG_DIR="$tmp/userconf"; mkdir -p "$CLAUDE_CONFIG_DIR"

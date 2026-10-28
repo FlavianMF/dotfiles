@@ -4,7 +4,7 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PP="$ROOT/claude/plugins-project.sh"
 tmp="$(mktemp -d)"
-trap 'rm -r "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 fail=0
 P="figma@claude-plugins-official"
 

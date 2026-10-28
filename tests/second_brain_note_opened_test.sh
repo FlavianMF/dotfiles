@@ -3,7 +3,7 @@
 set -u
 HOOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/claude/hooks/second-brain-note-opened.sh"
 tmp="$(mktemp -d)"
-trap 'rm -r "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -r "$tmp"' EXIT
 vault="$tmp/vault"; state="$tmp/state"
 mkdir -p "$vault/20_Permanent_Notes" "$vault/00_META/manifests"
 fail=0
