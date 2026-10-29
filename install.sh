@@ -135,6 +135,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [antigravity]="Antigravity CLI (agy, ~/.local/bin, self-updating) + ~/.gemini/config and ~/.gemini/antigravity-cli config"
     [ccr]="Claude Code Router (npm, ~/.local, version in ccr/VERSION); providers and routes are set in its UI"
     [traycer]="Traycer desktop (AppImage pinned by sha256 in traycer/SHA256, ~/.local/opt/traycer)"
+    [obsidian]="Obsidian (AppImage pinned by obsidian/VERSION + SHA256, ~/.local/opt/obsidian) + registers ~/obsidian_vault"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
     [hopper]="Hopper Disassembler 6.4.2 demo (.deb pinned by size+SHA-1) + Xvfb deps, backend of the rea MCP"
     [jev]="jev-workflow (clone + npm ci + build in ~/projetos_claude/jev-workflow); the E hook in settings.json stays in shadow mode"
@@ -165,6 +166,7 @@ declare -A SELECTED_COMPONENTS=(
     [eim]=1
     [hopper]=1
     [claudeskills]=1
+    [obsidian]=0
     [codex]=0
     [opencode]=0
     [antigravity]=0
@@ -199,7 +201,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills codex opencode antigravity ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
     local current=0
     local done=0
     local old_stty
@@ -864,6 +866,12 @@ if [[ ${SELECTED_COMPONENTS[traycer]} -eq 1 ]]; then
     HARNESS_CHECKLIST+=(
         "Traycer: systemd=true em /etc/wsl.conf (depois 'wsl --shutdown'), navegador padrão no WSL e login no primeiro 'traycer' (ver traycer/README.md)"
     )
+fi
+
+if [[ ${SELECTED_COMPONENTS[obsidian]} -eq 1 ]]; then
+    # After the obsidian_vault clone above: the installer registers the vault in Obsidian's config.
+    log_info "Installing Obsidian (obsidian/VERSION + SHA256)..."
+    as_user bash "$REPO_DIR/obsidian/install.sh" "${sub_dry[@]}" || log_warn "obsidian install failed"
 fi
 
 CODEX_ACTIVE=0

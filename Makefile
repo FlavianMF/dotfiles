@@ -1,4 +1,4 @@
-.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: install help clean update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -31,6 +31,8 @@ help:
 	@echo "  make ccr-update VERSION=x.y.z - Troca o pin em ccr/VERSION e instala"
 	@echo "  make traycer-install  - Instala o Traycer (AppImage conferido por traycer/SHA256)"
 	@echo "  make traycer-update   - Baixa o build atual e regrava traycer/SHA256 (revise o diff antes de instalar)"
+	@echo "  make obsidian-install - Instala o Obsidian (AppImage conferido por obsidian/SHA256) e registra ~/obsidian_vault"
+	@echo "  make obsidian-update [VERSION=x.y.z] - Fixa a release (padrão: latest) em obsidian/VERSION + SHA256 (revise o diff antes de instalar)"
 	@echo "  make antigravity-install - Instala o Antigravity CLI (agy) em ~/.local/bin, sha512 do manifesto conferido"
 	@echo "  make antigravity-config  - Reaplica MCPs, permissões, skills e hooks do agy em ~/.gemini (merge, não link)"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
@@ -116,9 +118,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh bin/llm-serve antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh bin/llm-serve antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -137,6 +139,12 @@ traycer-install:
 
 traycer-update:
 	./traycer/install.sh --update
+
+obsidian-install:
+	./obsidian/install.sh
+
+obsidian-update:
+	./obsidian/install.sh --update $(VERSION)
 
 antigravity-install:
 	./antigravity/install.sh
