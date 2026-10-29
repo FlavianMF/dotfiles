@@ -216,16 +216,6 @@
             "timeout": 4
           }
         ]
-      },
-      {
-        "matcher": "Bash|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/sb-prune.sh\"",
-            "timeout": 4
-          }
-        ]
       }
     ],
     "SubagentStop": [
