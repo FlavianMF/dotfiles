@@ -10,13 +10,15 @@ Spend quota in this order: the `claude` Pro plan, then the `antigravity` Google 
 | Orchestrator, on a trigger | `claude` | `opus` | `high` | Pro |
 | Self-contained implementation, tests included | `claude` | `sonnet` | `high` | Pro |
 | Bounded task, web research | `antigravity` | `gemini-3.8-flash` | `medium` | Gemini |
+| Git operation (commit, merge, push, rebase) | `claude` | `haiku` | `low` | Pro |
 | Mechanical task | `claude` | `haiku` | `low` | Pro |
 | Review | `antigravity` | `claude-opus-5.5` | `high` | 3p |
 | Second opinion | `claude` | `fable` | `high` | Pro |
 | Second opinion, alternatives | `antigravity` | `claude-opus-5.5` or `gemini-4-argon` | `high` | 3p or Gemini |
 
 - Orchestrator triggers for `opus`: an architecture decision, a debug stuck after 2 attempts, or the final review of a sensitive change. Return to `sonnet` afterwards.
-- Mechanical tasks are commit, merge, formatting and renaming.
+- Mechanical tasks are formatting and renaming.
+- Git operations always use `claude` `haiku` `low`. Give the agent the commit message and the file list, and tell it to follow the `git-ops` rules: no push, no AI attribution.
 - Sensitive topics are secrets, authentication, payments, migrations, deploy and CI.
 - Implementers and reviewers use the `traycer-implement` and `traycer-review` skills.
 
