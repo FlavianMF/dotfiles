@@ -48,6 +48,10 @@ expect "JSON inválido" "$(check "$(fixture l '{"hooks": ')")" "erro"
 expect ".hooks ausente" "$(check "$(fixture m '{"env":{}}')")" "erro"
 expect ".hooks string" "$(check "$(fixture n '{"hooks":"sb-prune"}')")" "erro"
 expect ".hooks array" "$(check "$(fixture o '{"hooks":[{"command":"sb-prune"}]}')")" "erro"
+: >"$tmp/vazio.json"
+expect "arquivo vazio" "$(check "$tmp/vazio.json")" "erro"
+expect "dois documentos JSON" "$(check "$(fixture p '{"hooks":{}}
+{"hooks":{}}')")" "erro"
 mkdir "$tmp/vazio"
 expect "jq fora do PATH" "$(PATH="$tmp/vazio" check "$tmp/a.json")" "erro"
 
