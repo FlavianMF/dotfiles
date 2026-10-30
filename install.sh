@@ -146,6 +146,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [shellcheck]="shellcheck (shell script linter, used by make lint)"
     [yazi]="yazi (terminal file manager)"
     [usbip]="usbip client (attach USB devices shared by usbipd-win from Windows)"
+    [tailscale]="Tailscale VPN Mesh (WireGuard client para acesso remoto seguro)"
 )
 
 # Packages for each optional component
@@ -181,6 +182,7 @@ declare -A SELECTED_COMPONENTS=(
     [shellcheck]=0
     [yazi]=0
     [usbip]=0
+    [tailscale]=0
 )
 
 # System-wide vs current-user-only install scope for non-apt tools (Neovim, lazygit, fd)
@@ -872,6 +874,11 @@ if [[ ${SELECTED_COMPONENTS[obsidian]} -eq 1 ]]; then
     # After the obsidian_vault clone above: the installer registers the vault in Obsidian's config.
     log_info "Installing Obsidian (obsidian/VERSION + SHA256)..."
     as_user bash "$REPO_DIR/obsidian/install.sh" "${sub_dry[@]}" || log_warn "obsidian install failed"
+fi
+
+if [[ ${SELECTED_COMPONENTS[tailscale]} -eq 1 ]]; then
+    log_info "Installing Tailscale..."
+    bash "$REPO_DIR/tailscale/install.sh" "${sub_dry[@]}" || log_warn "tailscale install failed"
 fi
 
 CODEX_ACTIVE=0
