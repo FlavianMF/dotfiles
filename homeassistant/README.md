@@ -4,6 +4,10 @@ Esta pasta contém a stack docker-compose para rodar o **Home Assistant Core** e
 
 ---
 
+
+> [!TIP]
+> Para o procedimento detalhado e o guia de deploy automatizado via SSH / Tailscale com o comando `make ha-vps-deploy`, consulte [VPS_DEPLOY.md](VPS_DEPLOY.md).
+
 ## 1. Pré-Requisitos na VPS
 
 1. **Docker e Docker Compose** instalados na VPS.
