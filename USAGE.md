@@ -221,6 +221,42 @@ git pull
 # Configurações já estão em sync!
 ```
 
+
+## 🎮 Controle Remoto & Home Assistant
+
+O repositório inclui automação para controle remoto da máquina física e do Windows via Home Assistant (app mobile no celular) e utilitário de linha de comando no WSL2:
+
+### 1. Linha de Comando no WSL2 (`bin/pc-ctl`)
+Utilitário para gerenciar energia, aplicativos e diagnósticos com suporte a `--dry-run`:
+```bash
+# Instalar o binário no PATH (~/.local/bin/pc-ctl)
+make pc-ctl-install
+
+# Checar status do sistema, Windows Host, SSH e Traycer
+pc-ctl status
+
+# Simulação segura de comandos
+pc-ctl --dry-run shutdown
+pc-ctl --dry-run sleep
+pc-ctl --dry-run app obsidian
+
+# Executar testes unitários TDD
+make pc-ctl-test
+```
+
+### 2. Stack da VPS (Home Assistant + Mosquitto)
+```bash
+# Gerar pacote pronto para deploy na VPS
+make ha-vps-pack
+# Envie o pacote para a VPS e siga o passo a passo em homeassistant/README.md
+```
+
+### 3. Provisionamento no Windows (HASS.Agent)
+Em um terminal PowerShell como Administrador no Windows:
+```powershell
+.\powershell\hass-agent\install-hass-agent.ps1 -RegisterCommands
+```
+
 ## 🆘 Troubleshooting Comum
 
 ### "Permission denied" ao rodar install.sh
