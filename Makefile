@@ -1,4 +1,4 @@
-.PHONY: install help clean pc-ctl-install pc-ctl-test ha-vps-pack update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: install help clean pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -42,7 +42,8 @@ help:
 	@echo "Remote Control & Home Assistant:"
 	@echo "  make pc-ctl-install   - Cria link de bin/pc-ctl em ~/.local/bin"
 	@echo "  make pc-ctl-test      - Executa os testes unitarios TDD de bin/pc-ctl"
-	@echo "  make ha-vps-pack      - Gera tarball da stack Home Assistant para envio a VPS"
+	@echo "  make ha-vps-pack      - Gera tarball da stack Home Assistant para envio a VPS
+	@echo "  make ha-vps-deploy [VPS=user@ip] - Deploy automatizado via SSH para a VPS""
 
 install:
 	chmod +x install.sh
@@ -123,9 +124,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/pc-ctl antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/pc-ctl bin/ha-deploy antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/pc-ctl antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/pc-ctl bin/ha-deploy antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -172,3 +173,6 @@ pc-ctl-test:
 ha-vps-pack:
 	@tar -czvf /tmp/homeassistant-vps-stack.tar.gz homeassistant/
 	@echo "✓ Pacote gerado em /tmp/homeassistant-vps-stack.tar.gz pronto para envio à VPS."
+
+ha-vps-deploy:
+	@./bin/ha-deploy $(VPS)
