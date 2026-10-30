@@ -5,7 +5,8 @@ Traycer's ACP `initialize` omits `clientInfo`, so agy_acp_server hides the Claud
 GPT-OSS models (it offers them only to JetBrains, Zed and Xcode). This wrapper adds a
 clientInfo to `initialize` when absent, then proxies communication bidirectionally.
 It also estimates and injects token `usage` metrics into `session/prompt` responses
-so Traycer displays accurate token consumption for Gemini / Antigravity models.
+and ensures `contextWindow` metadata is present on model catalogs so Traycer displays
+accurate token consumption for Gemini / Antigravity models in its status bar.
 Install with traycer/install_agy_wrapper.sh.
 
 Env:
@@ -55,6 +56,15 @@ def extract_text(data) -> str:
     return ""
 
 
+def model_context_window(model_id: str) -> int:
+    m = (model_id or "").lower()
+    if "claude" in m:
+        return 200_000
+    if "gpt" in m:
+        return 131_072
+    return 1_048_576  # 1M default for Gemini / Antigravity
+
+
 class AcpState:
     def __init__(self):
         self.lock = threading.Lock()
@@ -65,6 +75,7 @@ class AcpState:
         self.session_context_tokens = {}
         self.turn_output_tokens = {}
         self.pending_prompts = {}
+        self.pending_new_sessions = set()
         self.session_models = {}
 
     def process_stdin(self, line: bytes) -> bytes:
@@ -94,18 +105,24 @@ class AcpState:
         req_id = msg.get("id")
 
         with self.lock:
-            # 2. Track model selection
-            if method == "session/set_model" and isinstance(params, dict):
+            # 2. Track new session requests
+            if method == "session/new" and req_id is not None:
+                self.pending_new_sessions.add(req_id)
+                if isinstance(params, dict):
+                    model_id = params.get("modelId") or params.get("model")
+                    if model_id:
+                        self.session_models["default"] = model_id
+
+            # 3. Track model selection
+            elif method == "session/set_model" and isinstance(params, dict):
                 sid = params.get("sessionId")
                 model_id = params.get("modelId") or params.get("value")
                 if sid and model_id:
                     self.session_models[sid] = model_id
-            elif method == "session/new" and isinstance(params, dict):
-                model_id = params.get("modelId") or params.get("model")
                 if model_id:
                     self.session_models["default"] = model_id
 
-            # 3. Handle prompt request
+            # 4. Handle prompt request
             elif method == "session/prompt" and req_id is not None:
                 sid = "default"
                 prompt_tokens = 0
@@ -116,14 +133,19 @@ class AcpState:
                 if sid not in self.session_context_tokens:
                     self.session_context_tokens[sid] = self.baseline_tokens
                 self.session_context_tokens[sid] += prompt_tokens
+                active_model = (
+                    self.session_models.get(sid)
+                    or self.session_models.get("default")
+                    or "gemini-3.8-flash"
+                )
                 self.pending_prompts[req_id] = {
                     "sessionId": sid,
                     "inputTokens": self.session_context_tokens[sid],
-                    "modelId": self.session_models.get(sid),
+                    "modelId": active_model,
                 }
                 self.turn_output_tokens[sid] = 0
 
-            # 4. Clean up closed sessions
+            # 5. Clean up closed sessions
             elif method in ("session/delete", "session/close") and isinstance(params, dict):
                 sid = params.get("sessionId")
                 if sid:
@@ -156,8 +178,36 @@ class AcpState:
                         self.turn_output_tokens[sid] = self.turn_output_tokens.get(sid, 0) + out_tokens
             return line
 
-        # 2. Check if this is a response to session/prompt
         req_id = msg.get("id")
+
+        # 2. Check if this is a response to session/new
+        if req_id is not None:
+            with self.lock:
+                is_new_session = req_id in self.pending_new_sessions
+                if is_new_session:
+                    self.pending_new_sessions.remove(req_id)
+
+            if is_new_session:
+                result = msg.get("result")
+                if isinstance(result, dict):
+                    sid = result.get("sessionId")
+                    models = result.get("models")
+                    if isinstance(models, dict):
+                        cur_model = models.get("currentModelId")
+                        if cur_model:
+                            with self.lock:
+                                if sid:
+                                    self.session_models[sid] = cur_model
+                                self.session_models["default"] = cur_model
+                        avail = models.get("availableModels")
+                        if isinstance(avail, list):
+                            for m in avail:
+                                if isinstance(m, dict) and "contextWindow" not in m:
+                                    mid = m.get("modelId", "")
+                                    m["contextWindow"] = model_context_window(mid)
+                    return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+
+        # 3. Check if this is a response to session/prompt
         if req_id is None:
             return line
 
@@ -168,23 +218,41 @@ class AcpState:
             return line
 
         result = msg.get("result")
-        if isinstance(result, dict) and "usage" not in result:
+        if isinstance(result, dict):
             sid = info["sessionId"]
-            input_tokens = info["inputTokens"]
-            with self.lock:
-                out_tokens = max(1, self.turn_output_tokens.pop(sid, 0))
-                self.session_context_tokens[sid] = input_tokens + out_tokens
-            total_tokens = input_tokens + out_tokens
-            usage_obj = {
-                "inputTokens": input_tokens,
-                "outputTokens": out_tokens,
-                "totalTokens": total_tokens,
-            }
-            model_id = info.get("modelId")
-            if model_id:
-                usage_obj["modelId"] = model_id
-            result["usage"] = usage_obj
-            return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+            model_id = (
+                info.get("modelId")
+                or self.session_models.get(sid)
+                or self.session_models.get("default")
+                or "gemini-3.8-flash"
+            )
+            cw = model_context_window(model_id)
+
+            if "usage" not in result:
+                input_tokens = info["inputTokens"]
+                with self.lock:
+                    out_tokens = max(1, self.turn_output_tokens.pop(sid, 0))
+                    self.session_context_tokens[sid] = input_tokens + out_tokens
+                total_tokens = input_tokens + out_tokens
+                usage_obj = {
+                    "inputTokens": input_tokens,
+                    "outputTokens": out_tokens,
+                    "totalTokens": total_tokens,
+                    "contextTokens": input_tokens,
+                    "contextWindow": cw,
+                    "modelId": model_id,
+                }
+                result["usage"] = usage_obj
+                return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+            elif isinstance(result.get("usage"), dict):
+                u = result["usage"]
+                if "contextWindow" not in u:
+                    u["contextWindow"] = cw
+                if "contextTokens" not in u:
+                    u["contextTokens"] = u.get("inputTokens", 0)
+                if "modelId" not in u:
+                    u["modelId"] = model_id
+                return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
 
         return line
 

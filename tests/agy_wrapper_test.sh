@@ -34,7 +34,7 @@ out="$(printf '%s\n' "$given" | "$W")"
 has "não sobrescreve clientInfo existente" '"name":"meu"' "$out"
 [[ "$out" != *zed* ]] || { echo "FALHA: sobrescreveu clientInfo"; fail=1; }
 
-other=$'{"id":2,"method":"session/new","params":{}}\nnot json'
+other=$'{"id":2,"method":"session/other","params":{}}\nnot json'
 out="$(printf '%s\n' "$other" | "$W" | tail -n +2)"
 expect "demais mensagens passam intactas" "$out" "$other"
 
@@ -44,7 +44,7 @@ out="$(AGY_ACP_REAL='' TRAYCER_HOME_DIR="$tmp/none" "$W" </dev/null 2>&1)"; rc=$
 expect "sem servidor real sai com 127" "$rc" "127"
 has "sem servidor real avisa" "cannot locate" "$out"
 
-# --- testes de estimativa e injeção de tokens (ACP session/prompt) ---
+# --- testes de estimativa e injeção de tokens (ACP session/prompt e session/new) ---
 cat >"$tmp/acp_server" <<'MOCK'
 #!/usr/bin/env python3
 import sys, json
@@ -58,7 +58,23 @@ for line in iter(sys.stdin.readline, ""):
         continue
     req_id = msg.get("id")
     method = msg.get("method")
-    if method == "session/prompt":
+    if method == "session/new":
+        sys.stdout.write(json.dumps({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "sessionId": "s-new-123",
+                "models": {
+                    "currentModelId": "gemini-3.8-flash-high",
+                    "availableModels": [
+                        {"modelId": "gemini-3.8-flash-high", "name": "Gemini 3.8 Flash"},
+                        {"modelId": "claude-opus-5-5-high", "name": "Claude Opus"}
+                    ]
+                }
+            }
+        }) + "\n")
+        sys.stdout.flush()
+    elif method == "session/prompt":
         sid = msg.get("params", {}).get("sessionId", "default")
         # Simula envio de chunks de texto via session/update
         sys.stdout.write(json.dumps({
@@ -83,11 +99,18 @@ for line in iter(sys.stdin.readline, ""):
 MOCK
 chmod +x "$tmp/acp_server"
 
+s_new='{"jsonrpc":"2.0","id":5,"method":"session/new","params":{"cwd":"/tmp","mcpServers":[]}}'
+out_new="$(echo "$s_new" | AGY_ACP_REAL="$tmp/acp_server" "$W")"
+has "injeta contextWindow nos modelos em session/new" '"contextWindow":1048576' "$out_new"
+has "injeta contextWindow do claude" '"contextWindow":200000' "$out_new"
+
 p1='{"jsonrpc":"2.0","id":10,"method":"session/prompt","params":{"sessionId":"s1","prompt":[{"type":"text","text":"pergunta um"}]}}'
 out="$(echo "$p1" | AGY_ACP_REAL="$tmp/acp_server" "$W")"
 has "repassa notification session/update" '"agent_message_chunk"' "$out"
 has "injeta usage no resultado do prompt" '"usage":{"inputTokens":' "$out"
 has "calcula totalTokens" '"totalTokens":' "$out"
+has "injeta contextWindow no usage" '"contextWindow":1048576' "$out"
+has "injeta contextTokens no usage" '"contextTokens":' "$out"
 
 # Preserva usage se o servidor já o fornecer nativamente
 cat >"$tmp/acp_server_native" <<'MOCK'
@@ -112,8 +135,9 @@ MOCK
 chmod +x "$tmp/acp_server_native"
 
 out="$(echo "$p1" | AGY_ACP_REAL="$tmp/acp_server_native" "$W")"
-has "preserva usage nativo sem sobrescrever" '"inputTokens": 123' "$out"
-has "preserva totalTokens nativo" '"totalTokens": 168' "$out"
+has "preserva usage nativo sem sobrescrever" '"inputTokens":123' "$out"
+has "preserva totalTokens nativo" '"totalTokens":168' "$out"
+has "garante contextWindow mesmo com usage nativo" '"contextWindow":1048576' "$out"
 
 # Multi-turno e propagação de modelId
 set_m='{"jsonrpc":"2.0","id":1,"method":"session/set_model","params":{"sessionId":"s1","modelId":"gemini-3.8-flash"}}'
