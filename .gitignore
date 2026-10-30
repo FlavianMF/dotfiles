@@ -50,6 +50,12 @@ secrets/*
 *.key
 *.pem
 
+# Home Assistant & Mosquitto local data and credentials
+homeassistant/mosquitto/config/password_file
+homeassistant/mosquitto/data/*
+homeassistant/mosquitto/log/*
+homeassistant/config/
+
 # Temporary files
 tmp/
 temp/

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Deploy automatizado da stack Home Assistant & Mosquitto para a VPS via Tailscale / SSH.
+# Uso: bin/ha-deploy [usuario@ip-vps]
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TARGET="${1:-${VPS_HOST:-}}"
+REMOTE_DIR="/opt/homeassistant"
+
+echo "=========================================================="
+echo "  Deploy Automatizado: Home Assistant + Mosquitto na VPS"
+echo "=========================================================="
+
+if [[ -z "$TARGET" ]]; then
+    echo "❌ Erro: Destino da VPS não especificado."
+    echo "Uso: bin/ha-deploy usuario@ip-vps"
+    echo "Ou defina a variável VPS_HOST (ex: export VPS_HOST='root@100.x.y.z')"
+    exit 1
+fi
+
+MQTT_ENV="$ROOT/secrets/mqtt.env"
+if [[ ! -f "$MQTT_ENV" ]]; then
+    echo "❌ Erro: Arquivo de credenciais 'secrets/mqtt.env' não encontrado."
+    echo "Copie de secrets/mqtt.env.example e preencha as variáveis antes do deploy:"
+    echo "  cp secrets/mqtt.env.example secrets/mqtt.env"
+    exit 1
+fi
+
+# Carrega credenciais MQTT
+# shellcheck disable=SC1090
+source "$MQTT_ENV"
+
+if [[ -z "${MQTT_USER:-}" || -z "${MQTT_PASSWORD:-}" ]]; then
+    echo "❌ Erro: MQTT_USER e MQTT_PASSWORD devem estar definidos em secrets/mqtt.env"
+    exit 1
+fi
+
+echo "[*] Testando conexão SSH com $TARGET..."
+if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$TARGET" "echo OK" >/dev/null 2>&1; then
+    echo "⚠️  Não foi possível conectar com chave SSH sem senha a $TARGET."
+    echo "Tentando conexão interativa..."
+fi
+
+echo "[*] Criando diretório remoto $REMOTE_DIR..."
+ssh "$TARGET" "mkdir -p '$REMOTE_DIR'"
+
+echo "[*] Sincronizando arquivos da stack..."
+rsync -avz --delete \
+    --exclude="mosquitto/data/*" \
+    --exclude="mosquitto/log/*" \
+    --exclude="config/*" \
+    "$ROOT/homeassistant/" "$TARGET:$REMOTE_DIR/"
+
+echo "[*] Gerando credenciais do Mosquitto no container..."
+ssh "$TARGET" "cd '$REMOTE_DIR' && \
+    docker compose run --rm mosquitto mosquitto_passwd -b -c /mosquitto/config/password_file '$MQTT_USER' '$MQTT_PASSWORD' && \
+    chmod 600 mosquitto/config/password_file"
+
+echo "[*] Iniciando containers na VPS..."
+ssh "$TARGET" "cd '$REMOTE_DIR' && docker compose up -d"
+
+echo ""
+echo "[*] Verificando status dos containers:"
+ssh "$TARGET" "cd '$REMOTE_DIR' && docker compose ps"
+
+echo ""
+echo "=========================================================="
+echo "🎉 Deploy concluído com sucesso!"
+echo "Acesse o painel do Home Assistant via Tailscale:"
+echo "  👉 http://${MQTT_HOST:-seu-ip-tailscale}:8123"
+echo "=========================================================="

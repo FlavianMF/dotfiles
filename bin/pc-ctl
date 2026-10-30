@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WIN_DIR="${WIN_SYS_DIR:-/mnt/c/Windows/System32}"
+PS_DIR="${WIN_PS_DIR:-$WIN_DIR/WindowsPowerShell/v1.0}"
+
+DRY_RUN=0
+ARGS=()
+
+show_help() {
+    cat <<'EOF'
+Uso: pc-ctl [opções] <comando> [argumentos]
+
+Utilitário de controle do sistema host Windows e integração a partir do WSL2.
+
+Comandos:
+  shutdown [--force]  Desliga o computador host (10s com aviso ou imediato com --force)
+  abort               Cancela um desligamento agendado
+  restart             Reinicia o computador host imediatamente
+  sleep               Coloca o computador host em suspensão
+  lock                Bloqueia a sessão do computador host
+  app <nome>          Abre aplicativo no host (obsidian, wt, terminal)
+  status              Exibe o status dos serviços e interoperabilidade
+
+Opções:
+  -d, --dry-run       Apenas imprime o comando sem executá-lo
+  -h, --help          Exibe este menu de ajuda
+EOF
+}
+
+execute() {
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "[DRY-RUN] $*"
+    else
+        "$@"
+    fi
+}
+
+cmd_status() {
+    echo "=== Status do Sistema ==="
+    echo -n "Windows Host: "
+    if [[ -f "$WIN_DIR/cmd.exe" ]]; then
+        if timeout 2 "$WIN_DIR/cmd.exe" /c "echo OK" >/dev/null 2>&1; then
+            echo "Interoperabilidade ativa (OK)"
+        else
+            echo "Indisponível (Falha de execução)"
+        fi
+    else
+        echo "Binário cmd.exe não encontrado em $WIN_DIR"
+    fi
+
+    echo -n "SSH: "
+    local ssh_status
+    ssh_status="$(systemctl is-active ssh 2>/dev/null || true)"
+    if [[ -z "$ssh_status" ]]; then
+        ssh_status="inactive"
+    fi
+    echo "$ssh_status"
+
+    echo -n "Traycer: "
+    if pgrep -f traycer >/dev/null 2>&1; then
+        echo "running"
+    else
+        echo "stopped"
+    fi
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run|-d)
+            DRY_RUN=1
+            shift
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ${#ARGS[@]} -eq 0 ]]; then
+    echo "Erro: Nenhum comando informado." >&2
+    show_help >&2
+    exit 1
+fi
+
+set -- "${ARGS[@]}"
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    shutdown)
+        FORCE=0
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --force|-f)
+                    FORCE=1
+                    shift
+                    ;;
+                *)
+                    shift
+                    ;;
+            esac
+        done
+        if [[ "$FORCE" -eq 1 ]]; then
+            execute "$WIN_DIR/shutdown.exe" /s /t 0 /f
+        else
+            execute "$WIN_DIR/shutdown.exe" /s /t 10 /c "Desligamento acionado via pc-ctl"
+        fi
+        ;;
+    abort)
+        execute "$WIN_DIR/shutdown.exe" /a
+        ;;
+    restart)
+        execute "$WIN_DIR/shutdown.exe" /r /t 0 /f
+        ;;
+    sleep)
+        execute "$WIN_DIR/rundll32.exe" powrprof.dll,SetSuspendState 0,1,0
+        ;;
+    lock)
+        execute "$WIN_DIR/rundll32.exe" user32.dll,LockWorkStation
+        ;;
+    app)
+        if [[ $# -eq 0 || -z "${1:-}" ]]; then
+            echo "Erro: Nome da aplicação não informado." >&2
+            echo "Aplicações válidas: obsidian, wt, terminal" >&2
+            exit 1
+        fi
+        APP_NAME="$1"
+        case "$APP_NAME" in
+            obsidian)
+                execute "$PS_DIR/powershell.exe" -NoProfile -WindowStyle Hidden -Command "Start-Process obsidian"
+                ;;
+            wt|terminal)
+                execute "$PS_DIR/powershell.exe" -NoProfile -WindowStyle Hidden -Command "Start-Process wt"
+                ;;
+            *)
+                echo "Erro: Aplicacao desconhecida: $APP_NAME" >&2
+                echo "Aplicações válidas: obsidian, wt, terminal" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    status)
+        cmd_status
+        ;;
+    help)
+        show_help
+        exit 0
+        ;;
+    *)
+        echo "Erro: Comando desconhecido: '$COMMAND'" >&2
+        show_help >&2
+        exit 1
+        ;;
+esac

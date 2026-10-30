@@ -1,0 +1,97 @@
+{
+  "$schema": "https://raw.githubusercontent.com/hass-agent/HASS.Agent/main/schema/commands.schema.json",
+  "version": 1,
+  "description": "Catalogo declarativo de comandos para o HASS.Agent no Windows 11",
+  "commands": [
+    {
+      "id": "pc_shutdown",
+      "name": "pc_shutdown",
+      "friendly_name": "Desligar Computador",
+      "description": "Desliga o computador com aviso de 10 segundos para seguranca",
+      "entity_type": "Button",
+      "command_type": "Shutdown",
+      "executable": "shutdown.exe",
+      "arguments": "/s /t 10 /c \"Desligamento acionado remotamente via Home Assistant\""
+    },
+    {
+      "id": "pc_shutdown_abort",
+      "name": "pc_shutdown_abort",
+      "friendly_name": "Cancelar Desligamento",
+      "description": "Cancela a contagem regressiva de desligamento em andamento",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "shutdown.exe",
+      "arguments": "/a"
+    },
+    {
+      "id": "pc_restart",
+      "name": "pc_restart",
+      "friendly_name": "Reiniciar Computador",
+      "description": "Reinicia o sistema imediatamente",
+      "entity_type": "Button",
+      "command_type": "Restart",
+      "executable": "shutdown.exe",
+      "arguments": "/r /t 0 /f"
+    },
+    {
+      "id": "pc_sleep",
+      "name": "pc_sleep",
+      "friendly_name": "Suspender Computador",
+      "description": "Coloca o computador em suspensao (Sleep / Standby)",
+      "entity_type": "Button",
+      "command_type": "Sleep",
+      "executable": "rundll32.exe",
+      "arguments": "powrprof.dll,SetSuspendState 0,1,0"
+    },
+    {
+      "id": "pc_lock",
+      "name": "pc_lock",
+      "friendly_name": "Bloquear Sessao",
+      "description": "Bloqueia a estacao de trabalho (Win + L)",
+      "entity_type": "Button",
+      "command_type": "Lock",
+      "executable": "rundll32.exe",
+      "arguments": "user32.dll,LockWorkStation"
+    },
+    {
+      "id": "pc_app_obsidian",
+      "name": "pc_app_obsidian",
+      "friendly_name": "Abrir Obsidian",
+      "description": "Inicia o Obsidian Vault",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -WindowStyle Hidden -Command \"Start-Process obsidian\""
+    },
+    {
+      "id": "pc_app_terminal",
+      "name": "pc_app_terminal",
+      "friendly_name": "Abrir Windows Terminal",
+      "description": "Inicia o Windows Terminal",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -WindowStyle Hidden -Command \"Start-Process wt\""
+    },
+    {
+      "id": "pc_mode_llm_boost",
+      "name": "pc_mode_llm_boost",
+      "friendly_name": "Ativar Lenovo LLM Boost",
+      "description": "Ajusta ventoinhas e energia para alta performance com IA local",
+      "entity_type": "Button",
+      "command_type": "PowerShell",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -File \"$HOME/dotfiles/powershell/Set-LenovoLlmBoost.ps1\" -Mode Performance"
+    },
+    {
+      "id": "pc_status_traycer",
+      "name": "pc_status_traycer",
+      "friendly_name": "Status do Traycer",
+      "description": "Verifica se o processo do Traycer Desktop esta em execucao",
+      "entity_type": "Sensor",
+      "command_type": "PowerShell",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"if (Get-Process -Name 'traycer-desktop','traycer' -ErrorAction SilentlyContinue) { 'Running' } else { 'Stopped' }\""
+    }
+  ]
+}
