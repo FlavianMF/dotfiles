@@ -244,6 +244,20 @@ pc-ctl --dry-run app obsidian
 make pc-ctl-test
 ```
 
+### 2. Instalação e Conexão do Tailscale
+Para habilitar a rede mesh criptografada no Linux/WSL2 ou Windows:
+```bash
+# Instalar Tailscale no WSL2
+make tailscale-install
+
+# Conectar esta máquina à sua tailnet
+sudo tailscale up
+
+# Verificar status e IP Tailscale
+make tailscale-status
+```
+No Windows, execute o instalador interativo: `.\install.ps1` (e selecione Tailscale).
+
 ### 2. Stack da VPS (Home Assistant + Mosquitto)
 ```bash
 # Gerar pacote pronto para deploy na VPS

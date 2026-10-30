@@ -44,8 +44,8 @@ if ($NeedsPS7) {
 }
 
 $SystemWide = $true
-$SelectedComponents = @{'powershell7'=$false; 'node'=$false; 'python'=$true; 'docker'=$false; 'gh'=$true; 'vscode'=$true; 'eim'=$true; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false; 'wsl'=$false; 'ubuntu'=$false; 'usbipd'=$false}
-$OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'; 'wsl'='WSL 2 platform + kernel (Windows Subsystem for Linux)'; 'ubuntu'='Ubuntu distro for WSL (skips if a distro is already installed)'; 'usbipd'='usbipd-win (share USB devices from Windows into WSL)'}
+$SelectedComponents = @{'powershell7'=$false; 'node'=$false; 'python'=$true; 'docker'=$false; 'gh'=$true; 'vscode'=$true; 'eim'=$true; 'nvim'=$false; 'ripgrep'=$false; 'fd'=$false; 'lazygit'=$false; 'wsl'=$false; 'ubuntu'=$false; 'usbipd'=$false; 'tailscale'=$false}
+$OptionalComponents = @{'powershell7'='PowerShell 7 (recommended for oh-my-posh and PSReadLine features)'; 'node'='Node.js (required for nvim treesitter)'; 'python'='Python 3.12 (dev environment)'; 'docker'='Docker (containerization)'; 'gh'='GitHub CLI (gh)'; 'vscode'='Visual Studio Code (editor)'; 'eim'='Espressif EIM (ESP-IDF Installation Manager, CLI)'; 'nvim'='Neovim + LazyVim config'; 'ripgrep'='ripgrep (fast search, used by nvim Telescope)'; 'fd'='fd (fast file finder, used by nvim Telescope)'; 'lazygit'='lazygit (git UI, used by nvim plugin)'; 'wsl'='WSL 2 platform + kernel (Windows Subsystem for Linux)'; 'ubuntu'='Ubuntu distro for WSL (skips if a distro is already installed)'; 'usbipd'='usbipd-win (share USB devices from Windows into WSL)'; 'tailscale'='Tailscale (VPN Mesh WireGuard client para acesso remoto seguro)'}
 
 function Select-Components {
     if (-not (Is-Interactive)) {
@@ -53,7 +53,7 @@ function Select-Components {
         return
     }
 
-    $options = @('systemwide', 'node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit', 'wsl', 'ubuntu', 'usbipd')
+    $options = @('systemwide', 'node', 'python', 'docker', 'gh', 'vscode', 'eim', 'nvim', 'ripgrep', 'fd', 'lazygit', 'wsl', 'ubuntu', 'usbipd', 'tailscale')
     if ($NeedsPS7) {
         $options = @('systemwide', 'powershell7') + $options[1..($options.Count - 1)]
     }
@@ -163,7 +163,7 @@ if ($SelectedComponents['usbipd'] -and -not $SelectedComponents['wsl']) {
 }
 
 $PackagesToInstall = @('JanDeDobbeleer.OhMyPosh')
-$ComponentPackages = @{'powershell7'='Microsoft.PowerShell'; 'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'; 'usbipd'='dorssel.usbipd-win'}
+$ComponentPackages = @{'powershell7'='Microsoft.PowerShell'; 'node'='OpenJS.NodeJS.LTS'; 'python'='Python.Python.3.12'; 'docker'='Docker.DockerDesktop'; 'gh'='GitHub.cli'; 'nvim'='Neovim.Neovim'; 'ripgrep'='BurntSushi.ripgrep.MSVC'; 'fd'='sharkdp.fd'; 'lazygit'='JesseDuffield.lazygit'; 'usbipd'='dorssel.usbipd-win'; 'tailscale'='Tailscale.Tailscale'}
 
 foreach ($comp in $ComponentPackages.Keys) {
     if ($SelectedComponents[$comp]) {
