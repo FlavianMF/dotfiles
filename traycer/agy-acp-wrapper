@@ -3,47 +3,215 @@
 
 Traycer's ACP `initialize` omits `clientInfo`, so agy_acp_server hides the Claude and
 GPT-OSS models (it offers them only to JetBrains, Zed and Xcode). This wrapper adds a
-clientInfo to `initialize` when absent, then execs the real server. Everything else passes
-through unchanged. Install with traycer/install_agy_wrapper.sh.
+clientInfo to `initialize` when absent, then proxies communication bidirectionally.
+It also estimates and injects token `usage` metrics into `session/prompt` responses
+so Traycer displays accurate token consumption for Gemini / Antigravity models.
+Install with traycer/install_agy_wrapper.sh.
 
 Env:
-  AGY_ACP_REAL            path of the real agy_acp_server (default: the pack in current.json)
-  TRAYCER_AGY_CLIENT_NAME clientInfo.name to send (default: zed)
+  AGY_ACP_REAL               path of the real agy_acp_server (default: the pack in current.json)
+  TRAYCER_AGY_CLIENT_NAME    clientInfo.name to send (default: zed)
   TRAYCER_AGY_CLIENT_VERSION clientInfo.version to send (default: 1.0.0)
+  TRAYCER_AGY_BASELINE_TOKENS initial prompt tokens for session overhead (default: 2500)
+  TRAYCER_AGY_DISABLE_USAGE  set to 1 to disable usage injection
 """
 import json
 import os
 import signal
 import subprocess
 import sys
+import threading
 
 
 def real_server():
     override = os.environ.get("AGY_ACP_REAL")
     if override:
         return override
-    base = os.path.join(os.environ.get("TRAYCER_HOME_DIR", os.path.expanduser("~/.traycer")),
-                        "host", "providers", "antigravity", "linux-x64")
+    base = os.path.join(
+        os.environ.get("TRAYCER_HOME_DIR", os.path.expanduser("~/.traycer")),
+        "host", "providers", "antigravity", "linux-x64",
+    )
     with open(os.path.join(base, "current.json"), encoding="utf-8") as fh:
         version = json.load(fh)["version"]
     return os.path.join(base, version, "agy_acp_server")
 
 
-def patch(line):
+def estimate_tokens(text: str) -> int:
+    if not text:
+        return 0
+    byte_len = len(text.encode("utf-8", errors="replace"))
+    return max(1, (byte_len + 3) // 4)
+
+
+def extract_text(data) -> str:
+    if isinstance(data, str):
+        return data
+    if isinstance(data, (int, float, bool)):
+        return str(data)
+    if isinstance(data, list):
+        return " ".join(filter(None, (extract_text(item) for item in data)))
+    if isinstance(data, dict):
+        return " ".join(filter(None, (extract_text(val) for val in data.values())))
+    return ""
+
+
+class AcpState:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.baseline_tokens = int(os.environ.get("TRAYCER_AGY_BASELINE_TOKENS", "2500"))
+        self.usage_disabled = os.environ.get("TRAYCER_AGY_DISABLE_USAGE", "").lower() in (
+            "1", "true", "yes"
+        )
+        self.session_context_tokens = {}
+        self.turn_output_tokens = {}
+        self.pending_prompts = {}
+        self.session_models = {}
+
+    def process_stdin(self, line: bytes) -> bytes:
+        try:
+            msg = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            return line
+        if not isinstance(msg, dict):
+            return line
+
+        method = msg.get("method")
+        params = msg.get("params")
+
+        # 1. Patch initialize clientInfo if absent
+        if method == "initialize":
+            if isinstance(params, dict) and not params.get("clientInfo"):
+                params["clientInfo"] = {
+                    "name": os.environ.get("TRAYCER_AGY_CLIENT_NAME", "zed"),
+                    "version": os.environ.get("TRAYCER_AGY_CLIENT_VERSION", "1.0.0"),
+                }
+                return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+            return line
+
+        if self.usage_disabled:
+            return line
+
+        req_id = msg.get("id")
+
+        with self.lock:
+            # 2. Track model selection
+            if method == "session/set_model" and isinstance(params, dict):
+                sid = params.get("sessionId")
+                model_id = params.get("modelId") or params.get("value")
+                if sid and model_id:
+                    self.session_models[sid] = model_id
+            elif method == "session/new" and isinstance(params, dict):
+                model_id = params.get("modelId") or params.get("model")
+                if model_id:
+                    self.session_models["default"] = model_id
+
+            # 3. Handle prompt request
+            elif method == "session/prompt" and req_id is not None:
+                sid = "default"
+                prompt_tokens = 0
+                if isinstance(params, dict):
+                    sid = params.get("sessionId", "default")
+                    prompt_data = params.get("prompt")
+                    prompt_tokens = estimate_tokens(extract_text(prompt_data))
+                if sid not in self.session_context_tokens:
+                    self.session_context_tokens[sid] = self.baseline_tokens
+                self.session_context_tokens[sid] += prompt_tokens
+                self.pending_prompts[req_id] = {
+                    "sessionId": sid,
+                    "inputTokens": self.session_context_tokens[sid],
+                    "modelId": self.session_models.get(sid),
+                }
+                self.turn_output_tokens[sid] = 0
+
+            # 4. Clean up closed sessions
+            elif method in ("session/delete", "session/close") and isinstance(params, dict):
+                sid = params.get("sessionId")
+                if sid:
+                    self.session_context_tokens.pop(sid, None)
+                    self.turn_output_tokens.pop(sid, None)
+                    self.session_models.pop(sid, None)
+
+        return line
+
+    def process_stdout(self, line: bytes) -> bytes:
+        if self.usage_disabled:
+            return line
+        try:
+            msg = json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            return line
+        if not isinstance(msg, dict):
+            return line
+
+        # 1. Accumulate generated output tokens from stream notifications
+        method = msg.get("method")
+        if method == "session/update":
+            params = msg.get("params")
+            if isinstance(params, dict):
+                sid = params.get("sessionId", "default")
+                update = params.get("update")
+                if update:
+                    out_tokens = estimate_tokens(extract_text(update))
+                    with self.lock:
+                        self.turn_output_tokens[sid] = self.turn_output_tokens.get(sid, 0) + out_tokens
+            return line
+
+        # 2. Check if this is a response to session/prompt
+        req_id = msg.get("id")
+        if req_id is None:
+            return line
+
+        with self.lock:
+            info = self.pending_prompts.pop(req_id, None)
+
+        if not info:
+            return line
+
+        result = msg.get("result")
+        if isinstance(result, dict) and "usage" not in result:
+            sid = info["sessionId"]
+            input_tokens = info["inputTokens"]
+            with self.lock:
+                out_tokens = max(1, self.turn_output_tokens.pop(sid, 0))
+                self.session_context_tokens[sid] = input_tokens + out_tokens
+            total_tokens = input_tokens + out_tokens
+            usage_obj = {
+                "inputTokens": input_tokens,
+                "outputTokens": out_tokens,
+                "totalTokens": total_tokens,
+            }
+            model_id = info.get("modelId")
+            if model_id:
+                usage_obj["modelId"] = model_id
+            result["usage"] = usage_obj
+            return (json.dumps(msg, separators=(",", ":")) + "\n").encode("utf-8")
+
+        return line
+
+
+def proxy_stdin(child, state):
     try:
-        msg = json.loads(line)
-    except ValueError:
-        return line
-    if not isinstance(msg, dict) or msg.get("method") != "initialize":
-        return line
-    params = msg.get("params")
-    if not isinstance(params, dict) or params.get("clientInfo"):
-        return line
-    params["clientInfo"] = {
-        "name": os.environ.get("TRAYCER_AGY_CLIENT_NAME", "zed"),
-        "version": os.environ.get("TRAYCER_AGY_CLIENT_VERSION", "1.0.0"),
-    }
-    return (json.dumps(msg, separators=(",", ":")) + "\n").encode()
+        for line in iter(sys.stdin.buffer.readline, b""):
+            patched = state.process_stdin(line)
+            child.stdin.write(patched)
+            child.stdin.flush()
+    except (BrokenPipeError, OSError):
+        pass
+    finally:
+        try:
+            child.stdin.close()
+        except OSError:
+            pass
+
+
+def proxy_stdout(child, state):
+    try:
+        for line in iter(child.stdout.readline, b""):
+            patched = state.process_stdout(line)
+            sys.stdout.buffer.write(patched)
+            sys.stdout.buffer.flush()
+    except (BrokenPipeError, OSError):
+        pass
 
 
 def main():
@@ -52,20 +220,21 @@ def main():
     except (OSError, KeyError, ValueError) as err:
         sys.stderr.write("agy-acp-wrapper: cannot locate the real agy_acp_server: %s\n" % err)
         return 127
-    # The child inherits stdout and stderr, so only the client-to-server stream is proxied.
-    child = subprocess.Popen([server] + sys.argv[1:], stdin=subprocess.PIPE)
+
+    child = subprocess.Popen(
+        [server] + sys.argv[1:],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+    )
     for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
         signal.signal(sig, lambda s, _f: child.send_signal(s))
-    try:
-        for line in sys.stdin.buffer:
-            child.stdin.write(patch(line))
-            child.stdin.flush()
-    except (BrokenPipeError, OSError):
-        pass
-    try:
-        child.stdin.close()
-    except OSError:
-        pass
+
+    state = AcpState()
+    stdin_thread = threading.Thread(target=proxy_stdin, args=(child, state), daemon=True)
+    stdin_thread.start()
+
+    proxy_stdout(child, state)
+    stdin_thread.join(timeout=1.0)
     return child.wait()
 
 
