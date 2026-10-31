@@ -258,14 +258,30 @@ make tailscale-status
 ```
 No Windows, execute o instalador interativo: `.\install.ps1` (e selecione Tailscale).
 
-### 2. Stack da VPS (Home Assistant + Mosquitto)
+### 3. Stack da VPS (Home Assistant + Mosquitto)
 ```bash
 # Gerar pacote pronto para deploy na VPS
 make ha-vps-pack
 # Envie o pacote para a VPS e siga o passo a passo em homeassistant/README.md
 ```
 
-### 3. Provisionamento no Windows (HASS.Agent)
+### 4. Integração de MCP para Agentes de IA (`ha-mcp`)
+Conecta seus agentes locais (Claude Code, Gemini CLI, Antigravity, OpenCode, Cursor) ao Home Assistant:
+```bash
+# Copiar o template de credenciais e preencher seu token
+cp secrets/mcp.env.example secrets/mcp.env
+
+# Validar conectividade Tailscale (100.105.143.75:8123) e uvx
+make ha-mcp-check
+
+# Simular a configuração dos clientes de IA
+make ha-mcp-config DRY_RUN=1
+
+# Aplicar a configuração
+make ha-mcp-config
+```
+
+### 5. Provisionamento no Windows (HASS.Agent)
 Em um terminal PowerShell como Administrador no Windows:
 ```powershell
 .\powershell\hass-agent\install-hass-agent.ps1 -RegisterCommands

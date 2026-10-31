@@ -53,8 +53,13 @@ rc_unknown=$?
 expect "opcao desconhecida sai com 2" "$rc_unknown" "2"
 has "erro de opcao desconhecida" "Opção desconhecida" "$out_unknown"
 
-# 4. Modo Dry-Run quando não instalado
-out_dry="$(bash "$INSTALLER" --dry-run 2>&1)"
+# 4. Modo Dry-Run quando não instalado (isolar PATH de tailscale do host)
+mkdir -p "$tmp/nobin"
+for b in /bin/* /usr/bin/*; do
+    bn="$(basename "$b")"
+    [[ "$bn" != "tailscale" && ! -e "$tmp/nobin/$bn" ]] && ln -s "$b" "$tmp/nobin/$bn" 2>/dev/null || true
+done
+out_dry="$(PATH="$tmp/nobin" bash "$INSTALLER" --dry-run 2>&1)"
 has "dry-run indica instalacao" "[dry-run]" "$out_dry"
 has "dry-run menciona tailscale.com" "tailscale" "$out_dry"
 
