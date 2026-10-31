@@ -45,16 +45,16 @@ echo "[*] Criando diretório remoto $REMOTE_DIR..."
 ssh "$TARGET" "mkdir -p '$REMOTE_DIR'"
 
 echo "[*] Sincronizando arquivos da stack..."
-rsync -avz --delete \
+rsync -rlptvz --no-owner --no-group --delete \
     --exclude="mosquitto/data/*" \
     --exclude="mosquitto/log/*" \
-    --exclude="config/*" \
+    --exclude="mosquitto/config/password_file" \
+    --exclude="/config/*" \
     "$ROOT/homeassistant/" "$TARGET:$REMOTE_DIR/"
 
 echo "[*] Gerando credenciais do Mosquitto no container..."
 ssh "$TARGET" "cd '$REMOTE_DIR' && \
-    docker compose run --rm mosquitto mosquitto_passwd -b -c /mosquitto/config/password_file '$MQTT_USER' '$MQTT_PASSWORD' && \
-    chmod 600 mosquitto/config/password_file"
+    docker compose run --rm --entrypoint sh mosquitto -c \"rm -f /mosquitto/config/password_file && mosquitto_passwd -b -c /mosquitto/config/password_file '$MQTT_USER' '$MQTT_PASSWORD' && chmod 600 /mosquitto/config/password_file\""
 
 echo "[*] Iniciando containers na VPS..."
 ssh "$TARGET" "cd '$REMOTE_DIR' && docker compose up -d"
