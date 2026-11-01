@@ -287,10 +287,12 @@ pc-ctl --dry-run wake-setup
 pc-ctl wake-setup
 ```
 O que o `wake-setup` realiza:
-1. Executa `Install-PcCtl.ps1`, copiando os scripts para `C:\ProgramData\pc-ctl\` e restringindo as permissões (ACL) para que apenas **Administradores** e **SYSTEM** possam gravar ou alterar os scripts.
+1. Executa `Install-PcCtl.ps1`, copiando os scripts para `C:\ProgramData\pc-ctl\` e restringindo as permissões (ACL) para que apenas **Administradores** e **SYSTEM** possam gravar ou alterar os scripts. A ACL usa SIDs (`*S-1-5-32-544`, `*S-1-5-18`, `*S-1-5-32-545`), então funciona em Windows de qualquer idioma, e o script aborta se o `icacls` falhar.
 2. Cria o arquivo de requisição `C:\ProgramData\pc-ctl\request.json` com permissão de escrita para usuários comuns.
 3. Habilita os temporizadores de ativação (Wake Timers) do Windows na tomada (AC) e na bateria (DC) para o subgrupo `SUB_SLEEP` (`BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D`).
-4. Registra a tarefa agendada `pc-ctl-power` com privilégios elevados (`RunLevel Highest`), executando `Set-PowerProfile.ps1` sem solicitar UAC ao usuário durante o uso diário.
+4. Registra a tarefa agendada `pc-ctl-power` com privilégios elevados (`RunLevel Highest`), executando `Set-PowerProfile.ps1` sem solicitar UAC ao usuário durante o uso diário. Os passos 3 e 4 rodam dentro do script elevado, com `Register-ScheduledTask` e `powercfg`.
+
+Se o script elevado falhar, o `wake-setup` sai com código 1 e grava `failed` no log.
 
 #### Modos de Energia e Refrigeração (`power-mode`)
 Permite selecionar perfis de energia do Windows e modos térmicos Lenovo sem prompt de UAC:
@@ -316,10 +318,11 @@ pc-ctl power-mode status
 pc-ctl --dry-run power-mode llm-boost --ttl 90m
 ```
 Regras de segurança e invariantes:
-- **Proteção de Bateria**: Os modos de alta potência (`llm-boost` e `max`) são recusados automaticamente se o computador estiver na bateria, registrando o motivo no log.
+- **Proteção de Bateria**: Os modos de alta potência (`llm-boost` e `max`) são recusados se o computador estiver na bateria (`on_battery`) ou se o estado da tomada não puder ser lido (`power_unknown`). O motivo vai para o log.
 - **Canal sem UAC**: O comando do WSL2 escreve apenas no arquivo validado `C:\ProgramData\pc-ctl\request.json` e dispara a tarefa `schtasks /run /tn "pc-ctl-power"`. O script elevado valida rigorosamente o perfil contra a lista fixa e o TTL contra o teto.
 - **Reversão Automática**: No fim do TTL (padrão de 2 horas, teto de 4 horas), a tarefa elevada agenda `pc-ctl-power-revert` para retornar automaticamente ao perfil `balanced`.
-- **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run`), `reason`, `profile` e `until`.
+- **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run|requested`), `reason`, `profile` e `until`.
+- **Resultado real**: o `schtasks /run` é assíncrono. O `power-mode` grava `requested` no log. A tarefa elevada grava `applied`, `refused` ou `failed` no `state.json`, e `pc-ctl power-mode status` mostra o último pedido.
 
 ### 2. Instalação e Conexão do Tailscale
 Para habilitar a rede mesh criptografada no Linux/WSL2 ou Windows:
