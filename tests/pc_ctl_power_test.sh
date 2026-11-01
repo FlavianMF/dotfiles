@@ -116,6 +116,54 @@ else
     has "Install-PcCtl concede escrita para Users em request.json" "request.json" "$inst_content"
 fi
 
+
+# ==============================================================================
+# 3. Testes do subcomando wake-setup do bin/pc-ctl
+# ==============================================================================
+# 3.1 Help exibe wake-setup
+out_help="$(bash "$ROOT/bin/pc-ctl" --help 2>&1)"
+has "help lista wake-setup" "wake-setup" "$out_help"
+
+# 3.2 Dry-run do wake-setup
+out_wake_dry="$(bash "$ROOT/bin/pc-ctl" --dry-run wake-setup 2>&1)"
+has "dry-run wake-setup invoca Install-PcCtl.ps1" "Install-PcCtl.ps1" "$out_wake_dry"
+has "dry-run wake-setup habilita timers na tomada (AC)" "/setacvalueindex" "$out_wake_dry"
+has "dry-run wake-setup habilita timers na bateria (DC)" "/setdcvalueindex" "$out_wake_dry"
+has "dry-run wake-setup referencia SUB_SLEEP" "SUB_SLEEP" "$out_wake_dry"
+has "dry-run wake-setup referencia GUID do wake timer" "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" "$out_wake_dry"
+has "dry-run wake-setup registra schtasks pc-ctl-power" "pc-ctl-power" "$out_wake_dry"
+has "dry-run wake-setup usa HIGHEST" "HIGHEST" "$out_wake_dry"
+
+line_wake_dry="$(tail -n 1 "$test_log")"
+expect "log wake-setup dry-run cmd" "$(jq -r '.cmd' <<<"$line_wake_dry")" "wake-setup"
+expect "log wake-setup dry-run result" "$(jq -r '.result' <<<"$line_wake_dry")" "dry-run"
+
+# 3.3 Execução com mocks de sistema
+mock_win="$tmp/mock_win"
+mkdir -p "$mock_win"
+cat >"$mock_win/powershell.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_PS $*"
+MOCK
+cat >"$mock_win/powercfg.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_POWERCFG $*"
+MOCK
+cat >"$mock_win/schtasks.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_SCHTASKS $*"
+MOCK
+chmod +x "$mock_win/"*.exe
+
+out_wake_mock="$(WIN_SYS_DIR="$mock_win" WIN_PS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" wake-setup 2>&1)"
+has "wake-setup mock chama powershell Install-PcCtl" "MOCK_PS" "$out_wake_mock"
+has "wake-setup mock chama powercfg" "MOCK_POWERCFG" "$out_wake_mock"
+has "wake-setup mock chama schtasks create" "MOCK_SCHTASKS /create" "$out_wake_mock"
+
+line_wake_applied="$(tail -n 1 "$test_log")"
+expect "log wake-setup applied cmd" "$(jq -r '.cmd' <<<"$line_wake_applied")" "wake-setup"
+expect "log wake-setup applied result" "$(jq -r '.result' <<<"$line_wake_applied")" "applied"
+
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
     echo "🎉 Testes de lib/pc-ctl-log.sh PASSARAM!"

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/pc-ctl-log.sh
+source "$SCRIPT_DIR/lib/pc-ctl-log.sh"
+
 WIN_DIR="${WIN_SYS_DIR:-/mnt/c/Windows/System32}"
 PS_DIR="${WIN_PS_DIR:-$WIN_DIR/WindowsPowerShell/v1.0}"
 
@@ -20,6 +24,7 @@ Comandos:
   sleep               Coloca o computador host em suspensão
   lock                Bloqueia a sessão do computador host
   app <nome>          Abre aplicativo no host (obsidian, wt, terminal)
+  wake-setup          Configura permissões, wake timers e tarefa pc-ctl-power no host Windows
   status              Exibe o status dos serviços e interoperabilidade
 
 Opções:
@@ -62,6 +67,25 @@ cmd_status() {
         echo "running"
     else
         echo "stopped"
+    fi
+}
+
+cmd_wake_setup() {
+    local install_ps="$SCRIPT_DIR/powershell/pc-ctl/Install-PcCtl.ps1"
+    local win_install_ps
+    win_install_ps="$(wslpath -w "$install_ps" 2>/dev/null || echo "$install_ps")"
+
+    execute "$PS_DIR/powershell.exe" -NoProfile -Command "Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"$win_install_ps\"'"
+    execute "$WIN_DIR/powercfg.exe" /setacvalueindex SCHEME_CURRENT SUB_SLEEP BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D 1
+    execute "$WIN_DIR/powercfg.exe" /setdcvalueindex SCHEME_CURRENT SUB_SLEEP BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D 1
+    execute "$WIN_DIR/powercfg.exe" /setactive SCHEME_CURRENT
+    execute "$WIN_DIR/schtasks.exe" /create /tn "pc-ctl-power" /tr "$PS_DIR/powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\ProgramData\\pc-ctl\\Set-PowerProfile.ps1" /sc ONCE /st 00:00 /rl HIGHEST /f
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        pc_ctl_log --cmd "wake-setup" --result "dry-run" --reason "dry_run"
+    else
+        pc_ctl_log --cmd "wake-setup" --result "applied" --reason "ok"
+        echo "wake-setup concluído com sucesso."
     fi
 }
 
@@ -146,6 +170,9 @@ case "$COMMAND" in
                 exit 1
                 ;;
         esac
+        ;;
+    wake-setup)
+        cmd_wake_setup
         ;;
     status)
         cmd_status
