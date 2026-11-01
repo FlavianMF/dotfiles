@@ -123,6 +123,15 @@ else
     has "Set-PowerProfile usa gatilho New-ScheduledTaskTrigger -Once -At" "New-ScheduledTaskTrigger -Once -At" "$ps_content"
     has "Set-PowerProfile remove a reversão com Unregister-ScheduledTask" "Unregister-ScheduledTask" "$ps_content"
     has "Set-PowerProfile roda a reversão como SYSTEM por SID" "S-1-5-18" "$ps_content"
+    # O script elevado só executa Set-LenovoLlmBoost.ps1 de dentro da pasta protegida ($ConfigDir).
+    if grep -E '^[^#]*PSScriptRoot' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile procura scripts fora de ConfigDir via PSScriptRoot"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa PSScriptRoot"
+    fi
+    has "Set-PowerProfile executa só o Set-LenovoLlmBoost de ConfigDir" "Join-Path \$ConfigDir 'Set-LenovoLlmBoost.ps1'" "$ps_content"
+    has "Set-PowerProfile aborta se Set-LenovoLlmBoost.ps1 faltar" "Set-LenovoLlmBoost.ps1 não encontrado" "$ps_content"
     has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
 fi
 

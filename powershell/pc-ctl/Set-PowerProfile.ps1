@@ -109,23 +109,12 @@ switch ($Profile) {
     Set-LenovoWmi -SmartFanMode 2 -DynamicBoostWatts 0
   }
   'llm-boost' {
-    $llmBoostCandidates = @(
-      (Join-Path $ConfigDir 'Set-LenovoLlmBoost.ps1'),
-      (Join-Path $PSScriptRoot 'Set-LenovoLlmBoost.ps1'),
-      (Join-Path (Join-Path $PSScriptRoot '..') 'Set-LenovoLlmBoost.ps1')
-    )
-    $scriptFound = $false
-    foreach ($cand in $llmBoostCandidates) {
-      if (Test-Path $cand) {
-        & $cand -Elevated
-        $scriptFound = $true
-        break
-      }
+    # Execute só a cópia protegida em ConfigDir (ACL: só Admin e SYSTEM escrevem). Nunca procure fora dela.
+    $llmBoostScript = Join-Path $ConfigDir 'Set-LenovoLlmBoost.ps1'
+    if (-not (Test-Path $llmBoostScript)) {
+      throw "Set-LenovoLlmBoost.ps1 não encontrado em $ConfigDir. Rode 'pc-ctl wake-setup' para reinstalar."
     }
-    if (-not $scriptFound) {
-      powercfg /setactive $BalancedGuid
-      Set-LenovoWmi -SmartFanMode 3 -DynamicBoostWatts 15
-    }
+    & $llmBoostScript -Elevated
   }
   'max' {
     powercfg /setactive $MaxPerfGuid
