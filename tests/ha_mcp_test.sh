@@ -141,6 +141,30 @@ done
 out_no_uvx="$(PATH="$tmp/nouvx" bash "$SETUP_SCRIPT" check 2>&1 || true)"
 has "detecta falta de uvx" "❌ NÃO ENCONTRADO" "$out_no_uvx"
 
+# 10. Wrapper stdio descarta linhas não-JSON do stdout (uvx falso imprime "[ENV] ...")
+STDIO_WRAPPER="$ROOT/homeassistant/ha-mcp-stdio.sh"
+mkdir -p "$tmp/fakebin"
+cat >"$tmp/fakebin/uvx" <<'MOCK'
+#!/bin/bash
+echo "[ENV] WARNING: No environment file found."
+echo '{"jsonrpc":"2.0","id":1,"result":{}}'
+echo "ruído sem JSON"
+MOCK
+chmod +x "$tmp/fakebin/uvx"
+out_stdio="$(PATH="$tmp/fakebin:$PATH" bash "$STDIO_WRAPPER" </dev/null 2>/dev/null)"
+expect "wrapper deixa só a linha JSON-RPC" "$out_stdio" '{"jsonrpc":"2.0","id":1,"result":{}}'
+[[ -L "$ROOT/bin/ha-mcp-stdio" ]] && expect "symlink bin/ha-mcp-stdio resolve" "$(readlink "$ROOT/bin/ha-mcp-stdio")" "../homeassistant/ha-mcp-stdio.sh"
+
+# 11. Configs de cliente apontam para o wrapper, não para uvx cru
+out_cfg="$(bash "$SETUP_SCRIPT" config --dry-run --client all 2>&1)"
+has "gemini usa o wrapper" "bin/ha-mcp-stdio" "$out_cfg"
+if grep -F -q '"ha-mcp"' <<<"$out_cfg"; then
+    echo "❌ FALHA: snippet ainda chama uvx ha-mcp direto"
+    fail=1
+else
+    echo "✅ PASSOU: snippets não chamam uvx ha-mcp direto"
+fi
+
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
     echo "🎉 Todos os testes de setup-mcp.sh e ha-mcp-ctl PASSARAM!"

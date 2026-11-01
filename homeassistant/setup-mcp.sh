@@ -10,6 +10,8 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEFAULT_HA_URL="http://100.105.143.75:8123"
 HA_URL="${HOMEASSISTANT_URL:-$DEFAULT_HA_URL}"
 HA_TOKEN="${HOMEASSISTANT_TOKEN:-}"
+# Wrapper que filtra o stdout do ha-mcp (clientes estritos quebram com o "[ENV] ..." dele).
+WRAPPER="$ROOT/bin/ha-mcp-stdio"
 DRY_RUN=0
 COMMAND="check"
 TARGET_CLIENT="all"
@@ -165,8 +167,8 @@ configure_gemini() {
     local json_block
     json_block="$(cat <<EOF
 {
-  "command": "uvx",
-  "args": ["ha-mcp"],
+  "command": "$WRAPPER",
+  "args": [],
   "env": {
     "HOMEASSISTANT_URL": "$HA_URL",
     "HOMEASSISTANT_TOKEN": "${HA_TOKEN:-<SEU_TOKEN>}"
@@ -208,10 +210,10 @@ configure_opencode() {
     echo ""
     echo "=== [OpenCode] ==="
     local opencode_snippet
-    opencode_snippet="$(cat <<'EOF'
+    opencode_snippet="$(cat <<EOF
 "homeassistant": {
   "type": "local",
-  "command": ["uvx", "ha-mcp"],
+  "command": ["$WRAPPER"],
   "enabled": true,
   "environment": {
     "HOMEASSISTANT_URL": "{env:HOMEASSISTANT_URL}",
@@ -234,8 +236,8 @@ configure_cursor() {
 {
   "mcpServers": {
     "homeassistant": {
-      "command": "uvx",
-      "args": ["ha-mcp"],
+      "command": "$WRAPPER",
+      "args": [],
       "env": {
         "HOMEASSISTANT_URL": "$HA_URL",
         "HOMEASSISTANT_TOKEN": "${HA_TOKEN:-<SEU_TOKEN>}"
