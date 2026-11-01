@@ -71,7 +71,13 @@ out_reboot="$(bash "$PC_CTL" --dry-run restart 2>&1)"
 has "dry-run restart" "shutdown.exe /r /t 0 /f" "$out_reboot"
 
 out_sleep="$(bash "$PC_CTL" --dry-run sleep 2>&1)"
-has "dry-run sleep" "rundll32.exe powrprof.dll,SetSuspendState" "$out_sleep"
+has "dry-run sleep usa S3 via SetSuspendState('Suspend')" "SetSuspendState('Suspend'" "$out_sleep"
+if grep -F -q "rundll32.exe powrprof.dll,SetSuspendState" <<<"$out_sleep"; then
+    echo "❌ FALHA: sleep ainda usa rundll32 (hiberna com o hibernar habilitado)"
+    fail=1
+else
+    echo "✅ PASSOU: sleep não usa rundll32"
+fi
 
 out_lock="$(bash "$PC_CTL" --dry-run lock 2>&1)"
 has "dry-run lock" "rundll32.exe user32.dll,LockWorkStation" "$out_lock"

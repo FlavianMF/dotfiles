@@ -119,7 +119,9 @@ case "$COMMAND" in
         execute "$WIN_DIR/shutdown.exe" /r /t 0 /f
         ;;
     sleep)
-        execute "$WIN_DIR/rundll32.exe" powrprof.dll,SetSuspendState 0,1,0
+        # S3 explícito. rundll32 powrprof.dll,SetSuspendState hiberna quando o hibernar está habilitado.
+        execute "$PS_DIR/powershell.exe" -NoProfile -WindowStyle Hidden -Command \
+            "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', \$false, \$false) | Out-Null"
         ;;
     lock)
         execute "$WIN_DIR/rundll32.exe" user32.dll,LockWorkStation
