@@ -164,6 +164,98 @@ line_wake_applied="$(tail -n 1 "$test_log")"
 expect "log wake-setup applied cmd" "$(jq -r '.cmd' <<<"$line_wake_applied")" "wake-setup"
 expect "log wake-setup applied result" "$(jq -r '.result' <<<"$line_wake_applied")" "applied"
 
+
+# ==============================================================================
+# 4. Testes do subcomando power-mode do bin/pc-ctl
+# ==============================================================================
+# 4.1 Help exibe power-mode
+out_help_pwr="$(bash "$ROOT/bin/pc-ctl" --help 2>&1)"
+has "help lista power-mode" "power-mode" "$out_help_pwr"
+
+# 4.2 Validações de argumento do power-mode
+rc_no_prof=0
+out_no_prof="$(bash "$ROOT/bin/pc-ctl" power-mode 2>&1)" || rc_no_prof=$?
+expect "power-mode sem perfil sai com 1" "$rc_no_prof" "1"
+has "power-mode sem perfil lista perfis validos" "eco, balanced, llm-boost, max, status" "$out_no_prof"
+
+rc_inv_prof=0
+out_inv_prof="$(bash "$ROOT/bin/pc-ctl" power-mode perfil_invalido 2>&1)" || rc_inv_prof=$?
+expect "power-mode com perfil invalido sai com 1" "$rc_inv_prof" "1"
+has "power-mode com perfil invalido exibe mensagem" "Perfil desconhecido" "$out_inv_prof"
+
+# 4.3 Dry-run com llm-boost e TTL 90m
+out_dry_pwr="$(PC_CTL_MOCK_POWER_LINE="Online" bash "$ROOT/bin/pc-ctl" --dry-run power-mode llm-boost --ttl 90m 2>&1)"
+has "dry-run power-mode mostra escrita de request.json" "request.json" "$out_dry_pwr"
+has "dry-run power-mode mostra perfil llm-boost" "llm-boost" "$out_dry_pwr"
+has "dry-run power-mode mostra ttl 90" "90" "$out_dry_pwr"
+has "dry-run power-mode executa schtasks run pc-ctl-power" "schtasks" "$out_dry_pwr"
+has "dry-run power-mode roda pc-ctl-power" "pc-ctl-power" "$out_dry_pwr"
+
+line_pwr_dry="$(tail -n 1 "$test_log")"
+expect "log dry-run power-mode cmd" "$(jq -r '.cmd' <<<"$line_pwr_dry")" "power-mode"
+expect "log dry-run power-mode result" "$(jq -r '.result' <<<"$line_pwr_dry")" "dry-run"
+expect "log dry-run power-mode profile" "$(jq -r '.profile' <<<"$line_pwr_dry")" "llm-boost"
+
+# 4.4 Validação de TTL acima do teto de 4 horas (240m)
+rc_ttl_ceil=0
+out_ttl_ceil="$(PC_CTL_MOCK_POWER_LINE="Online" bash "$ROOT/bin/pc-ctl" power-mode max --ttl 5h 2>&1)" || rc_ttl_ceil=$?
+expect "TTL acima do teto de 4h sai com 1" "$rc_ttl_ceil" "1"
+has "mensagem de TTL acima do teto" "240" "$out_ttl_ceil"
+
+line_ttl_ceil="$(tail -n 1 "$test_log")"
+expect "log ttl excedido result" "$(jq -r '.result' <<<"$line_ttl_ceil")" "refused"
+expect "log ttl excedido reason" "$(jq -r '.reason' <<<"$line_ttl_ceil")" "ttl_exceeded"
+
+# 4.5 Bloqueio quando na bateria (mock Offline)
+rc_bat_max=0
+out_bat_max="$(PC_CTL_MOCK_POWER_LINE="Offline" bash "$ROOT/bin/pc-ctl" power-mode max 2>&1)" || rc_bat_max=$?
+expect "power-mode max na bateria sai com 1" "$rc_bat_max" "1"
+has "mensagem de recusa na bateria" "bateria" "$out_bat_max"
+
+line_bat_max="$(tail -n 1 "$test_log")"
+expect "log bateria max result" "$(jq -r '.result' <<<"$line_bat_max")" "refused"
+expect "log bateria max reason" "$(jq -r '.reason' <<<"$line_bat_max")" "on_battery"
+expect "log bateria max profile" "$(jq -r '.profile' <<<"$line_bat_max")" "max"
+
+# 4.6 Perfis eco e balanced permitidos na bateria
+out_bat_eco="$(PC_CTL_MOCK_POWER_LINE="Offline" bash "$ROOT/bin/pc-ctl" --dry-run power-mode eco 2>&1)"
+has "eco permitido na bateria em dry-run" "request.json" "$out_bat_eco"
+
+# 4.7 Execução com mock de schtasks e request.json
+mock_req_dir="$tmp/progdata"
+mkdir -p "$mock_req_dir"
+mock_req_file="$mock_req_dir/request.json"
+
+out_mock_run="$(PC_CTL_MOCK_POWER_LINE="Online" PC_CTL_REQUEST_FILE="$mock_req_file" WIN_SYS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" power-mode balanced 2>&1)"
+has "execucao grava request.json" "solicitado com sucesso" "$out_mock_run"
+if [[ -f "$mock_req_file" ]]; then
+    expect "request.json contem balanced" "$(jq -r '.profile' "$mock_req_file")" "balanced"
+    echo "✅ PASSOU: request.json gerado corretamente"
+else
+    echo "❌ FALHA: request.json não foi criado em $mock_req_file"
+    fail=1
+fi
+
+line_applied_pwr="$(tail -n 1 "$test_log")"
+expect "log power-mode applied cmd" "$(jq -r '.cmd' <<<"$line_applied_pwr")" "power-mode"
+expect "log power-mode applied result" "$(jq -r '.result' <<<"$line_applied_pwr")" "applied"
+expect "log power-mode applied profile" "$(jq -r '.profile' <<<"$line_applied_pwr")" "balanced"
+
+# 4.8 Status do power-mode
+mock_state_file="$mock_req_dir/state.json"
+cat >"$mock_state_file" <<'JSON'
+{
+  "active_profile": "llm-boost",
+  "applied_at": "2026-11-01T18:00:00Z",
+  "ttl_minutes": 120,
+  "expires_at": "2026-11-01T20:00:00Z"
+}
+JSON
+
+out_pwr_status="$(PC_CTL_STATE_FILE="$mock_state_file" bash "$ROOT/bin/pc-ctl" power-mode status 2>&1)"
+has "status exibe perfil ativo" "llm-boost" "$out_pwr_status"
+has "status exibe TTL restante ou total" "120" "$out_pwr_status"
+
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
     echo "🎉 Testes de lib/pc-ctl-log.sh PASSARAM!"

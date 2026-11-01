@@ -24,6 +24,7 @@ Comandos:
   sleep               Coloca o computador host em suspensão
   lock                Bloqueia a sessão do computador host
   app <nome>          Abre aplicativo no host (obsidian, wt, terminal)
+  power-mode <perfil> Altera perfil de energia (eco, balanced, llm-boost, max, status) [--ttl N]
   wake-setup          Configura permissões, wake timers e tarefa pc-ctl-power no host Windows
   status              Exibe o status dos serviços e interoperabilidade
 
@@ -68,6 +69,16 @@ cmd_status() {
     else
         echo "stopped"
     fi
+
+    echo -n "Power Profile: "
+    local state_file="${PC_CTL_STATE_FILE:-/mnt/c/ProgramData/pc-ctl/state.json}"
+    if [[ -f "$state_file" ]]; then
+        local p_name
+        p_name="$(jq -r '.active_profile // "desconhecido"' "$state_file" 2>/dev/null || echo "desconhecido")"
+        echo "$p_name"
+    else
+        echo "desconhecido"
+    fi
 }
 
 cmd_wake_setup() {
@@ -87,6 +98,152 @@ cmd_wake_setup() {
         pc_ctl_log --cmd "wake-setup" --result "applied" --reason "ok"
         echo "wake-setup concluído com sucesso."
     fi
+}
+
+check_power_line_status() {
+    if [[ -n "${PC_CTL_MOCK_POWER_LINE:-}" ]]; then
+        echo "$PC_CTL_MOCK_POWER_LINE"
+        return 0
+    fi
+
+    local ps_output
+    ps_output="$("$PS_DIR/powershell.exe" -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus" 2>/dev/null || true)"
+    ps_output="$(tr -d '\r\n ' <<<"$ps_output")"
+    if [[ -z "$ps_output" ]]; then
+        echo "Online"
+    else
+        echo "$ps_output"
+    fi
+}
+
+parse_ttl_minutes() {
+    local raw="$1"
+    local minutes=0
+    if [[ "$raw" =~ ^([0-9]+(\.[0-9]+)?)h$ ]]; then
+        local hours="${BASH_REMATCH[1]}"
+        minutes="$(python3 -c "import sys; print(int(round(float(sys.argv[1]) * 60)))" "$hours")"
+    elif [[ "$raw" =~ ^([0-9]+)m$ ]]; then
+        minutes="${BASH_REMATCH[1]}"
+    elif [[ "$raw" =~ ^([0-9]+)$ ]]; then
+        minutes="$raw"
+    else
+        echo "Erro: Formato de TTL inválido: '$raw'. Exemplos válidos: 90m, 2h, 120" >&2
+        return 1
+    fi
+    echo "$minutes"
+}
+
+cmd_power_mode() {
+    if [[ $# -eq 0 ]]; then
+        echo "Erro: Nenhum perfil informado." >&2
+        echo "Perfis válidos: eco, balanced, llm-boost, max, status" >&2
+        return 1
+    fi
+
+    local profile="$1"
+    shift
+
+    if [[ "$profile" == "status" ]]; then
+        local state_file="${PC_CTL_STATE_FILE:-/mnt/c/ProgramData/pc-ctl/state.json}"
+        if [[ -f "$state_file" ]]; then
+            local active ttl expires
+            active="$(jq -r '.active_profile // "desconhecido"' "$state_file")"
+            ttl="$(jq -r '.ttl_minutes // 0' "$state_file")"
+            expires="$(jq -r '.expires_at // "sem expiracao"' "$state_file")"
+            echo "Perfil ativo: $active"
+            echo "TTL: ${ttl}m (Expira em: $expires)"
+        else
+            echo "Perfil ativo: Desconhecido (state.json não encontrado)"
+        fi
+        return 0
+    fi
+
+    case "$profile" in
+        eco|balanced|llm-boost|max)
+            ;;
+        *)
+            echo "Erro: Perfil desconhecido: '$profile'" >&2
+            echo "Perfis válidos: eco, balanced, llm-boost, max, status" >&2
+            return 1
+            ;;
+    esac
+
+    local ttl_minutes=0
+    if [[ "$profile" == "llm-boost" || "$profile" == "max" ]]; then
+        ttl_minutes=120 # Padrão: 2 horas
+    fi
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --ttl)
+                if [[ $# -lt 2 ]]; then
+                    echo "Erro: --ttl requer um valor de duração." >&2
+                    return 1
+                fi
+                ttl_minutes="$(parse_ttl_minutes "$2")"
+                shift 2
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    # Validação do teto de TTL (4 horas = 240 minutos)
+    if [[ "$ttl_minutes" -gt 240 ]]; then
+        echo "Erro: TTL de ${ttl_minutes}m excede o teto permitido de 240m (4h)." >&2
+        pc_ctl_log --cmd "power-mode" --result "refused" --reason "ttl_exceeded" --profile "$profile"
+        return 1
+    fi
+
+    # Verificação de bateria / tomada
+    local power_line
+    power_line="$(check_power_line_status)"
+    if [[ "$power_line" != "Online" && ("$profile" == "llm-boost" || "$profile" == "max") ]]; then
+        echo "Erro: Perfil '$profile' recusado: computador está operando na bateria." >&2
+        pc_ctl_log --cmd "power-mode" --result "refused" --reason "on_battery" --profile "$profile"
+        return 1
+    fi
+
+    local until=""
+    if [[ "$ttl_minutes" -gt 0 ]]; then
+        until="$(python3 -c "import datetime; print((datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=$ttl_minutes)).strftime('%Y-%m-%dT%H:%M:%SZ'))")"
+    fi
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "[DRY-RUN] Escrevendo em C:\\ProgramData\\pc-ctl\\request.json: {\"profile\": \"$profile\", \"ttl_minutes\": $ttl_minutes}"
+        echo "[DRY-RUN] $WIN_DIR/schtasks.exe /run /tn \"pc-ctl-power\""
+        if [[ -n "$until" ]]; then
+            pc_ctl_log --cmd "power-mode" --result "dry-run" --reason "dry_run" --profile "$profile" --until "$until"
+        else
+            pc_ctl_log --cmd "power-mode" --result "dry-run" --reason "dry_run" --profile "$profile"
+        fi
+        return 0
+    fi
+
+    local req_file="${PC_CTL_REQUEST_FILE:-/mnt/c/ProgramData/pc-ctl/request.json}"
+    local req_dir
+    req_dir="$(dirname "$req_file")"
+    if [[ ! -d "$req_dir" ]]; then
+        mkdir -p "$req_dir" 2>/dev/null || true
+    fi
+
+    python3 -c '
+import json, sys
+data = {"profile": sys.argv[1], "ttl_minutes": int(sys.argv[2])}
+with open(sys.argv[3], "w", encoding="utf-8") as f:
+    json.dump(data, f)
+' "$profile" "$ttl_minutes" "$req_file"
+
+    execute "$WIN_DIR/schtasks.exe" /run /tn "pc-ctl-power"
+
+    if [[ -n "$until" ]]; then
+        pc_ctl_log --cmd "power-mode" --result "applied" --reason "ok" --profile "$profile" --until "$until"
+    else
+        pc_ctl_log --cmd "power-mode" --result "applied" --reason "ok" --profile "$profile"
+    fi
+
+    echo "Perfil '$profile' solicitado com sucesso (TTL: ${ttl_minutes}m)."
 }
 
 while [[ $# -gt 0 ]]; do
@@ -173,6 +330,9 @@ case "$COMMAND" in
         ;;
     wake-setup)
         cmd_wake_setup
+        ;;
+    power-mode)
+        cmd_power_mode "$@"
         ;;
     status)
         cmd_status
