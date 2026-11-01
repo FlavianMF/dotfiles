@@ -114,6 +114,31 @@ else
     has "Install-PcCtl instala em ProgramData" "ProgramData\\pc-ctl" "$inst_content"
     has "Install-PcCtl ajusta ACL via icacls" "icacls" "$inst_content"
     has "Install-PcCtl concede escrita para Users em request.json" "request.json" "$inst_content"
+
+    # Windows pt-BR: nomes de grupo em inglês não existem. O icacls deve usar SIDs.
+    icacls_lines="$(grep -iE '^[^#]*icacls' "$INSTALL_PS" || true)"
+    has "Install-PcCtl usa SID de Administradores no icacls" '*S-1-5-32-544' "$icacls_lines"
+    has "Install-PcCtl usa SID de SYSTEM no icacls" '*S-1-5-18' "$icacls_lines"
+    has "Install-PcCtl usa SID de Usuarios no icacls" '*S-1-5-32-545' "$icacls_lines"
+    if grep -qE '(^|[^A-Za-z])(Administrators|SYSTEM|Users):' <<<"$icacls_lines"; then
+        echo "❌ FALHA: icacls usa nome de grupo em inglês (quebra no Windows pt-BR)"
+        fail=1
+    else
+        echo "✅ PASSOU: icacls não usa nomes de grupo em inglês"
+    fi
+    if grep -q 'Out-Null' <<<"$icacls_lines"; then
+        echo "❌ FALHA: icacls engole a saída com Out-Null"
+        fail=1
+    else
+        echo "✅ PASSOU: icacls não engole erro com Out-Null"
+    fi
+    lastexit_count="$(grep -c 'LASTEXITCODE' "$INSTALL_PS" || true)"
+    if [[ "$lastexit_count" -ge 2 ]]; then
+        echo "✅ PASSOU: Install-PcCtl checa LASTEXITCODE depois de cada icacls"
+    else
+        echo "❌ FALHA: Install-PcCtl deve checar LASTEXITCODE depois de cada icacls (achou $lastexit_count)"
+        fail=1
+    fi
 fi
 
 

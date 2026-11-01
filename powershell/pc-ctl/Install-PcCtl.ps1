@@ -48,10 +48,17 @@ if (-not (Test-Path $requestFile)) {
 }
 
 # 4. Ajuste de ACL: Scripts e diretório restritos a Admin e SYSTEM; Users com RX
-# Desabilita herança e copia permissões existentes, depois concede permissões explícitas
-& icacls.exe $InstallDir /inheritance:r /grant:r "Administrators:(OI)(CI)(F)" "SYSTEM:(OI)(CI)(F)" "Users:(OI)(CI)(RX)" | Out-Null
+# Use SIDs: os nomes de grupo mudam com o idioma do Windows (pt-BR: Administradores, Usuários).
+# S-1-5-32-544 = Administradores, S-1-5-18 = SYSTEM, S-1-5-32-545 = Usuários
+$icaclsOut = & icacls.exe $InstallDir /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)(F)' '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-545:(OI)(CI)(RX)' 2>&1
+if ($LASTEXITCODE -ne 0) {
+  throw "icacls falhou ao restringir $InstallDir (código $LASTEXITCODE): $icaclsOut"
+}
 
 # Concede aos usuários permissão de escrita/modificação apenas no request.json
-& icacls.exe $requestFile /grant "Users:(M)" | Out-Null
+$icaclsOut = & icacls.exe $requestFile /grant '*S-1-5-32-545:(M)' 2>&1
+if ($LASTEXITCODE -ne 0) {
+  throw "icacls falhou ao liberar $requestFile (código $LASTEXITCODE): $icaclsOut"
+}
 
 Write-Output "pc-ctl instalado com sucesso em $InstallDir."
