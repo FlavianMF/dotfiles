@@ -277,6 +277,50 @@ pc-ctl --dry-run app obsidian
 make pc-ctl-test
 ```
 
+#### Configuração de Wake e Tarefas Elevadas (`wake-setup`)
+Configuração única e idempotente executada com elevação de Administrador no Windows:
+```bash
+# Simulação segura do que será configurado no Windows
+pc-ctl --dry-run wake-setup
+
+# Execução real (solicita prompt UAC no Windows uma única vez)
+pc-ctl wake-setup
+```
+O que o `wake-setup` realiza:
+1. Executa `Install-PcCtl.ps1`, copiando os scripts para `C:\ProgramData\pc-ctl\` e restringindo as permissões (ACL) para que apenas **Administradores** e **SYSTEM** possam gravar ou alterar os scripts.
+2. Cria o arquivo de requisição `C:\ProgramData\pc-ctl\request.json` com permissão de escrita para usuários comuns.
+3. Habilita os temporizadores de ativação (Wake Timers) do Windows na tomada (AC) e na bateria (DC) para o subgrupo `SUB_SLEEP` (`BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D`).
+4. Registra a tarefa agendada `pc-ctl-power` com privilégios elevados (`RunLevel Highest`), executando `Set-PowerProfile.ps1` sem solicitar UAC ao usuário durante o uso diário.
+
+#### Modos de Energia e Refrigeração (`power-mode`)
+Permite selecionar perfis de energia do Windows e modos térmicos Lenovo sem prompt de UAC:
+```bash
+# Perfis disponíveis: eco, balanced, llm-boost, max, status
+
+# Ativar perfil equilibrado padrão
+pc-ctl power-mode balanced
+
+# Ativar perfil econômico silencioso (SmartFanMode 1, Dynamic Boost 0)
+pc-ctl power-mode eco
+
+# Ativar otimização para inferência local com TTL de 90 minutos (padrão 2h, teto 4h)
+pc-ctl power-mode llm-boost --ttl 90m
+
+# Ativar perfil de desempenho máximo
+pc-ctl power-mode max --ttl 2h
+
+# Consultar perfil ativo e TTL restante
+pc-ctl power-mode status
+
+# Simulação com --dry-run (mostra a escrita no request.json e o schtasks /run)
+pc-ctl --dry-run power-mode llm-boost --ttl 90m
+```
+Regras de segurança e invariantes:
+- **Proteção de Bateria**: Os modos de alta potência (`llm-boost` e `max`) são recusados automaticamente se o computador estiver na bateria, registrando o motivo no log.
+- **Canal sem UAC**: O comando do WSL2 escreve apenas no arquivo validado `C:\ProgramData\pc-ctl\request.json` e dispara a tarefa `schtasks /run /tn "pc-ctl-power"`. O script elevado valida rigorosamente o perfil contra a lista fixa e o TTL contra o teto.
+- **Reversão Automática**: No fim do TTL (padrão de 2 horas, teto de 4 horas), a tarefa elevada agenda `pc-ctl-power-revert` para retornar automaticamente ao perfil `balanced`.
+- **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run`), `reason`, `profile` e `until`.
+
 ### 2. Instalação e Conexão do Tailscale
 Para habilitar a rede mesh criptografada no Linux/WSL2 ou Windows:
 ```bash
