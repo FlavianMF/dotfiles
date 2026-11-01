@@ -336,6 +336,38 @@ expect "log bateria max profile" "$(jq -r '.profile' <<<"$line_bat_max")" "max"
 out_bat_eco="$(PC_CTL_MOCK_POWER_LINE="Offline" bash "$ROOT/bin/pc-ctl" --dry-run power-mode eco 2>&1)"
 has "eco permitido na bateria em dry-run" "request.json" "$out_bat_eco"
 
+# 4.6b Falha aberta: se o powershell.exe falhar, o estado é Unknown e llm-boost/max são recusados
+mock_ps_fail="$tmp/mock_ps_fail"
+mkdir -p "$mock_ps_fail"
+printf '#!/bin/bash\nexit 1\n' >"$mock_ps_fail/powershell.exe"
+mock_ps_empty="$tmp/mock_ps_empty"
+mkdir -p "$mock_ps_empty"
+printf '#!/bin/bash\nexit 0\n' >"$mock_ps_empty/powershell.exe"
+mock_ps_online="$tmp/mock_ps_online"
+mkdir -p "$mock_ps_online"
+printf '#!/bin/bash\nprintf "Online\\r\\n"\n' >"$mock_ps_online/powershell.exe"
+chmod +x "$mock_ps_fail/powershell.exe" "$mock_ps_empty/powershell.exe" "$mock_ps_online/powershell.exe"
+
+for ps_case in fail empty; do
+    ps_dir="$tmp/mock_ps_$ps_case"
+    for prof in llm-boost max; do
+        rc_unk=0
+        out_unk="$(WIN_PS_DIR="$ps_dir" bash "$ROOT/bin/pc-ctl" --dry-run power-mode "$prof" 2>&1)" || rc_unk=$?
+        expect "powershell $ps_case: power-mode $prof sai com 1" "$rc_unk" "1"
+        has "powershell $ps_case: mensagem de $prof cita Unknown" "Unknown" "$out_unk"
+        line_unk="$(tail -n 1 "$test_log")"
+        expect "powershell $ps_case: log $prof result" "$(jq -r '.result' <<<"$line_unk")" "refused"
+        expect "powershell $ps_case: log $prof reason" "$(jq -r '.reason' <<<"$line_unk")" "power_unknown"
+    done
+    rc_unk_eco=0
+    WIN_PS_DIR="$ps_dir" bash "$ROOT/bin/pc-ctl" --dry-run power-mode eco >/dev/null 2>&1 || rc_unk_eco=$?
+    expect "powershell $ps_case: eco continua permitido" "$rc_unk_eco" "0"
+done
+
+rc_online=0
+WIN_PS_DIR="$mock_ps_online" bash "$ROOT/bin/pc-ctl" --dry-run power-mode max >/dev/null 2>&1 || rc_online=$?
+expect "powershell Online (com CRLF): max permitido" "$rc_online" "0"
+
 # 4.7 Execução com mock de schtasks e request.json
 mock_req_dir="$tmp/progdata"
 mkdir -p "$mock_req_dir"

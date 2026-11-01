@@ -115,11 +115,12 @@ check_power_line_status() {
         return 0
     fi
 
-    local ps_output
-    ps_output="$("$PS_DIR/powershell.exe" -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus" 2>/dev/null || true)"
+    # Falha fechada: se o powershell.exe falhar ou não responder, o estado é Unknown (nunca Online).
+    local ps_output rc=0
+    ps_output="$("$PS_DIR/powershell.exe" -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus" 2>/dev/null)" || rc=$?
     ps_output="$(tr -d '\r\n ' <<<"$ps_output")"
-    if [[ -z "$ps_output" ]]; then
-        echo "Online"
+    if [[ "$rc" -ne 0 || -z "$ps_output" ]]; then
+        echo "Unknown"
     else
         echo "$ps_output"
     fi
@@ -209,8 +210,13 @@ cmd_power_mode() {
     local power_line
     power_line="$(check_power_line_status)"
     if [[ "$power_line" != "Online" && ("$profile" == "llm-boost" || "$profile" == "max") ]]; then
-        echo "Erro: Perfil '$profile' recusado: computador está operando na bateria." >&2
-        pc_ctl_log --cmd "power-mode" --result "refused" --reason "on_battery" --profile "$profile"
+        if [[ "$power_line" == "Unknown" ]]; then
+            echo "Erro: Perfil '$profile' recusado: não foi possível ler o estado da tomada (Unknown)." >&2
+            pc_ctl_log --cmd "power-mode" --result "refused" --reason "power_unknown" --profile "$profile"
+        else
+            echo "Erro: Perfil '$profile' recusado: computador está operando na bateria." >&2
+            pc_ctl_log --cmd "power-mode" --result "refused" --reason "on_battery" --profile "$profile"
+        fi
         return 1
     fi
 
