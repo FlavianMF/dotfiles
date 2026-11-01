@@ -162,6 +162,14 @@ cmd_power_mode() {
             expires="$(jq -r '.expires_at // "sem expiracao"' "$state_file")"
             echo "Perfil ativo: $active"
             echo "TTL: ${ttl}m (Expira em: $expires)"
+            local last_result last_reason last_profile last_at
+            last_result="$(jq -r '.last_result // empty' "$state_file")"
+            if [[ -n "$last_result" ]]; then
+                last_reason="$(jq -r '.last_reason // "-"' "$state_file")"
+                last_profile="$(jq -r '.last_profile // "-"' "$state_file")"
+                last_at="$(jq -r '.last_at // "-"' "$state_file")"
+                echo "Último pedido: perfil $last_profile, resultado $last_result ($last_reason), em $last_at"
+            fi
         else
             echo "Perfil ativo: Desconhecido (state.json não encontrado)"
         fi
@@ -252,13 +260,15 @@ with open(sys.argv[3], "w", encoding="utf-8") as f:
 
     execute "$WIN_DIR/schtasks.exe" /run /tn "pc-ctl-power"
 
+    # O schtasks /run é assíncrono: só o pedido foi enviado. A tarefa elevada grava o resultado real
+    # (applied|refused|failed) no state.json, e "power-mode status" lê esse arquivo.
     if [[ -n "$until" ]]; then
-        pc_ctl_log --cmd "power-mode" --result "applied" --reason "ok" --profile "$profile" --until "$until"
+        pc_ctl_log --cmd "power-mode" --result "requested" --reason "task_started" --profile "$profile" --until "$until"
     else
-        pc_ctl_log --cmd "power-mode" --result "applied" --reason "ok" --profile "$profile"
+        pc_ctl_log --cmd "power-mode" --result "requested" --reason "task_started" --profile "$profile"
     fi
 
-    echo "Perfil '$profile' solicitado com sucesso (TTL: ${ttl_minutes}m)."
+    echo "Perfil '$profile' solicitado (TTL: ${ttl_minutes}m). Confira o resultado com: pc-ctl power-mode status"
 }
 
 while [[ $# -gt 0 ]]; do

@@ -43,10 +43,10 @@ pc_ctl_log() {
     fi
 
     case "$result" in
-        applied|refused|failed|dry-run)
+        applied|refused|failed|dry-run|requested)
             ;;
         *)
-            echo "Erro pc_ctl_log: result deve ser 'applied', 'refused', 'failed' ou 'dry-run' (recebido: '$result')" >&2
+            echo "Erro pc_ctl_log: result deve ser 'applied', 'refused', 'failed', 'dry-run' ou 'requested' (recebido: '$result')" >&2
             return 1
             ;;
     esac

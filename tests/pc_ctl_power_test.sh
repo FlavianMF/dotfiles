@@ -83,6 +83,12 @@ else
     fail=1
 fi
 
+# Teste 1.4: result 'requested' (pedido enviado; o resultado real vem do state.json)
+rc_req=0
+pc_ctl_log --cmd "power-mode" --result "requested" --reason "task_started" --profile "max" || rc_req=$?
+expect "result 'requested' aceito" "$rc_req" "0"
+expect "log registra result=requested" "$(jq -r '.result' <<<"$(tail -n 1 "$test_log")")" "requested"
+
 
 # ==============================================================================
 # 2. Testes dos scripts PowerShell do Windows (powershell/pc-ctl/)
@@ -141,6 +147,12 @@ else
     fi
     has "Set-PowerProfile declara o parâmetro \$PowerProfile" '[string]$PowerProfile' "$ps_content"
     has "Set-PowerProfile mantém -Profile como alias" "[Alias('Profile')]" "$ps_content"
+    # O resultado real (applied|refused|failed) vai para o state.json, que o status lê.
+    has "Set-PowerProfile grava last_result no state.json" "last_result" "$ps_content"
+    has "Set-PowerProfile grava last_reason no state.json" "last_reason" "$ps_content"
+    has "Set-PowerProfile registra recusa" "refused" "$ps_content"
+    has "Set-PowerProfile registra falha" "failed" "$ps_content"
+    has "Set-PowerProfile recusa na bateria com reason on_battery" "on_battery" "$ps_content"
     has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
 fi
 
@@ -374,7 +386,7 @@ mkdir -p "$mock_req_dir"
 mock_req_file="$mock_req_dir/request.json"
 
 out_mock_run="$(PC_CTL_MOCK_POWER_LINE="Online" PC_CTL_REQUEST_FILE="$mock_req_file" WIN_SYS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" power-mode balanced 2>&1)"
-has "execucao grava request.json" "solicitado com sucesso" "$out_mock_run"
+has "execucao grava request.json e informa o pedido" "solicitado" "$out_mock_run"
 if [[ -f "$mock_req_file" ]]; then
     expect "request.json contem balanced" "$(jq -r '.profile' "$mock_req_file")" "balanced"
     echo "✅ PASSOU: request.json gerado corretamente"
@@ -385,7 +397,7 @@ fi
 
 line_applied_pwr="$(tail -n 1 "$test_log")"
 expect "log power-mode applied cmd" "$(jq -r '.cmd' <<<"$line_applied_pwr")" "power-mode"
-expect "log power-mode applied result" "$(jq -r '.result' <<<"$line_applied_pwr")" "applied"
+expect "log power-mode grava requested (o resultado real vem do state.json)" "$(jq -r '.result' <<<"$line_applied_pwr")" "requested"
 expect "log power-mode applied profile" "$(jq -r '.profile' <<<"$line_applied_pwr")" "balanced"
 
 # 4.8 Status do power-mode
@@ -402,6 +414,24 @@ JSON
 out_pwr_status="$(PC_CTL_STATE_FILE="$mock_state_file" bash "$ROOT/bin/pc-ctl" power-mode status 2>&1)"
 has "status exibe perfil ativo" "llm-boost" "$out_pwr_status"
 has "status exibe TTL restante ou total" "120" "$out_pwr_status"
+
+# 4.9 Status mostra o último pedido gravado pela tarefa elevada (recusa do lado Windows)
+cat >"$mock_state_file" <<'JSON'
+{
+  "active_profile": "balanced",
+  "applied_at": "2026-11-01T18:00:00Z",
+  "ttl_minutes": 0,
+  "expires_at": null,
+  "last_result": "refused",
+  "last_reason": "on_battery",
+  "last_profile": "max",
+  "last_at": "2026-11-01T19:00:00Z"
+}
+JSON
+out_pwr_status2="$(PC_CTL_STATE_FILE="$mock_state_file" bash "$ROOT/bin/pc-ctl" power-mode status 2>&1)"
+has "status exibe o resultado do último pedido" "refused" "$out_pwr_status2"
+has "status exibe o motivo do último pedido" "on_battery" "$out_pwr_status2"
+has "status exibe o perfil do último pedido" "max" "$out_pwr_status2"
 
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
