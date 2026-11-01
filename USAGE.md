@@ -288,7 +288,7 @@ pc-ctl wake-setup
 ```
 O que o `wake-setup` realiza:
 1. Executa `Install-PcCtl.ps1`, copiando os scripts para `C:\ProgramData\pc-ctl\` e restringindo as permissões (ACL) para que apenas **Administradores** e **SYSTEM** possam gravar ou alterar os scripts. A ACL usa SIDs (`*S-1-5-32-544`, `*S-1-5-18`, `*S-1-5-32-545`), então funciona em Windows de qualquer idioma, e o script aborta se o `icacls` falhar.
-2. Cria o arquivo de requisição `C:\ProgramData\pc-ctl\request.json` com permissão de escrita para usuários comuns.
+2. Cria o arquivo de requisição `C:\ProgramData\pc-ctl\request.json` com leitura e escrita para usuários comuns (`(R,W)`, sem permissão de apagar).
 3. Habilita os temporizadores de ativação (Wake Timers) do Windows na tomada (AC) e na bateria (DC) para o subgrupo `SUB_SLEEP` (`BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D`).
 4. Registra a tarefa agendada `pc-ctl-power` com privilégios elevados (`RunLevel Highest`), executando `Set-PowerProfile.ps1` sem solicitar UAC ao usuário durante o uso diário. Os passos 3 e 4 rodam dentro do script elevado, com `Register-ScheduledTask` e `powercfg`.
 

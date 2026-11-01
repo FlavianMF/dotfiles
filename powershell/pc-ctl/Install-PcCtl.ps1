@@ -57,8 +57,10 @@ if ($LASTEXITCODE -ne 0) {
   throw "icacls falhou ao restringir $InstallDir (código $LASTEXITCODE): $icaclsOut"
 }
 
-# Concede aos usuários permissão de escrita/modificação apenas no request.json
-$icaclsOut = & icacls.exe $requestFile /grant '*S-1-5-32-545:(M)' 2>&1
+# Concede aos usuários leitura e escrita no request.json, sem DELETE.
+# (M) incluiria DELETE, e a pasta só dá RX: um arquivo apagado não voltaria.
+# /grant:r substitui um (M) deixado por instalação anterior.
+$icaclsOut = & icacls.exe $requestFile /grant:r '*S-1-5-32-545:(R,W)' 2>&1
 if ($LASTEXITCODE -ne 0) {
   throw "icacls falhou ao liberar $requestFile (código $LASTEXITCODE): $icaclsOut"
 }

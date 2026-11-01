@@ -176,6 +176,16 @@ else
     else
         echo "✅ PASSOU: icacls não usa nomes de grupo em inglês"
     fi
+    # request.json: Usuários escrevem, mas não apagam. (M) inclui DELETE, e a pasta só dá RX,
+    # então um arquivo apagado não volta até o próximo wake-setup.
+    req_acl_line="$(grep -F 'requestFile' <<<"$icacls_lines" || true)"
+    has "request.json concede (R,W) a Usuarios" "*S-1-5-32-545:(R,W)" "$req_acl_line"
+    if grep -qE 'S-1-5-32-545:\((M|F)\)' <<<"$req_acl_line"; then
+        echo "❌ FALHA: request.json concede (M) ou (F) a Usuários (inclui DELETE)"
+        fail=1
+    else
+        echo "✅ PASSOU: request.json não concede DELETE a Usuários"
+    fi
     if grep -q 'Out-Null' <<<"$icacls_lines"; then
         echo "❌ FALHA: icacls engole a saída com Out-Null"
         fail=1
