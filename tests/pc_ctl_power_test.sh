@@ -132,6 +132,21 @@ else
     else
         echo "✅ PASSOU: icacls não engole erro com Out-Null"
     fi
+    # A criação da tarefa e o powercfg rodam dentro do script elevado.
+    has "Install-PcCtl registra a tarefa com Register-ScheduledTask" "Register-ScheduledTask" "$inst_content"
+    has "Install-PcCtl registra pc-ctl-power" "pc-ctl-power" "$inst_content"
+    has "Install-PcCtl usa RunLevel Highest" "-RunLevel Highest" "$inst_content"
+    has "Install-PcCtl habilita wake timers na tomada (AC)" "/setacvalueindex" "$inst_content"
+    has "Install-PcCtl habilita wake timers na bateria (DC)" "/setdcvalueindex" "$inst_content"
+    has "Install-PcCtl referencia SUB_SLEEP" "SUB_SLEEP" "$inst_content"
+    has "Install-PcCtl referencia GUID do wake timer" "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" "$inst_content"
+    has "Install-PcCtl executa Set-PowerProfile.ps1 instalado" "Set-PowerProfile.ps1" "$inst_content"
+    if grep -q '/mnt/' "$INSTALL_PS"; then
+        echo "❌ FALHA: Install-PcCtl contém caminho /mnt/ do WSL"
+        fail=1
+    else
+        echo "✅ PASSOU: Install-PcCtl não contém caminho /mnt/"
+    fi
     lastexit_count="$(grep -c 'LASTEXITCODE' "$INSTALL_PS" || true)"
     if [[ "$lastexit_count" -ge 2 ]]; then
         echo "✅ PASSOU: Install-PcCtl checa LASTEXITCODE depois de cada icacls"
@@ -149,45 +164,82 @@ fi
 out_help="$(bash "$ROOT/bin/pc-ctl" --help 2>&1)"
 has "help lista wake-setup" "wake-setup" "$out_help"
 
-# 3.2 Dry-run do wake-setup
+# 3.2 Dry-run do wake-setup: só dispara o script elevado. powercfg e tarefa vivem no Install-PcCtl.ps1.
 out_wake_dry="$(bash "$ROOT/bin/pc-ctl" --dry-run wake-setup 2>&1)"
 has "dry-run wake-setup invoca Install-PcCtl.ps1" "Install-PcCtl.ps1" "$out_wake_dry"
-has "dry-run wake-setup habilita timers na tomada (AC)" "/setacvalueindex" "$out_wake_dry"
-has "dry-run wake-setup habilita timers na bateria (DC)" "/setdcvalueindex" "$out_wake_dry"
-has "dry-run wake-setup referencia SUB_SLEEP" "SUB_SLEEP" "$out_wake_dry"
-has "dry-run wake-setup referencia GUID do wake timer" "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" "$out_wake_dry"
-has "dry-run wake-setup registra schtasks pc-ctl-power" "pc-ctl-power" "$out_wake_dry"
-has "dry-run wake-setup usa HIGHEST" "HIGHEST" "$out_wake_dry"
+has "dry-run wake-setup pede elevação (RunAs)" "RunAs" "$out_wake_dry"
+if grep -qE 'schtasks|powercfg' <<<"$out_wake_dry"; then
+    echo "❌ FALHA: wake-setup roda schtasks/powercfg fora da elevação"
+    fail=1
+else
+    echo "✅ PASSOU: wake-setup não roda schtasks/powercfg fora da elevação"
+fi
+
+# Nenhum argumento enviado ao Windows pode conter caminho /mnt/ (o executável é a 1a palavra)
+wake_dry_args="$(sed -E 's/^\[DRY-RUN\] [^ ]+ //' <<<"$out_wake_dry")"
+if grep -q '/mnt/' <<<"$wake_dry_args"; then
+    echo "❌ FALHA: argumento do wake-setup contém caminho /mnt/: $wake_dry_args"
+    fail=1
+else
+    echo "✅ PASSOU: argumentos do wake-setup não contêm /mnt/"
+fi
 
 line_wake_dry="$(tail -n 1 "$test_log")"
 expect "log wake-setup dry-run cmd" "$(jq -r '.cmd' <<<"$line_wake_dry")" "wake-setup"
 expect "log wake-setup dry-run result" "$(jq -r '.result' <<<"$line_wake_dry")" "dry-run"
 
-# 3.3 Execução com mocks de sistema
+# 3.3 Execução com mocks de sistema (cada mock registra seus argumentos em $MOCK_LOG)
 mock_win="$tmp/mock_win"
 mkdir -p "$mock_win"
+export MOCK_LOG="$tmp/mock_calls.log"
 cat >"$mock_win/powershell.exe" <<'MOCK'
 #!/bin/bash
 echo "MOCK_PS $*"
+echo "MOCK_PS $*" >>"$MOCK_LOG"
+exit "${MOCK_PS_RC:-0}"
 MOCK
 cat >"$mock_win/powercfg.exe" <<'MOCK'
 #!/bin/bash
 echo "MOCK_POWERCFG $*"
+echo "MOCK_POWERCFG $*" >>"$MOCK_LOG"
 MOCK
 cat >"$mock_win/schtasks.exe" <<'MOCK'
 #!/bin/bash
 echo "MOCK_SCHTASKS $*"
+echo "MOCK_SCHTASKS $*" >>"$MOCK_LOG"
 MOCK
 chmod +x "$mock_win/"*.exe
 
+: >"$MOCK_LOG"
 out_wake_mock="$(WIN_SYS_DIR="$mock_win" WIN_PS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" wake-setup 2>&1)"
 has "wake-setup mock chama powershell Install-PcCtl" "MOCK_PS" "$out_wake_mock"
-has "wake-setup mock chama powercfg" "MOCK_POWERCFG" "$out_wake_mock"
-has "wake-setup mock chama schtasks create" "MOCK_SCHTASKS /create" "$out_wake_mock"
+has "wake-setup mock passa Install-PcCtl.ps1" "Install-PcCtl.ps1" "$(cat "$MOCK_LOG")"
+if grep -qE 'MOCK_POWERCFG|MOCK_SCHTASKS' "$MOCK_LOG"; then
+    echo "❌ FALHA: wake-setup chamou powercfg/schtasks fora da elevação"
+    fail=1
+else
+    echo "✅ PASSOU: wake-setup não chama powercfg/schtasks fora da elevação"
+fi
+if grep -q '/mnt/' "$MOCK_LOG"; then
+    echo "❌ FALHA: argumento enviado ao Windows contém /mnt/: $(cat "$MOCK_LOG")"
+    fail=1
+else
+    echo "✅ PASSOU: nenhum argumento enviado ao Windows contém /mnt/"
+fi
 
 line_wake_applied="$(tail -n 1 "$test_log")"
 expect "log wake-setup applied cmd" "$(jq -r '.cmd' <<<"$line_wake_applied")" "wake-setup"
 expect "log wake-setup applied result" "$(jq -r '.result' <<<"$line_wake_applied")" "applied"
+
+# 3.4 Falha do script elevado: wake-setup propaga o código de saída e registra failed
+rc_wake_fail=0
+MOCK_PS_RC=1 WIN_SYS_DIR="$mock_win" WIN_PS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" wake-setup >/dev/null 2>&1 || rc_wake_fail=$?
+expect "wake-setup sai com 1 se o script elevado falhar" "$rc_wake_fail" "1"
+line_wake_fail="$(tail -n 1 "$test_log")"
+expect "log wake-setup falha result" "$(jq -r '.result' <<<"$line_wake_fail")" "failed"
+
+# O Start-Process elevado deve devolver o código de saída do Install-PcCtl.ps1
+has "wake-setup propaga ExitCode do processo elevado" "ExitCode" "$(cat "$ROOT/bin/pc-ctl")"
 
 
 # ==============================================================================

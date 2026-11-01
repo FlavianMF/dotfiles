@@ -6,6 +6,8 @@
   - Copia Set-PowerProfile.ps1 e Set-LenovoLlmBoost.ps1 para C:\ProgramData\pc-ctl\.
   - Configura ACLs de segurança: apenas Administradores e SYSTEM podem alterar/escrever scripts.
   - Concede permissão de escrita/modificação aos Usuários apenas no arquivo request.json.
+  - Habilita os temporizadores de ativação (powercfg) na tomada e na bateria.
+  - Registra a tarefa pc-ctl-power (RunLevel Highest) com Register-ScheduledTask.
 #>
 [CmdletBinding()]
 param(
@@ -60,5 +62,28 @@ $icaclsOut = & icacls.exe $requestFile /grant '*S-1-5-32-545:(M)' 2>&1
 if ($LASTEXITCODE -ne 0) {
   throw "icacls falhou ao liberar $requestFile (código $LASTEXITCODE): $icaclsOut"
 }
+
+# 5. Wake timers: habilita "Permitir temporizadores de ativação" na tomada (AC) e na bateria (DC)
+$wakeTimerGuid = 'BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D'
+foreach ($mode in '/setacvalueindex', '/setdcvalueindex') {
+  $powercfgOut = & powercfg.exe $mode SCHEME_CURRENT SUB_SLEEP $wakeTimerGuid 1 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "powercfg $mode falhou (código $LASTEXITCODE): $powercfgOut"
+  }
+}
+$powercfgOut = & powercfg.exe /setactive SCHEME_CURRENT 2>&1
+if ($LASTEXITCODE -ne 0) {
+  throw "powercfg /setactive falhou (código $LASTEXITCODE): $powercfgOut"
+}
+
+# 6. Tarefa pc-ctl-power: o usuário a dispara com `schtasks /run`, sem UAC. Sem gatilho e sem argumentos livres.
+$taskName = 'pc-ctl-power'
+$psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$powerScript = Join-Path $InstallDir 'Set-PowerProfile.ps1'
+$taskAction = New-ScheduledTaskAction -Execute $psExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$powerScript`""
+$taskUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+$taskPrincipal = New-ScheduledTaskPrincipal -UserId $taskUser -LogonType Interactive -RunLevel Highest
+$taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName $taskName -Action $taskAction -Principal $taskPrincipal -Settings $taskSettings -Description 'pc-ctl: aplica o perfil de energia pedido em request.json' -Force | Out-Null
 
 Write-Output "pc-ctl instalado com sucesso em $InstallDir."

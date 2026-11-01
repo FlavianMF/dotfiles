@@ -84,13 +84,22 @@ cmd_status() {
 cmd_wake_setup() {
     local install_ps="$SCRIPT_DIR/powershell/pc-ctl/Install-PcCtl.ps1"
     local win_install_ps
-    win_install_ps="$(wslpath -w "$install_ps" 2>/dev/null || echo "$install_ps")"
+    if ! win_install_ps="$(wslpath -w "$install_ps" 2>/dev/null)"; then
+        echo "Erro: wslpath não converteu '$install_ps' para um caminho Windows." >&2
+        pc_ctl_log --cmd "wake-setup" --result "failed" --reason "wslpath_failed"
+        return 1
+    fi
 
-    execute "$PS_DIR/powershell.exe" -NoProfile -Command "Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"$win_install_ps\"'"
-    execute "$WIN_DIR/powercfg.exe" /setacvalueindex SCHEME_CURRENT SUB_SLEEP BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D 1
-    execute "$WIN_DIR/powercfg.exe" /setdcvalueindex SCHEME_CURRENT SUB_SLEEP BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D 1
-    execute "$WIN_DIR/powercfg.exe" /setactive SCHEME_CURRENT
-    execute "$WIN_DIR/schtasks.exe" /create /tn "pc-ctl-power" /tr "$PS_DIR/powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\\ProgramData\\pc-ctl\\Set-PowerProfile.ps1" /sc ONCE /st 00:00 /rl HIGHEST /f
+    # Uma única elevação: Install-PcCtl.ps1 copia os scripts, ajusta a ACL, habilita os
+    # wake timers (powercfg) e registra a tarefa pc-ctl-power. O ExitCode volta para cá.
+    local rc=0
+    execute "$PS_DIR/powershell.exe" -NoProfile -Command "\$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"$win_install_ps\"'; exit \$p.ExitCode" || rc=$?
+
+    if [[ "$rc" -ne 0 ]]; then
+        echo "Erro: o script elevado Install-PcCtl.ps1 falhou (código $rc)." >&2
+        pc_ctl_log --cmd "wake-setup" --result "failed" --reason "install_failed"
+        return 1
+    fi
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         pc_ctl_log --cmd "wake-setup" --result "dry-run" --reason "dry_run"
