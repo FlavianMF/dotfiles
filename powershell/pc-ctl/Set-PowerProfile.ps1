@@ -63,7 +63,8 @@ if (-not $Profile -or $FromRequest) {
       if ($req.ttl_minutes) {
         $TtlMinutes = [int]$req.ttl_minutes
       }
-      Remove-Item -Path $RequestFile -Force -ErrorAction SilentlyContinue
+      # Sobrescreva em vez de apagar: o usuário só tem RX na pasta e precisa reescrever o arquivo no próximo pedido.
+      '{}' | Set-Content -Path $RequestFile -Encoding UTF8
     } catch {
       throw "Falha ao processar request.json: $_"
     }

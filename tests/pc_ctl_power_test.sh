@@ -104,6 +104,15 @@ else
     has "Set-PowerProfile agenda pc-ctl-power-revert" "pc-ctl-power-revert" "$ps_content"
     has "Set-PowerProfile grava state.json" "state.json" "$ps_content"
     has "Set-PowerProfile reaproveita Set-LenovoLlmBoost" "Set-LenovoLlmBoost.ps1" "$ps_content"
+
+    # request.json: o usuário só tem RX na pasta, então apagar o arquivo impede o próximo pedido.
+    if grep -iE '^[^#]*Remove-Item[^|]*(RequestFile|request\.json)' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile apaga o request.json com Remove-Item"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não apaga o request.json"
+    fi
+    has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
 fi
 
 if [[ ! -f "$INSTALL_PS" ]]; then
