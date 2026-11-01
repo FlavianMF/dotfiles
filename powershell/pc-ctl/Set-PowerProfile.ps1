@@ -134,16 +134,21 @@ switch ($Profile) {
 }
 
 # 6. Agendamento de reversão para balanced se houver TTL
+# Use Register-ScheduledTask: o formato de data do schtasks /sd depende da localidade (pt-BR: dd/MM/yyyy).
+$revertTaskName = 'pc-ctl-power-revert'
 if ($TtlMinutes -gt 0) {
   $revertTime = (Get-Date).AddMinutes($TtlMinutes)
-  $timeStr = $revertTime.ToString('HH:mm')
-  $dateStr = $revertTime.ToString('yyyy/MM/dd')
   $revertScript = Join-Path $ConfigDir 'Set-PowerProfile.ps1'
-  $revertAction = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$revertScript`" -Profile balanced"
+  $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $systemAccount = ([Security.Principal.SecurityIdentifier]'S-1-5-18').Translate([Security.Principal.NTAccount]).Value
 
-  schtasks.exe /create /tn "pc-ctl-power-revert" /tr $revertAction /sc once /st $timeStr /sd $dateStr /ru SYSTEM /rl HIGHEST /f | Out-Null
+  $revertAction = New-ScheduledTaskAction -Execute $psExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$revertScript`" -Profile balanced"
+  $revertTrigger = New-ScheduledTaskTrigger -Once -At $revertTime
+  $revertPrincipal = New-ScheduledTaskPrincipal -UserId $systemAccount -LogonType ServiceAccount -RunLevel Highest
+  $revertSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+  Register-ScheduledTask -TaskName $revertTaskName -Action $revertAction -Trigger $revertTrigger -Principal $revertPrincipal -Settings $revertSettings -Force | Out-Null
 } else {
-  schtasks.exe /delete /tn "pc-ctl-power-revert" /f 2>$null | Out-Null
+  Unregister-ScheduledTask -TaskName $revertTaskName -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 # 7. Gravação do estado atual em state.json

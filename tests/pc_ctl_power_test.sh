@@ -112,6 +112,17 @@ else
     else
         echo "✅ PASSOU: Set-PowerProfile não apaga o request.json"
     fi
+    # A reversão do TTL não pode depender da localidade (schtasks /sd usa dd/MM/yyyy em pt-BR).
+    if grep -iE '^[^#]*schtasks' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile usa schtasks (formato de data depende da localidade)"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa schtasks"
+    fi
+    has "Set-PowerProfile registra a reversão com Register-ScheduledTask" "Register-ScheduledTask" "$ps_content"
+    has "Set-PowerProfile usa gatilho New-ScheduledTaskTrigger -Once -At" "New-ScheduledTaskTrigger -Once -At" "$ps_content"
+    has "Set-PowerProfile remove a reversão com Unregister-ScheduledTask" "Unregister-ScheduledTask" "$ps_content"
+    has "Set-PowerProfile roda a reversão como SYSTEM por SID" "S-1-5-18" "$ps_content"
     has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
 fi
 
