@@ -132,6 +132,15 @@ else
     fi
     has "Set-PowerProfile executa só o Set-LenovoLlmBoost de ConfigDir" "Join-Path \$ConfigDir 'Set-LenovoLlmBoost.ps1'" "$ps_content"
     has "Set-PowerProfile aborta se Set-LenovoLlmBoost.ps1 faltar" "Set-LenovoLlmBoost.ps1 não encontrado" "$ps_content"
+    # O parâmetro $Profile sombrearia a variável automática $PROFILE do PowerShell.
+    if grep -iE '^[^#]*\$Profile\b' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile usa \$Profile (sombreia a variável automática \$PROFILE)"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa \$Profile"
+    fi
+    has "Set-PowerProfile declara o parâmetro \$PowerProfile" '[string]$PowerProfile' "$ps_content"
+    has "Set-PowerProfile mantém -Profile como alias" "[Alias('Profile')]" "$ps_content"
     has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
 fi
 

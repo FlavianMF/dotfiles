@@ -11,8 +11,9 @@
 #>
 [CmdletBinding()]
 param(
+  [Alias('Profile')]
   [ValidateSet('eco', 'balanced', 'llm-boost', 'max')]
-  [string]$Profile,
+  [string]$PowerProfile,
 
   [int]$TtlMinutes = 0,
 
@@ -53,12 +54,12 @@ function Set-LenovoWmi {
 
 # 1. Leitura de request.json caso Profile não tenha sido passado na linha de comando
 $RequestFile = Join-Path $ConfigDir 'request.json'
-if (-not $Profile -or $FromRequest) {
+if (-not $PowerProfile -or $FromRequest) {
   if (Test-Path $RequestFile) {
     try {
       $req = Get-Content -Path $RequestFile -Raw | ConvertFrom-Json
       if ($req.profile) {
-        $Profile = [string]$req.profile
+        $PowerProfile = [string]$req.profile
       }
       if ($req.ttl_minutes) {
         $TtlMinutes = [int]$req.ttl_minutes
@@ -75,19 +76,19 @@ if (-not $Profile -or $FromRequest) {
 
 # 2. Validação de perfil
 $validProfiles = @('eco', 'balanced', 'llm-boost', 'max')
-if ($Profile -notin $validProfiles) {
-  throw "Perfil inválido: '$Profile'. Perfis suportados: $($validProfiles -join ', ')"
+if ($PowerProfile -notin $validProfiles) {
+  throw "Perfil inválido: '$PowerProfile'. Perfis suportados: $($validProfiles -join ', ')"
 }
 
 # 3. Verificação de bateria / tomada
 Add-Type -AssemblyName System.Windows.Forms
 $powerStatus = [System.Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus
-if ($powerStatus -ne 'Online' -and ($Profile -eq 'llm-boost' -or $Profile -eq 'max')) {
-  throw "Perfil '$Profile' recusado: computador operando na bateria ($powerStatus)."
+if ($powerStatus -ne 'Online' -and ($PowerProfile -eq 'llm-boost' -or $PowerProfile -eq 'max')) {
+  throw "Perfil '$PowerProfile' recusado: computador operando na bateria ($powerStatus)."
 }
 
 # 4. Validação de TTL
-if ($Profile -in @('llm-boost', 'max')) {
+if ($PowerProfile -in @('llm-boost', 'max')) {
   if ($TtlMinutes -le 0) {
     $TtlMinutes = 120 # Padrão: 2 horas
   }
@@ -99,7 +100,7 @@ if ($Profile -in @('llm-boost', 'max')) {
 }
 
 # 5. Aplicação do Perfil
-switch ($Profile) {
+switch ($PowerProfile) {
   'eco' {
     powercfg /setactive $BalancedGuid
     Set-LenovoWmi -SmartFanMode 1 -DynamicBoostWatts 0
@@ -131,7 +132,7 @@ if ($TtlMinutes -gt 0) {
   $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
   $systemAccount = ([Security.Principal.SecurityIdentifier]'S-1-5-18').Translate([Security.Principal.NTAccount]).Value
 
-  $revertAction = New-ScheduledTaskAction -Execute $psExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$revertScript`" -Profile balanced"
+  $revertAction = New-ScheduledTaskAction -Execute $psExe -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$revertScript`" -PowerProfile balanced"
   $revertTrigger = New-ScheduledTaskTrigger -Once -At $revertTime
   $revertPrincipal = New-ScheduledTaskPrincipal -UserId $systemAccount -LogonType ServiceAccount -RunLevel Highest
   $revertSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
@@ -153,11 +154,11 @@ $expiresAt = if ($TtlMinutes -gt 0) {
 }
 
 $stateObj = [ordered]@{
-  active_profile = $Profile
+  active_profile = $PowerProfile
   applied_at     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
   ttl_minutes    = $TtlMinutes
   expires_at     = $expiresAt
 }
 
 $stateObj | ConvertTo-Json | Set-Content -Path $StateFile -Encoding UTF8
-Write-Output "Perfil '$Profile' aplicado com sucesso. (TTL: $TtlMinutes min)"
+Write-Output "Perfil '$PowerProfile' aplicado com sucesso. (TTL: $TtlMinutes min)"
