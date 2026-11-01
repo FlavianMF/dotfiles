@@ -18,7 +18,7 @@ expect() {
 }
 
 has() {
-    if ! grep -q -- "$2" <<<"$3"; then
+    if ! grep -F -q -- "$2" <<<"$3"; then
         echo "❌ FALHA: $1 (faltou '$2' em: $3)"
         fail=1
     else
@@ -81,6 +81,39 @@ if [[ "$rc_invalid" -ne 0 ]]; then
 else
     echo "❌ FALHA: result inválido deveria ter retornado erro"
     fail=1
+fi
+
+
+# ==============================================================================
+# 2. Testes dos scripts PowerShell do Windows (powershell/pc-ctl/)
+# ==============================================================================
+SET_POWER_PS="$ROOT/powershell/pc-ctl/Set-PowerProfile.ps1"
+INSTALL_PS="$ROOT/powershell/pc-ctl/Install-PcCtl.ps1"
+
+if [[ ! -f "$SET_POWER_PS" ]]; then
+    echo "❌ FALHA: powershell/pc-ctl/Set-PowerProfile.ps1 não existe (fase RED do TDD)"
+    fail=1
+else
+    ps_content="$(cat "$SET_POWER_PS")"
+    has "Set-PowerProfile suporta eco" "eco" "$ps_content"
+    has "Set-PowerProfile suporta balanced" "balanced" "$ps_content"
+    has "Set-PowerProfile suporta llm-boost" "llm-boost" "$ps_content"
+    has "Set-PowerProfile suporta max" "max" "$ps_content"
+    has "Set-PowerProfile le request.json" "request.json" "$ps_content"
+    has "Set-PowerProfile checa PowerLineStatus na bateria" "PowerLineStatus" "$ps_content"
+    has "Set-PowerProfile agenda pc-ctl-power-revert" "pc-ctl-power-revert" "$ps_content"
+    has "Set-PowerProfile grava state.json" "state.json" "$ps_content"
+    has "Set-PowerProfile reaproveita Set-LenovoLlmBoost" "Set-LenovoLlmBoost.ps1" "$ps_content"
+fi
+
+if [[ ! -f "$INSTALL_PS" ]]; then
+    echo "❌ FALHA: powershell/pc-ctl/Install-PcCtl.ps1 não existe (fase RED do TDD)"
+    fail=1
+else
+    inst_content="$(cat "$INSTALL_PS")"
+    has "Install-PcCtl instala em ProgramData" "ProgramData\\pc-ctl" "$inst_content"
+    has "Install-PcCtl ajusta ACL via icacls" "icacls" "$inst_content"
+    has "Install-PcCtl concede escrita para Users em request.json" "request.json" "$inst_content"
 fi
 
 echo "----------------------------------------"
