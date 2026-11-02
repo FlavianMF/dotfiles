@@ -324,6 +324,31 @@ Regras de segurança e invariantes:
 - **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run|requested`), `reason`, `profile` e `until`.
 - **Resultado real**: o `schtasks /run` é assíncrono. O `power-mode` grava `requested` no log. A tarefa elevada grava `applied`, `refused` ou `failed` no `state.json`, e `pc-ctl power-mode status` mostra o último pedido.
 
+#### Visão Geral da Cadeia de Energia e Despertar
+```mermaid
+flowchart TD
+    subgraph Traycer["Agente Traycer"]
+        P["Pausa >= 30m"] --> Check["traycer_list_tasks (outros agentes?)"]
+        Check -- "Livre" --> SS["pc-ctl schedule-sleep --until &lt;ts&gt; --agents-idle-checked"]
+        Check -- "Ocupado" --> NoSleep["Pausa normal sem suspender"]
+    end
+
+    subgraph PC["Lenovo LOQ (Host)"]
+        SS --> Locks{"Travas Locais<br>(Ociosidade >= 10m &amp;<br>Zero Builds Ativos)"}
+        Locks -- "Falha" --> Refuse["Refusão segura + Log"]
+        Locks -- "OK" --> Tasks["1. Agenda Tarefa pc-ctl-wake (RTC WakeToRun -5min)<br>2. Publica MQTT pc/loq/sleeping_until (retain)<br>3. Aplica perfil eco<br>4. Suspende (S3 na tomada / Hibernar na bateria)"]
+    end
+
+    subgraph WakeChain["Cadeia de Despertar & Fallback"]
+        Tasks -.->|"-5 min"| RTC["1. RTC WakeToRun (Hardware Wake)"]
+        RTC --> WCheck["pc-ctl wake-check<br>(setup-mcp.sh + pc-ctl status)"]
+        WCheck -- "Saudável" --> ClearMQTT["Limpa pc/loq/sleeping_until (MQTT)"]
+
+        Tasks -.->|"+10 min &amp; Offline"| ESP32["2. Fallback WoL: ESP32 dispara Magic Packet"]
+        Tasks -.->|"+20 min &amp; Offline"| Push["3. Fallback Alerta: Notificação Mobile (iOS/Android)"]
+    end
+```
+
 #### Suspensão Agendada com Wake RTC (`schedule-sleep`)
 Permite suspender o computador com garantia de despertar automático (RTC Wake Timers) e sincronização de estado com o Home Assistant:
 ```bash

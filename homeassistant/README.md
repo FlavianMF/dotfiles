@@ -193,3 +193,27 @@ O Lenovo LOQ opera primariamente via agendamento RTC (`WakeToRun` no Windows Tas
 1. **RTC Wake Local**: Mecanismo primário (dispara 5 minutos antes do término da quota/espera).
 2. **ESP32 WoL (+10 min)**: Se 10 minutos após o wake previsto o PC ainda não responder no MQTT (`sensor.loq_windows_cargadacpu` indisponível / `binary_sensor.loq_online` off), a automação `loq_wake_fallback_esp32_wol` aciona o botão `button.wake_loq_pc` no firmware ESPHome (`homeassistant/esphome/pc-wol.yaml` via `target_mac_address`).
 3. **Notificação Mobile (+20 min)**: Se passados 20 minutos o dispositivo ainda estiver indisponível, a automação `loq_wake_fallback_notify_mobile` dispara um alerta push para o smartphone do usuário via `notify.send_message` direcionado a `notify.iphone_de_flavian`.
+
+```mermaid
+flowchart TD
+    subgraph Traycer["Agente Traycer"]
+        P["Pausa >= 30m"] --> Check["traycer_list_tasks (outros agentes?)"]
+        Check -- "Livre" --> SS["pc-ctl schedule-sleep --until &lt;ts&gt; --agents-idle-checked"]
+        Check -- "Ocupado" --> NoSleep["Pausa normal sem suspender"]
+    end
+
+    subgraph PC["Lenovo LOQ (Host)"]
+        SS --> Locks{"Travas Locais<br>(Ociosidade >= 10m &amp;<br>Zero Builds Ativos)"}
+        Locks -- "Falha" --> Refuse["Refusão segura + Log"]
+        Locks -- "OK" --> Tasks["1. Agenda Tarefa pc-ctl-wake (RTC WakeToRun -5min)<br>2. Publica MQTT pc/loq/sleeping_until (retain)<br>3. Aplica perfil eco<br>4. Suspende (S3 na tomada / Hibernar na bateria)"]
+    end
+
+    subgraph WakeChain["Cadeia de Despertar & Fallback"]
+        Tasks -.->|"-5 min"| RTC["1. RTC WakeToRun (Hardware Wake)"]
+        RTC --> WCheck["pc-ctl wake-check<br>(setup-mcp.sh + pc-ctl status)"]
+        WCheck -- "Saudável" --> ClearMQTT["Limpa pc/loq/sleeping_until (MQTT)"]
+
+        Tasks -.->|"+10 min &amp; Offline"| ESP32["2. Fallback WoL: ESP32 dispara Magic Packet"]
+        Tasks -.->|"+20 min &amp; Offline"| Push["3. Fallback Alerta: Notificação Mobile (iOS/Android)"]
+    end
+```
