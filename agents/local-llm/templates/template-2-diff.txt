@@ -5,13 +5,20 @@ ISSUES (verbatim tool output):
 {LINTER_OR_TEST_OUTPUT}
 ```
 
-FILE {PATH} (with line numbers):
+FILE {PATH}:
 ```{LANG}
-{NUMBERED_FILE_OR_RANGE}
+{RAW_FILE_CONTENT_OR_EXCERPT}
+```
+
+EXTERNAL SIGNATURES / TYPES (available to import/use, do not re-declare):
+```{LANG}
+{EXTERNAL_SIGNATURES}
 ```
 
 CONSTRAINTS:
 - Keep public names and signatures.
 - Do not reorder imports or reformat untouched lines.
+- Output MUST be a valid unified diff that can be applied cleanly with `git apply`.
+- Do NOT prefix diff lines with line numbers.
 
 Output: one ```diff block, unified format, paths a/{PATH} b/{PATH}.

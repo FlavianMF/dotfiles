@@ -4,6 +4,11 @@ GOAL: {ONE_SENTENCE_GOAL}
 DOMAIN RULES:
 {DOMAIN_BLOCK}
 
+EXTERNAL SIGNATURES / TYPES (available to import/use, do not re-declare):
+```{LANG}
+{EXTERNAL_SIGNATURES}
+```
+
 EXACT FACTS (use verbatim):
 - {FACT_1}
 - {FACT_2}

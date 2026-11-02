@@ -1,5 +1,5 @@
 #!/bin/bash
-# Testes TDD de bin/llm-ask com mock de curl e validação de payload JSON
+# Testes TDD de bin/llm-ask com mock de curl, think, grammar e apply de search-replace
 # Uso: bash tests/llm_ask_test.sh
 set -u
 
@@ -36,6 +36,8 @@ fi
 out_help="$(bash "$LLM_ASK" --help 2>&1)"
 has "help exibe uso" "Uso: llm-ask" "$out_help"
 has "help lista opções" "--temp" "$out_help"
+has "help lista --think" "--think" "$out_help"
+has "help lista --apply" "--apply" "$out_help"
 
 out_noargs="$(bash "$LLM_ASK" 2>&1 || true)"
 has "erro de argumento obrigatório" "Arquivo de prompt do usuário é obrigatório" "$out_noargs"
@@ -68,12 +70,15 @@ expect "temperatura padrão 0.2" "$temp" "0.2"
 max_tokens="$(jq -r '.max_tokens' <<<"$out_dry")"
 expect "max_tokens padrão 6000" "$max_tokens" "6000"
 
-# 4. Customização de parâmetros no dry-run
-out_custom="$(bash "$LLM_ASK" --dry-run --temp 0.7 --max-tokens 1024 "$tmp/user.txt" "$tmp/sys.txt")"
+# 4. Customização de parâmetros no dry-run e --grammar
+echo 'root ::= "test"' > "$tmp/test.gbnf"
+out_custom="$(bash "$LLM_ASK" --dry-run --temp 0.7 --max-tokens 1024 --grammar "$tmp/test.gbnf" "$tmp/user.txt" "$tmp/sys.txt")"
 custom_temp="$(jq -r '.temperature' <<<"$out_custom")"
 expect "temperatura customizada 0.7" "$custom_temp" "0.7"
 custom_max="$(jq -r '.max_tokens' <<<"$out_custom")"
 expect "max_tokens customizado 1024" "$custom_max" "1024"
+grammar_in_payload="$(jq -r '.grammar' <<<"$out_custom")"
+has "grammar injetada no payload" 'root ::= "test"' "$grammar_in_payload"
 
 # 5. Entrada via stdin (-)
 out_stdin="$(echo "STDIN CONTENT" | bash "$LLM_ASK" --dry-run - "$tmp/sys.txt")"
@@ -89,7 +94,7 @@ cat << 'RESP'
   "choices": [
     {
       "message": {
-        "content": "Ignored explanation\n```typescript\nexport const answer = 42;\n```\nMore text"
+        "content": "<think>\nThinking about the problem...\n</think>\nIgnored explanation\n```typescript\nexport const answer = 42;\n```\nMore text"
       }
     }
   ]
@@ -99,16 +104,40 @@ MOCK
 chmod +x "$tmp/bin/curl"
 
 out_extract="$(PATH="$tmp/bin:$PATH" bash "$LLM_ASK" "$tmp/user.txt" "$tmp/sys.txt")"
-has "extrai bloco de código sem prosa externa" "export const answer = 42;" "$out_extract"
-if grep -q "Ignored explanation" <<<"$out_extract"; then
-    echo "❌ FALHA: prosa externa não foi descartada"
+has "extrai bloco de código sem prosa externa e sem think" "export const answer = 42;" "$out_extract"
+if grep -q "Thinking about" <<<"$out_extract"; then
+    echo "❌ FALHA: tag think não foi descartada na extração de código"
     fail=1
 else
-    echo "✅ PASSOU: prosa externa descartada na extração"
+    echo "✅ PASSOU: tag think descartada na extração de código"
 fi
+
+out_think="$(PATH="$tmp/bin:$PATH" bash "$LLM_ASK" --think "$tmp/user.txt" "$tmp/sys.txt")"
+has "extrai apenas conteúdo da tag think" "Thinking about the problem..." "$out_think"
 
 out_raw="$(PATH="$tmp/bin:$PATH" bash "$LLM_ASK" --raw "$tmp/user.txt" "$tmp/sys.txt")"
 has "modo raw preserva texto completo" "Ignored explanation" "$out_raw"
+
+# 7. Teste de --apply com Search/Replace blocks
+cat << 'MOCK_SR' > "$tmp/bin/curl"
+#!/bin/bash
+cat << 'RESP'
+{
+  "choices": [
+    {
+      "message": {
+        "content": "```search-replace\n<<<<<<< SEARCH\nold_value = 10\n=======\nnew_value = 20\n>>>>>>> REPLACE\n```"
+      }
+    }
+  ]
+}
+RESP
+MOCK_SR
+
+echo "old_value = 10" > "$tmp/target_file.py"
+PATH="$tmp/bin:$PATH" bash "$LLM_ASK" --apply "$tmp/target_file.py" "$tmp/user.txt" "$tmp/sys.txt" >/dev/null
+updated_content="$(cat "$tmp/target_file.py")"
+expect "--apply substitui conteúdo com search-replace" "$updated_content" "new_value = 20"
 
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then

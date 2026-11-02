@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # llm-ask: chamada direta ao llama-server local em bounded context (sem ferramentas, sem histórico).
+# Suporta extração de blocos cercados, modo raw, think extraction e aplicação determinística (--apply).
 # Uso: llm-ask [opções] <arquivo-prompt-usuario> [arquivo-prompt-sistema]
 set -euo pipefail
 
@@ -15,7 +16,10 @@ PORT="${LLM_PORT:-8080}"
 TEMP="0.2"
 MAX_TOKENS="6000"
 RAW=0
+SHOW_THINK=0
 DRY_RUN=0
+APPLY_TARGET=""
+GRAMMAR_FILE=""
 ARGS=()
 
 show_help() {
@@ -32,6 +36,9 @@ Opções:
   -p, --port PORT          Porta do llama-server (padrão: 8080 ou $LLM_PORT)
   -m, --max-tokens N       Máximo de tokens gerados (padrão: 6000)
   --raw                    Retorna a resposta bruta completa sem extrair bloco de código
+  --think                  Exibe apenas o raciocínio (<think>...</think> ou reasoning_content)
+  --apply <arquivo>        Aplica o diff ou bloco search-replace gerado diretamente ao arquivo
+  --grammar <arquivo>      Aplica uma gramática GBNF do llama-server para amostragem estrita
   -d, --dry-run            Imprime o payload JSON formatado sem enviar a requisição
   -h, --help               Exibe esta mensagem de ajuda
 HELP
@@ -61,6 +68,20 @@ while [[ $# -gt 0 ]]; do
         --raw)
             RAW=1
             shift
+            ;;
+        --think)
+            SHOW_THINK=1
+            shift
+            ;;
+        --apply)
+            [[ $# -gt 1 ]] || { echo "Erro: --apply requer o caminho do arquivo alvo." >&2; exit 1; }
+            APPLY_TARGET="$2"
+            shift 2
+            ;;
+        --grammar)
+            [[ $# -gt 1 ]] || { echo "Erro: --grammar requer o arquivo de gramática GBNF." >&2; exit 1; }
+            GRAMMAR_FILE="$2"
+            shift 2
             ;;
         -d|--dry-run)
             DRY_RUN=1
@@ -109,11 +130,21 @@ if [[ ! -f "$SYS_FILE" ]]; then
     exit 1
 fi
 
+grammar_arg=""
+if [[ -n "$GRAMMAR_FILE" ]]; then
+    if [[ ! -f "$GRAMMAR_FILE" ]]; then
+        echo "Erro: Arquivo de gramática não encontrado: '$GRAMMAR_FILE'" >&2
+        exit 1
+    fi
+    grammar_arg="$(<"$GRAMMAR_FILE")"
+fi
+
 PAYLOAD="$(jq -n \
     --rawfile sys "$SYS_FILE" \
     --rawfile usr "$USER_FILE" \
     --argjson temp "$TEMP" \
     --argjson max_tokens "$MAX_TOKENS" \
+    --arg grammar "$grammar_arg" \
     '{
         model: "local",
         cache_prompt: true,
@@ -127,7 +158,7 @@ PAYLOAD="$(jq -n \
             {role: "system", content: $sys},
             {role: "user", content: $usr}
         ]
-    }')"
+    } + (if $grammar != "" then {grammar: $grammar} else {} end)')"
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "$PAYLOAD"
@@ -144,20 +175,104 @@ if ! RESPONSE="$(echo "$PAYLOAD" | curl -fsS -m 300 "$API_URL" -H 'Content-Type:
 fi
 
 CONTENT="$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')"
+REASONING="$(echo "$RESPONSE" | jq -r '.choices[0].message.reasoning_content // empty')"
 
-if [[ -z "$CONTENT" ]]; then
+if [[ -z "$CONTENT" && -z "$REASONING" ]]; then
     echo "Erro: Resposta vazia ou inesperada da API local:" >&2
     echo "$RESPONSE" >&2
     exit 1
 fi
 
-if [[ "$RAW" -eq 1 ]]; then
-    echo "$CONTENT"
-else
-    # Extrai o conteúdo dentro do bloco cercado (``` ... ```) se houver
-    if grep -q '^```' <<<"$CONTENT"; then
-        echo "$CONTENT" | awk '/^```/{f=!f; next} f'
+# Se solicitado apenas o pensamento
+if [[ "$SHOW_THINK" -eq 1 ]]; then
+    if [[ -n "$REASONING" ]]; then
+        echo "$REASONING"
+    elif grep -q '<think>' <<<"$CONTENT"; then
+        python3 -c '
+import sys, re
+text = sys.stdin.read()
+m = re.search(r"<think>(.*?)</think>", text, re.DOTALL)
+if m:
+    print(m.group(1).strip())
+' <<<"$CONTENT"
     else
-        echo "$CONTENT"
+        echo "Nenhum raciocínio explícito retornado pelo modelo."
+    fi
+    exit 0
+fi
+
+if [[ "$RAW" -eq 1 ]]; then
+    FINAL_OUTPUT="$CONTENT"
+else
+    # Extrai o conteúdo dentro do bloco cercado (``` ... ```)
+    if grep -q '^```' <<<"$CONTENT"; then
+        FINAL_OUTPUT="$(echo "$CONTENT" | awk '/^```/{f=!f; next} f')"
+    else
+        FINAL_OUTPUT="$CONTENT"
     fi
 fi
+
+# Aplicação automática ao arquivo alvo se solicitado
+if [[ -n "$APPLY_TARGET" ]]; then
+    if [[ ! -f "$APPLY_TARGET" ]]; then
+        echo "Erro: Arquivo alvo para --apply não encontrado: '$APPLY_TARGET'" >&2
+        exit 1
+    fi
+
+    # Caso 1: Bloco SEARCH/REPLACE
+    if grep -F -q '<<<<<<< SEARCH' <<<"$FINAL_OUTPUT"; then
+        python3 -c '
+import sys, re
+target_file = sys.argv[1]
+diff_content = sys.stdin.read()
+with open(target_file, "r", encoding="utf-8") as f:
+    content = f.read()
+
+pattern = re.compile(r"<<<<<<< SEARCH\s*\n(.*?)\n=======\s*\n(.*?)\n>>>>>>> REPLACE", re.DOTALL)
+matches = pattern.findall(diff_content)
+if not matches:
+    print("Erro: Nenhum bloco SEARCH/REPLACE válido encontrado.", file=sys.stderr)
+    sys.exit(1)
+
+for search, replace in matches:
+    search_norm = search.replace("\r\n", "\n")
+    content_norm = content.replace("\r\n", "\n")
+    if search not in content and search_norm not in content_norm:
+        print(f"Erro: Trecho de busca não confere no arquivo:\n{search}", file=sys.stderr)
+        sys.exit(1)
+    if search in content:
+        content = content.replace(search, replace, 1)
+    else:
+        content = content_norm.replace(search_norm, replace, 1)
+
+with open(target_file, "w", encoding="utf-8") as f:
+    f.write(content)
+print(f"✓ {len(matches)} bloco(s) Search/Replace aplicado(s) com sucesso em {target_file}.")
+' "$APPLY_TARGET" <<<"$FINAL_OUTPUT"
+        exit $?
+    fi
+
+    # Caso 2: Unified diff (git apply com recount)
+    if grep -E -q '^(diff --git|--- |\+\+\+ |@@ )' <<<"$FINAL_OUTPUT"; then
+        tmp_patch="$(mktemp)"
+        echo "$FINAL_OUTPUT" > "$tmp_patch"
+        if git apply --recount --ignore-space-change "$tmp_patch" 2>/dev/null; then
+            echo "✓ Unified diff aplicado com sucesso via git apply (--recount)."
+            rm -f "$tmp_patch"
+            exit 0
+        elif patch -p1 --batch < "$tmp_patch" 2>/dev/null; then
+            echo "✓ Unified diff aplicado com sucesso via patch."
+            rm -f "$tmp_patch"
+            exit 0
+        else
+            echo "Erro: git apply / patch falhou ao aplicar o diff unificado." >&2
+            git apply --recount --check "$tmp_patch" || true
+            rm -f "$tmp_patch"
+            exit 1
+        fi
+    fi
+
+    echo "Aviso: A saída não continha blocos diff nem search-replace identificáveis." >&2
+fi
+
+echo "$FINAL_OUTPUT"
