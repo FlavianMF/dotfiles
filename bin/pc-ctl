@@ -609,76 +609,197 @@ cmd_wake_check() {
 
 cmd_wake_test() {
     if [[ $# -eq 0 ]]; then
-        echo "Erro: Subcomando wake-test requer argumento 'wol'." >&2
-        echo "Uso: pc-ctl wake-test wol [--delay N]" >&2
+        echo "Erro: Subcomando wake-test requer argumento 'wol' ou 'rtc'." >&2
+        echo "Uso: pc-ctl wake-test wol|rtc [--delay N]" >&2
         return 1
     fi
 
     local target="$1"
     shift
 
-    if [[ "$target" != "wol" ]]; then
-        echo "Erro: Alvo desconhecido para wake-test: '$target'. Válido: wol" >&2
-        return 1
-    fi
+    case "$target" in
+        wol)
+            local delay_seconds=15
 
-    local delay_seconds=15
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --delay)
+                        delay_seconds="${2:-15}"
+                        shift 2
+                        ;;
+                    *)
+                        shift
+                        ;;
+                esac
+            done
 
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --delay)
-                delay_seconds="${2:-15}"
-                shift 2
-                ;;
-            *)
-                shift
-                ;;
-        esac
-    done
+            # Carrega variáveis do Home Assistant se existirem
+            local mcp_env="$SCRIPT_DIR/secrets/mcp.env"
+            if [[ -f "$mcp_env" ]]; then
+                # shellcheck source=/dev/null
+                source "$mcp_env" 2>/dev/null || true
+            fi
 
-    # Carrega variáveis do Home Assistant se existirem
-    local mcp_env="$SCRIPT_DIR/secrets/mcp.env"
-    if [[ -f "$mcp_env" ]]; then
-        # shellcheck source=/dev/null
-        source "$mcp_env" 2>/dev/null || true
-    fi
+            local ha_url="${HOMEASSISTANT_URL:-http://100.105.143.75:8123}"
+            local ha_token="${HOMEASSISTANT_TOKEN:-}"
 
-    local ha_url="${HOMEASSISTANT_URL:-http://100.105.143.75:8123}"
-    local ha_token="${HOMEASSISTANT_TOKEN:-}"
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "[DRY-RUN] Testando despertar via ESP32 Wake-on-LAN (button.wake_loq_pc em $ha_url)"
+                echo "[DRY-RUN] Agendando envio de Magic Packet e suspendendo o sistema em S3..."
+                pc_ctl_log --cmd "wake-test" --result "dry-run" --reason "dry_run"
+                return 0
+            fi
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-        echo "[DRY-RUN] Testando despertar via ESP32 Wake-on-LAN (button.wake_loq_pc em $ha_url)"
-        echo "[DRY-RUN] Agendando envio de Magic Packet e suspendendo o sistema em S3..."
-        pc_ctl_log --cmd "wake-test" --result "dry-run" --reason "dry_run"
-        return 0
-    fi
+            echo "Iniciando teste de despertar via ESP32 Wake-on-LAN..."
+            echo "1. Agendando disparo do botão button.wake_loq_pc no Home Assistant ($ha_url em ${delay_seconds}s)..."
 
-    echo "Iniciando teste de despertar via ESP32 Wake-on-LAN..."
-    echo "1. Agendando disparo do botão button.wake_loq_pc no Home Assistant ($ha_url em ${delay_seconds}s)..."
+            if [[ -n "$ha_token" ]]; then
+                (
+                    sleep "$delay_seconds"
+                    curl -s -m 10 -X POST -H "Authorization: Bearer $ha_token" \
+                        -H "Content-Type: application/json" \
+                        "$ha_url/api/services/button/press" \
+                        -d '{"entity_id": "button.wake_loq_pc"}' >/dev/null 2>&1 || true
+                ) &
+            else
+                echo "Aviso: HOMEASSISTANT_TOKEN não configurado. Acione manualmente 'button.wake_loq_pc' após suspender." >&2
+            fi
 
-    if [[ -n "$ha_token" ]]; then
-        (
-            sleep "$delay_seconds"
-            curl -s -m 10 -X POST -H "Authorization: Bearer $ha_token"                  -H "Content-Type: application/json"                  "$ha_url/api/services/button/press"                  -d '{"entity_id": "button.wake_loq_pc"}' >/dev/null 2>&1 || true
-        ) &
-    else
-        echo "Aviso: HOMEASSISTANT_TOKEN não configurado. Acione manualmente 'button.wake_loq_pc' após suspender." >&2
-    fi
+            echo "2. Suspendendo host em S3..."
+            local sleep_rc=0
+            execute "$PS_DIR/powershell.exe" -NoProfile -WindowStyle Hidden -Command \
+                "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', \$false, \$false) | Out-Null" || sleep_rc=$?
 
-    echo "2. Suspendendo host em S3..."
-    local sleep_rc=0
-    execute "$PS_DIR/powershell.exe" -NoProfile -WindowStyle Hidden -Command         "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', \$false, \$false) | Out-Null" || sleep_rc=$?
+            # Ao acordar, o script retoma execução aqui
+            echo "3. Host acordou. Registrando resultado no log..."
+            if [[ "$sleep_rc" -eq 0 ]]; then
+                pc_ctl_log --cmd "wake-test" --result "applied" --reason "woke_up"
+                echo "✓ Teste de WoL concluído com sucesso (sistema acordou)."
+            else
+                pc_ctl_log --cmd "wake-test" --result "failed" --reason "sleep_failed"
+                echo "❌ Falha ao suspender para teste de WoL." >&2
+                return 1
+            fi
+            ;;
+        rtc)
+            local delay_seconds=180
+            local mode="both"
 
-    # Ao acordar, o script retoma execução aqui
-    echo "3. Host acordou. Registrando resultado no log..."
-    if [[ "$sleep_rc" -eq 0 ]]; then
-        pc_ctl_log --cmd "wake-test" --result "applied" --reason "woke_up"
-        echo "✓ Teste de WoL concluído com sucesso (sistema acordou)."
-    else
-        pc_ctl_log --cmd "wake-test" --result "failed" --reason "sleep_failed"
-        echo "❌ Falha ao suspender para teste de WoL." >&2
-        return 1
-    fi
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --delay)
+                        if [[ $# -lt 2 ]]; then
+                            echo "Erro: --delay requer um valor em segundos." >&2
+                            return 1
+                        fi
+                        delay_seconds="$2"
+                        shift 2
+                        ;;
+                    --mode)
+                        if [[ $# -lt 2 ]]; then
+                            echo "Erro: --mode requer um argumento (s3, hibernate, both)." >&2
+                            return 1
+                        fi
+                        mode="$2"
+                        shift 2
+                        ;;
+                    *)
+                        echo "Erro: opção desconhecida para wake-test rtc: '$1'" >&2
+                        return 1
+                        ;;
+                esac
+            done
+
+            if [[ "$mode" != "s3" && "$mode" != "hibernate" && "$mode" != "both" ]]; then
+                echo "Erro: Modo inválido para wake-test rtc: '$mode'. Válido: s3, hibernate, both" >&2
+                return 1
+            fi
+
+            local now_epoch wake_epoch wake_iso
+            now_epoch="$(windows_epoch 2>/dev/null)" || now_epoch="$(date +%s)"
+            wake_epoch=$((now_epoch + delay_seconds))
+            wake_iso="$(epoch_to_iso "$wake_epoch")"
+
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "[DRY-RUN] Plano do wake-test rtc:"
+                if [[ "$mode" == "s3" || "$mode" == "both" ]]; then
+                    echo "[DRY-RUN] 1. Teste S3 (Espera):"
+                    echo "[DRY-RUN]   - Registrando tarefa $WAKE_TASK_NAME (WakeToRun) para $wake_iso (${delay_seconds}s)..."
+                    echo "[DRY-RUN]   - Suspendendo host em S3..."
+                fi
+                if [[ "$mode" == "hibernate" || "$mode" == "both" ]]; then
+                    echo "[DRY-RUN] 2. Teste Hibernar:"
+                    echo "[DRY-RUN]   - Registrando tarefa $WAKE_TASK_NAME (WakeToRun) para $wake_iso (${delay_seconds}s)..."
+                    echo "[DRY-RUN]   - Suspendendo host em Hibernate..."
+                fi
+                pc_ctl_log --cmd "wake-test" --result "dry-run" --reason "dry_run"
+                return 0
+            fi
+
+            if [[ "$mode" == "s3" || "$mode" == "both" ]]; then
+                echo "=== Teste RTC Wake: Modo S3 (Espera) ==="
+                echo "1. Agendando despertar para $wake_iso (${delay_seconds}s)..."
+                local rc=0
+                register_wake_task "$wake_iso" || rc=$?
+                if [[ "$rc" -ne 0 ]]; then
+                    echo "Erro: não consegui registrar a tarefa $WAKE_TASK_NAME (código $rc)." >&2
+                    pc_ctl_log --cmd "wake-test" --result "failed" --reason "wake_task_failed_s3"
+                    return 1
+                fi
+
+                echo "2. Suspendendo host em S3..."
+                pc_ctl_log --cmd "wake-test" --result "requested" --reason "suspending_s3"
+                rc=0
+                suspend_host "s3" || rc=$?
+                unregister_wake_task >/dev/null 2>&1 || true
+
+                if [[ "$rc" -ne 0 ]]; then
+                    echo "Erro: falha ao suspender em S3 (código $rc)." >&2
+                    pc_ctl_log --cmd "wake-test" --result "failed" --reason "suspend_failed_s3"
+                    return 1
+                fi
+
+                pc_ctl_log --cmd "wake-test" --result "applied" --reason "woke_s3"
+                echo "✓ Host acordou do modo S3 com sucesso."
+            fi
+
+            if [[ "$mode" == "hibernate" || "$mode" == "both" ]]; then
+                now_epoch="$(windows_epoch 2>/dev/null)" || now_epoch="$(date +%s)"
+                wake_epoch=$((now_epoch + delay_seconds))
+                wake_iso="$(epoch_to_iso "$wake_epoch")"
+
+                echo "=== Teste RTC Wake: Modo Hibernar ==="
+                echo "1. Agendando despertar para $wake_iso (${delay_seconds}s)..."
+                local rc=0
+                register_wake_task "$wake_iso" || rc=$?
+                if [[ "$rc" -ne 0 ]]; then
+                    echo "Erro: não consegui registrar a tarefa $WAKE_TASK_NAME (código $rc)." >&2
+                    pc_ctl_log --cmd "wake-test" --result "failed" --reason "wake_task_failed_hibernate"
+                    return 1
+                fi
+
+                echo "2. Suspendendo host em Hibernar..."
+                pc_ctl_log --cmd "wake-test" --result "requested" --reason "suspending_hibernate"
+                rc=0
+                suspend_host "hibernate" || rc=$?
+                unregister_wake_task >/dev/null 2>&1 || true
+
+                if [[ "$rc" -ne 0 ]]; then
+                    echo "Erro: falha ao suspender em Hibernar (código $rc)." >&2
+                    pc_ctl_log --cmd "wake-test" --result "failed" --reason "suspend_failed_hibernate"
+                    return 1
+                fi
+
+                pc_ctl_log --cmd "wake-test" --result "applied" --reason "woke_hibernate"
+                echo "✓ Host acordou do modo Hibernar com sucesso."
+            fi
+            return 0
+            ;;
+        *)
+            echo "Erro: Alvo desconhecido para wake-test: '$target'. Válido: wol, rtc" >&2
+            return 1
+            ;;
+    esac
 }
 
 cmd_wake_setup() {

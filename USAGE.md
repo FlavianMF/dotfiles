@@ -324,6 +324,63 @@ Regras de segurança e invariantes:
 - **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run|requested`), `reason`, `profile` e `until`.
 - **Resultado real**: o `schtasks /run` é assíncrono. O `power-mode` grava `requested` no log. A tarefa elevada grava `applied`, `refused` ou `failed` no `state.json`, e `pc-ctl power-mode status` mostra o último pedido.
 
+#### Suspensão Agendada com Wake RTC (`schedule-sleep`)
+Permite suspender o computador com garantia de despertar automático (RTC Wake Timers) e sincronização de estado com o Home Assistant:
+```bash
+# Simular plano de suspensão até uma data/hora no futuro (mínimo 30 minutos)
+pc-ctl --dry-run schedule-sleep --until "2026-11-02T22:00:00Z" --agents-idle-checked
+
+# Execução real: agenda wake para 5 minutos antes, notifica HA, aplica perfil eco e suspende
+pc-ctl schedule-sleep --until "2026-11-02T22:00:00Z" --agents-idle-checked
+```
+Ordem de operações e travas de segurança:
+1. **Validação temporal**: `until` precisa estar no futuro e a pausa deve durar 30 minutos ou mais.
+2. **Travas locais (falham fechado)**:
+   - Trava de ociosidade: Windows precisa estar ocioso há 10 minutos ou mais (`GetLastInputInfo`).
+   - Trava de build: Nenhum processo ativo de compilação ou build (`make`, `cargo`, `npm`, `pnpm`, `go build`, `docker build`, `docker compose up`) no WSL2.
+   - Trava de agentes: Exige flag `--agents-idle-checked` informada pelo agente chamador.
+3. **Agendamento de Wake**: Registra a tarefa Windows `pc-ctl-wake` com gatilho `-WakeToRun` para 5 minutos antes de `until`.
+4. **Publicação no Home Assistant**: Envia payload retido (`retain: true`) com `until`, `mode` e `set_at` para o tópico MQTT `pc/loq/sleeping_until`.
+5. **Perfil Eco**: Dispara `pc-ctl power-mode eco` antes da suspensão.
+6. **Suspensão segura**: S3 (Espera) quando conectado na tomada (AC), ou Hibernar quando operando na bateria (DC).
+
+#### Health Check Pós-Wake (`wake-check`)
+Valida o retorno dos serviços essenciais após o computador despertar e limpa o estado retido no Home Assistant:
+```bash
+# Executar verificação de saúde e limpeza do tópico MQTT (tenta a cada 30s por até 5m)
+pc-ctl wake-check
+
+# Com parâmetros customizados de timeout e intervalo
+pc-ctl wake-check --timeout 180 --interval 15
+
+# Simulação com --dry-run
+pc-ctl --dry-run wake-check
+```
+O que o `wake-check` realiza:
+1. Executa `homeassistant/setup-mcp.sh check` para validar a conectividade e integridade do MCP.
+2. Executa `pc-ctl status` para checar a interoperabilidade com o Windows Host.
+3. Se algum serviço ainda estiver inicializando, aguarda o intervalo configurado e repete o teste por até 5 minutos.
+4. Ao passar, publica payload vazio retido (`retain: true`) no tópico `pc/loq/sleeping_until`, notificando o Home Assistant que o host está online e operacional.
+
+#### Teste de Despertar RTC e WoL (`wake-test`)
+Permite validar o despertar do sistema tanto via temporizadores de hardware (RTC) quanto via rede (Magic Packet):
+```bash
+# Teste de despertar via RTC (agenda wake para daqui a 3 minutos e testa S3, depois Hibernar)
+pc-ctl wake-test rtc
+
+# Teste RTC específico para S3 ou Hibernar com delay customizado
+pc-ctl wake-test rtc --mode s3 --delay 60
+pc-ctl wake-test rtc --mode hibernate --delay 60
+
+# Teste de despertar via ESP32 Wake-on-LAN (dispara button.wake_loq_pc no Home Assistant)
+pc-ctl wake-test wol --delay 15
+
+# Simulação com --dry-run
+pc-ctl --dry-run wake-test rtc
+pc-ctl --dry-run wake-test wol
+```
+- **Modos RTC**: Valida o registro da tarefa `pc-ctl-wake` com privilégio de despertar (`WakeToRun`), suspende no modo selecionado e grava o resultado (`woke_s3` e `woke_hibernate`) no log de auditoria.
+
 ### 2. Instalação e Conexão do Tailscale
 Para habilitar a rede mesh criptografada no Linux/WSL2 ou Windows:
 ```bash

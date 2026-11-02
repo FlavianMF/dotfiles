@@ -475,6 +475,73 @@ expect "wake-check dry-run com falha sai com 1" "$rc" "1"
 has "wake-check dry-run com falha avisa que falhou" "serviços falharam na verificação pós-wake" "$out"
 expect "wake-check dry-run com falha grava would_fail no log" "$(jq -r 'select(.cmd=="wake-check") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "would_fail"
 
+# ==============================================================================
+# 7. wake-test rtc: teste de despertar via RTC em S3 e Hibernar
+# ==============================================================================
+# wake-test rtc --dry-run
+reset_mocks
+out="$(bash "$PC_CTL" --dry-run wake-test rtc 2>&1)"; rc=$?
+expect "wake-test rtc dry-run sai com 0" "$rc" "0"
+has "wake-test rtc dry-run mostra plano" "Plano do wake-test rtc" "$out"
+has "wake-test rtc dry-run mostra S3" "Teste S3 (Espera)" "$out"
+has "wake-test rtc dry-run mostra Hibernar" "Teste Hibernar" "$out"
+has "wake-test rtc dry-run mostra tarefa" "pc-ctl-wake" "$out"
+expect "wake-test rtc dry-run não registra tarefa" "$(count register)" "0"
+expect "wake-test rtc dry-run não suspende" "$(count suspend)" "0"
+expect "wake-test rtc dry-run grava dry-run no log" "$(jq -r 'select(.cmd=="wake-test") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "dry-run"
+
+# wake-test rtc caminho feliz (executa S3 e Hibernar)
+reset_mocks
+out="$(bash "$PC_CTL" wake-test rtc --delay 10 2>&1)"; rc=$?
+expect "wake-test rtc caminho feliz sai com 0" "$rc" "0"
+has "wake-test rtc reporta acordou S3" "Host acordou do modo S3 com sucesso" "$out"
+has "wake-test rtc reporta acordou Hibernar" "Host acordou do modo Hibernar com sucesso" "$out"
+expect "wake-test rtc registra tarefas duas vezes" "$(count register)" "2"
+expect "wake-test rtc suspende duas vezes" "$(count suspend)" "2"
+expect "wake-test rtc remove tarefas duas vezes" "$(count unregister)" "2"
+scripts="$(all_scripts)"
+has "wake-test rtc suspende em S3" "SetSuspendState('Suspend'" "$scripts"
+has "wake-test rtc suspende em Hibernate" "SetSuspendState('Hibernate'" "$scripts"
+expect "wake-test rtc grava woke_s3 e woke_hibernate"     "$(jq -r 'select(.cmd=="wake-test") | .reason' "$PC_CTL_LOG_FILE" | tr '
+' ',')"     "suspending_s3,woke_s3,suspending_hibernate,woke_hibernate,"
+
+# wake-test rtc --mode s3
+reset_mocks
+out="$(bash "$PC_CTL" wake-test rtc --mode s3 --delay 10 2>&1)"; rc=$?
+expect "wake-test rtc mode s3 sai com 0" "$rc" "0"
+expect "wake-test rtc mode s3 registra tarefa uma vez" "$(count register)" "1"
+expect "wake-test rtc mode s3 suspende uma vez" "$(count suspend)" "1"
+expect "wake-test rtc mode s3 grava woke_s3" "$(jq -r 'select(.cmd=="wake-test" and .result=="applied") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "woke_s3"
+
+# wake-test rtc --mode hibernate
+reset_mocks
+out="$(bash "$PC_CTL" wake-test rtc --mode hibernate --delay 10 2>&1)"; rc=$?
+expect "wake-test rtc mode hibernate sai com 0" "$rc" "0"
+expect "wake-test rtc mode hibernate registra tarefa uma vez" "$(count register)" "1"
+expect "wake-test rtc mode hibernate suspende uma vez" "$(count suspend)" "1"
+expect "wake-test rtc mode hibernate grava woke_hibernate" "$(jq -r 'select(.cmd=="wake-test" and .result=="applied") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "woke_hibernate"
+
+# wake-test rtc falha ao registrar tarefa
+reset_mocks
+out="$(MOCK_REGISTER_RC=1 bash "$PC_CTL" wake-test rtc --delay 10 2>&1)"; rc=$?
+expect "wake-test rtc falha no registro sai com 1" "$rc" "1"
+expect "wake-test rtc falha no registro não suspende" "$(count suspend)" "0"
+expect "wake-test rtc falha no registro grava failed" "$(jq -r 'select(.cmd=="wake-test") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "failed"
+expect "wake-test rtc falha no registro grava wake_task_failed_s3" "$(jq -r 'select(.cmd=="wake-test") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "wake_task_failed_s3"
+
+# wake-test rtc falha na suspensão
+reset_mocks
+out="$(MOCK_SUSPEND_RC=1 bash "$PC_CTL" wake-test rtc --delay 10 2>&1)"; rc=$?
+expect "wake-test rtc falha na suspensão sai com 1" "$rc" "1"
+expect "wake-test rtc falha na suspensão remove a tarefa" "$(count unregister)" "1"
+expect "wake-test rtc falha na suspensão grava failed" "$(jq -r 'select(.cmd=="wake-test") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "failed"
+expect "wake-test rtc falha na suspensão grava suspend_failed_s3" "$(jq -r 'select(.cmd=="wake-test") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "suspend_failed_s3"
+
+# wake-test rtc modo inválido
+out="$(bash "$PC_CTL" wake-test rtc --mode invalido 2>&1)"; rc=$?
+expect "wake-test rtc modo invalido sai com 1" "$rc" "1"
+has "wake-test rtc modo invalido avisa erro" "Modo inválido" "$out"
+
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
     echo "🎉 Todos os testes de schedule-sleep/wake-check/wake-test rtc PASSARAM!"
