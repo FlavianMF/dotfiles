@@ -1,0 +1,8 @@
+#!/bin/bash
+# Wrapper para sb (Second Brain CLI)
+# Se sb.py não existir no vault, encerra 0 silenciosamente.
+
+target="${SECOND_BRAIN_SB_PY:-$HOME/obsidian_vault/00_META/skills/second-brain-sync/scripts/sb.py}"
+[[ -f "$target" ]] || exit 0
+
+exec python3 "$target" "$@"

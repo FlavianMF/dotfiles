@@ -1,0 +1,7 @@
+[Unit]
+Description=Second Brain Projects Scan with Tests
+Documentation=https://github.com/flavianmf/dotfiles
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sb projects scan --tests

@@ -19,6 +19,25 @@ vault="${SECOND_BRAIN_VAULT:-$HOME/obsidian_vault}"
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)"
 [[ "$stop_active" == "true" ]] && exit 0
 
+# Scan de projetos em segundo plano se o repo estiver registrado
+if command -v sb >/dev/null 2>&1; then
+    cwd=""
+    cwd="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+    [[ -d "$cwd" ]] || cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+    repo=""
+    if common="$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
+        case "$common" in
+            */.git/modules/*) repo="$(basename "$common")" ;;
+            *) repo="$(basename "$(dirname "$common")")" ;;
+        esac
+    fi
+    [[ -z "$repo" ]] && repo="$(basename "$cwd")"
+
+    if [[ -n "$repo" ]] && sb projects list --json 2>/dev/null | jq -e --arg r "$repo" '.[] | select(.slug == $r or .repo == $r)' >/dev/null 2>&1; then
+        ( timeout 60 sb projects scan --project "$repo" >/dev/null 2>&1 & )
+    fi
+fi
+
 transcript="$(printf '%s' "$input" | jq -r '.transcript_path // empty' 2>/dev/null)"
 transcript="${transcript/#\~/$HOME}"
 [[ -f "$transcript" ]] || exit 0
