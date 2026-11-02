@@ -121,6 +121,20 @@ exit "${MOCK_SCHTASKS_RC:-0}"
 MOCK
 chmod +x "$WIN_SYS/schtasks.exe"
 
+cat >"$WIN_SYS/cmd.exe" <<'MOCK'
+#!/bin/bash
+exit "${MOCK_CMD_RC:-0}"
+MOCK
+chmod +x "$WIN_SYS/cmd.exe"
+
+export PC_CTL_SETUP_MCP_BIN="$tmp/setup-mcp.sh"
+cat >"$PC_CTL_SETUP_MCP_BIN" <<'MOCK'
+#!/bin/bash
+echo "setup-mcp $*" >>"$MOCK_ORDER"
+exit "${MOCK_SETUP_MCP_RC:-0}"
+MOCK
+chmod +x "$PC_CTL_SETUP_MCP_BIN"
+
 cat >"$MOCK_BIN/curl" <<'MOCK'
 #!/bin/bash
 echo "$*" >>"$MOCK_CURL_ARGS"
@@ -151,7 +165,7 @@ reset_mocks() {
         "$MOCK_CURL_STDIN" "$MOCK_SLEEP_LOG" "$PC_CTL_LOG_FILE" "$PC_CTL_REQUEST_FILE" "$MOCK_EPOCH_STATE"
     : >"$MOCK_ORDER"
     unset MOCK_IDLE MOCK_IDLE_RC MOCK_POWER MOCK_POWER_RC MOCK_REGISTER_RC MOCK_UNREGISTER_RC MOCK_SUSPEND_RC \
-        MOCK_CURL_RC MOCK_PS_RC MOCK_PROCS MOCK_SCHTASKS_RC
+        MOCK_CURL_RC MOCK_PS_RC MOCK_PROCS MOCK_SCHTASKS_RC MOCK_CMD_RC MOCK_SETUP_MCP_RC
 }
 export MOCK_EPOCH_STATE="$tmp/epoch.state"
 
@@ -414,6 +428,52 @@ has "dry-run com trava falhando ainda mostra o plano" "pc-ctl-wake" "$out"
 has "dry-run com trava falhando diz que recusaria" "idle_too_short" "$out"
 expect "dry-run com trava falhando não suspende" "$(count suspend)" "0"
 expect "dry-run com trava falhando não registra tarefa" "$(count register)" "0"
+
+# ==============================================================================
+# 6. wake-check: health check pós-wake e limpeza do sleeping_until
+# ==============================================================================
+reset_mocks
+out="$(PC_CTL_WAKE_CHECK_TIMEOUT=1 PC_CTL_WAKE_CHECK_INTERVAL=1 bash "$PC_CTL" wake-check 2>&1)"; rc=$?
+expect "wake-check caminho feliz sai com 0" "$rc" "0"
+has "wake-check caminho feliz reporta setup-mcp OK" "setup-mcp.sh check): OK" "$out"
+has "wake-check caminho feliz reporta status OK" "pc-ctl status): OK" "$out"
+has "wake-check caminho feliz reporta limpeza MQTT" "Limpando estado retido em pc/loq/sleeping_until" "$out"
+expect "wake-check publica no MQTT" "$(count curl)" "1"
+curl_args="$(cat "$MOCK_CURL_ARGS")"
+has "wake-check publica no tópico sleeping_until" "pc/loq/sleeping_until" "$curl_args"
+has "wake-check publica com retain true" '"retain": true' "$curl_args"
+expect "wake-check payload é vazio para limpar MQTT" "$(jq -r '.payload' <<<"$(sed -n 's/.* -d //p' "$MOCK_CURL_ARGS")")" ""
+hasnt "wake-check não vaza o token na saída" "$TOKEN" "$out"
+hasnt "wake-check não vaza o token no argv do curl" "$TOKEN" "$curl_args"
+has "wake-check passa o token via stdin" "$TOKEN" "$(cat "$MOCK_CURL_STDIN")"
+expect "wake-check grava applied no log" "$(jq -r 'select(.cmd=="wake-check") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "applied"
+expect "wake-check grava healthy no log" "$(jq -r 'select(.cmd=="wake-check") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "healthy"
+
+# wake-check com falha nos serviços até timeout
+reset_mocks
+out="$(MOCK_SETUP_MCP_RC=1 PC_CTL_WAKE_CHECK_TIMEOUT=2 PC_CTL_WAKE_CHECK_INTERVAL=1 bash "$PC_CTL" wake-check 2>&1)"; rc=$?
+expect "wake-check com falha sai com 1" "$rc" "1"
+has "wake-check reporta falha de timeout" "wake-check falhou após 2s" "$out"
+expect "wake-check com falha não publica no MQTT" "$(count curl)" "0"
+expect "wake-check com falha grava failed no log" "$(jq -r 'select(.cmd=="wake-check") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "failed"
+expect "wake-check com falha grava timeout no log" "$(jq -r 'select(.cmd=="wake-check") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "timeout"
+
+# wake-check --dry-run
+reset_mocks
+out="$(PC_CTL_WAKE_CHECK_TIMEOUT=1 PC_CTL_WAKE_CHECK_INTERVAL=1 bash "$PC_CTL" --dry-run wake-check 2>&1)"; rc=$?
+expect "wake-check dry-run sai com 0" "$rc" "0"
+has "wake-check dry-run mostra plano" "Plano do wake-check" "$out"
+has "wake-check dry-run menciona setup-mcp" "setup-mcp" "$out"
+has "wake-check dry-run menciona status" "pc-ctl status" "$out"
+has "wake-check dry-run menciona limpeza MQTT" "POST http://ha.test:8123/api/services/mqtt/publish" "$out"
+expect "wake-check dry-run não publica no MQTT" "$(count curl)" "0"
+expect "wake-check dry-run grava dry-run no log" "$(jq -r 'select(.cmd=="wake-check") | .result' "$PC_CTL_LOG_FILE" | tail -n1)" "dry-run"
+
+reset_mocks
+out="$(MOCK_CMD_RC=1 PC_CTL_WAKE_CHECK_TIMEOUT=1 PC_CTL_WAKE_CHECK_INTERVAL=1 bash "$PC_CTL" --dry-run wake-check 2>&1)"; rc=$?
+expect "wake-check dry-run com falha sai com 1" "$rc" "1"
+has "wake-check dry-run com falha avisa que falhou" "serviços falharam na verificação pós-wake" "$out"
+expect "wake-check dry-run com falha grava would_fail no log" "$(jq -r 'select(.cmd=="wake-check") | .reason' "$PC_CTL_LOG_FILE" | tail -n1)" "would_fail"
 
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then

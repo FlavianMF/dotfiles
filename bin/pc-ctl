@@ -56,6 +56,7 @@ execute() {
 }
 
 cmd_status() {
+    local status_rc=0
     echo "=== Status do Sistema ==="
     echo -n "Windows Host: "
     if [[ -f "$WIN_DIR/cmd.exe" ]]; then
@@ -63,9 +64,11 @@ cmd_status() {
             echo "Interoperabilidade ativa (OK)"
         else
             echo "Indisponível (Falha de execução)"
+            status_rc=1
         fi
     else
         echo "Binário cmd.exe não encontrado em $WIN_DIR"
+        status_rc=1
     fi
 
     echo -n "SSH: "
@@ -92,6 +95,7 @@ cmd_status() {
     else
         echo "desconhecido"
     fi
+    return "$status_rc"
 }
 
 # ------------------------------------------------------------------------------
@@ -500,6 +504,109 @@ cmd_schedule_sleep() {
     echo "Host acordou ($mode). Rode 'pc-ctl wake-check' para validar os serviços e limpar $SLEEPING_TOPIC."
 }
 
+cmd_wake_check() {
+    local timeout="${PC_CTL_WAKE_CHECK_TIMEOUT:-300}"
+    local interval="${PC_CTL_WAKE_CHECK_INTERVAL:-30}"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --timeout)
+                if [[ $# -lt 2 ]]; then
+                    echo "Erro: --timeout requer um valor em segundos." >&2
+                    return 1
+                fi
+                timeout="$2"
+                shift 2
+                ;;
+            --interval)
+                if [[ $# -lt 2 ]]; then
+                    echo "Erro: --interval requer um valor em segundos." >&2
+                    return 1
+                fi
+                interval="$2"
+                shift 2
+                ;;
+            *)
+                echo "Erro: opção desconhecida para wake-check: '$1'" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    local setup_mcp="${PC_CTL_SETUP_MCP_BIN:-$SCRIPT_DIR/homeassistant/setup-mcp.sh}"
+    load_ha_env
+
+    echo "Iniciando verificação pós-wake (wake-check)..."
+
+    local elapsed=0
+    local attempt=1
+    local check_passed=0
+
+    while true; do
+        echo "Tentativa $attempt: verificando serviços..."
+        local mcp_ok=0 status_ok=0
+
+        if [[ -f "$setup_mcp" ]]; then
+            if bash "$setup_mcp" check >/dev/null 2>&1; then
+                mcp_ok=1
+                echo "  - Home Assistant MCP (setup-mcp.sh check): OK"
+            else
+                echo "  - Home Assistant MCP (setup-mcp.sh check): FALHOU"
+            fi
+        else
+            echo "  - Home Assistant MCP ($setup_mcp): Não encontrado"
+        fi
+
+        if cmd_status >/dev/null 2>&1; then
+            status_ok=1
+            echo "  - Status do Sistema (pc-ctl status): OK"
+        else
+            echo "  - Status do Sistema (pc-ctl status): FALHOU"
+        fi
+
+        if [[ "$mcp_ok" -eq 1 && "$status_ok" -eq 1 ]]; then
+            check_passed=1
+            break
+        fi
+
+        elapsed=$((elapsed + interval))
+        if [[ $elapsed -ge $timeout ]]; then
+            break
+        fi
+
+        echo "Aguardando ${interval}s para próxima tentativa (decorrido: ${elapsed}s / ${timeout}s)..."
+        sleep "$interval"
+        attempt=$((attempt + 1))
+    done
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "[DRY-RUN] Plano do wake-check:"
+        echo "[DRY-RUN]   1. Verificação do Home Assistant MCP: $setup_mcp check"
+        echo "[DRY-RUN]   2. Verificação de status do sistema: pc-ctl status"
+        echo "[DRY-RUN]   3. Limpeza do tópico MQTT: POST $HA_URL_VALUE/api/services/mqtt/publish topic=$SLEEPING_TOPIC retain=true payload="
+        if [[ "$check_passed" -eq 1 ]]; then
+            echo "[DRY-RUN] Resultado: todos os serviços estão saudáveis. Estado seria limpo."
+            pc_ctl_log --cmd "wake-check" --result "dry-run" --reason "dry_run"
+            return 0
+        else
+            echo "[DRY-RUN] Resultado: serviços falharam na verificação pós-wake." >&2
+            pc_ctl_log --cmd "wake-check" --result "dry-run" --reason "would_fail"
+            return 1
+        fi
+    fi
+
+    if [[ "$check_passed" -eq 1 ]]; then
+        echo "✓ Serviços saudáveis! Limpando estado retido em $SLEEPING_TOPIC..."
+        ha_publish_sleeping "" || echo "Aviso: falha ao publicar payload vazio em $SLEEPING_TOPIC." >&2
+        pc_ctl_log --cmd "wake-check" --result "applied" --reason "healthy"
+        return 0
+    else
+        echo "Erro: wake-check falhou após ${timeout}s (serviços não responderam)." >&2
+        pc_ctl_log --cmd "wake-check" --result "failed" --reason "timeout"
+        return 1
+    fi
+}
+
 cmd_wake_test() {
     if [[ $# -eq 0 ]]; then
         echo "Erro: Subcomando wake-test requer argumento 'wol'." >&2
@@ -859,6 +966,9 @@ case "$COMMAND" in
         ;;
     schedule-sleep)
         cmd_schedule_sleep "$@"
+        ;;
+    wake-check)
+        cmd_wake_check "$@"
         ;;
     wake-test)
         cmd_wake_test "$@"
