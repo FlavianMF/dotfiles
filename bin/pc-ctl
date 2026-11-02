@@ -34,7 +34,10 @@ Comandos:
   lock                Bloqueia a sessão do computador host
   app <nome>          Abre aplicativo no host (obsidian, wt, terminal)
   power-mode <perfil> Altera perfil de energia (eco, balanced, llm-boost, max, status) [--ttl N]
-  wake-test wol       Testa suspensão em S3 e despertar via ESP32 WoL / Home Assistant
+  schedule-sleep --until <ISO-8601> --agents-idle-checked
+                      Agenda o wake (RTC) e suspende (S3 na tomada, hibernar na bateria) até a hora
+  wake-check          Health check pós-wake (setup-mcp.sh check + status); limpa o sleeping_until
+  wake-test wol|rtc   Testa o despertar: wol (ESP32/Home Assistant) ou rtc (WakeToRun em S3 e hibernar)
   wake-setup          Configura permissões, wake timers e tarefa pc-ctl-power no host Windows
   status              Exibe o status dos serviços e interoperabilidade
 
@@ -89,6 +92,412 @@ cmd_status() {
     else
         echo "desconhecido"
     fi
+}
+
+# ------------------------------------------------------------------------------
+# Suspensão agendada (schedule-sleep, wake-check, wake-test rtc)
+# ------------------------------------------------------------------------------
+SLEEP_MIN_PAUSE_SECONDS=1800   # pausas menores que 30 minutos não compensam
+WAKE_LEAD_SECONDS=300          # a tarefa acorda o PC 5 minutos antes do until
+IDLE_MIN_SECONDS=600           # Windows ocioso há 10 minutos ou mais
+SLEEPING_TOPIC="pc/loq/sleeping_until"
+WAKE_TASK_NAME="pc-ctl-wake"
+
+# Roda um script PowerShell via -EncodedCommand (base64 UTF-16LE): sem problema de aspas,
+# sem caminho /mnt/ e com o código de saída do powershell.exe devolvido ao chamador.
+run_ps() {
+    local encoded
+    encoded="$(python3 -c 'import base64, sys; print(base64.b64encode(sys.argv[1].encode("utf-16-le")).decode())' "$1")" || return 1
+    "$PS_DIR/powershell.exe" -NoProfile -NonInteractive -EncodedCommand "$encoded"
+}
+
+# Ociosidade do Windows em segundos (GetLastInputInfo, sessão interativa). Aritmética em uint32
+# para sobreviver ao giro do GetTickCount.
+idle_ps_script() {
+    cat <<'PS'
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class PcCtlIdle {
+    [StructLayout(LayoutKind.Sequential)]
+    struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+    [DllImport("kernel32.dll")] static extern uint GetTickCount();
+    public static long IdleMs() {
+        LASTINPUTINFO info = new LASTINPUTINFO();
+        info.cbSize = (uint)Marshal.SizeOf(info);
+        if (!GetLastInputInfo(ref info)) { throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error()); }
+        return (long)(uint)(GetTickCount() - info.dwTime);
+    }
+}
+"@
+[math]::Floor([PcCtlIdle]::IdleMs() / 1000)
+PS
+}
+
+# Registra (ou substitui) a tarefa pc-ctl-wake. Register-ScheduledTask não depende da localidade
+# (schtasks /sd depende) e não precisa de Admin para uma tarefa do próprio usuário.
+wake_task_ps_script() {
+    cat <<PS
+\$ErrorActionPreference = 'Stop'
+try {
+    \$at = [DateTimeOffset]::Parse('$1', [System.Globalization.CultureInfo]::InvariantCulture).LocalDateTime
+    \$trigger = New-ScheduledTaskTrigger -Once -At \$at
+    \$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c exit 0'
+    \$settings = New-ScheduledTaskSettingsSet -WakeToRun -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+    \$null = Register-ScheduledTask -TaskName '$WAKE_TASK_NAME' -Trigger \$trigger -Action \$action -Settings \$settings -Force
+} catch {
+    [Console]::Error.WriteLine("Falha ao registrar $WAKE_TASK_NAME: " + \$_.Exception.Message)
+    exit 1
+}
+exit 0
+PS
+}
+
+unregister_wake_task_ps_script() {
+    cat <<PS
+\$ErrorActionPreference = 'Stop'
+try {
+    Unregister-ScheduledTask -TaskName '$WAKE_TASK_NAME' -Confirm:\$false
+} catch {
+    [Console]::Error.WriteLine("Falha ao remover $WAKE_TASK_NAME: " + \$_.Exception.Message)
+    exit 1
+}
+exit 0
+PS
+}
+
+# $1 = Suspend (S3) ou Hibernate. SetSuspendState devolve False se o Windows recusar.
+suspend_ps_script() {
+    cat <<PS
+\$ErrorActionPreference = 'Stop'
+try {
+    Add-Type -AssemblyName System.Windows.Forms
+    \$ok = [System.Windows.Forms.Application]::SetSuspendState('$1', \$false, \$false)
+} catch {
+    [Console]::Error.WriteLine("Falha ao suspender: " + \$_.Exception.Message)
+    exit 1
+}
+if (\$ok -eq \$false) {
+    [Console]::Error.WriteLine('SetSuspendState retornou False')
+    exit 1
+}
+exit 0
+PS
+}
+
+epoch_ps_script() {
+    echo '[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()'
+}
+
+# $1 = s3 | hibernate
+suspend_state_name() {
+    case "$1" in
+        s3) echo "Suspend" ;;
+        hibernate) echo "Hibernate" ;;
+        *) return 1 ;;
+    esac
+}
+
+suspend_host() {
+    local state
+    state="$(suspend_state_name "$1")" || return 1
+    run_ps "$(suspend_ps_script "$state")"
+}
+
+register_wake_task() { run_ps "$(wake_task_ps_script "$1")"; }
+unregister_wake_task() { run_ps "$(unregister_wake_task_ps_script)"; }
+
+# Epoch UTC lido no Windows (o relógio do WSL2 atrasa depois de uma suspensão).
+windows_epoch() {
+    local out
+    out="$(run_ps "$(epoch_ps_script)" 2>/dev/null)" || return 1
+    out="$(tr -d '\r\n ' <<<"$out")"
+    [[ "$out" =~ ^[0-9]+$ ]] || return 1
+    echo "$out"
+}
+
+# ISO-8601 (com Z, offset ou local sem offset) para UTC "YYYY-MM-DDTHH:MM:SSZ".
+normalize_until() {
+    python3 -c '
+import datetime, sys
+text = sys.argv[1].strip()
+try:
+    dt = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+except ValueError:
+    sys.exit(1)
+if dt.tzinfo is None:
+    dt = dt.astimezone()
+print(dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+' "$1"
+}
+
+epoch_to_iso() { date -u -d "@$1" +"%Y-%m-%dT%H:%M:%SZ"; }
+
+get_idle_seconds() {
+    local out rc=0
+    out="$(run_ps "$(idle_ps_script)" 2>/dev/null)" || rc=$?
+    out="$(tr -d '\r\n ' <<<"$out")"
+    if [[ "$rc" -ne 0 || ! "$out" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+    echo "$out"
+}
+
+# Procura build ativo no WSL2: make, cargo, npm, pnpm, go build, docker build e docker compose up.
+# rc 0 = nenhum, 1 = achou (stdout = processo), 2 = não conseguiu listar (falha fechada).
+find_active_build() {
+    local listing
+    listing="$(ps -eo pid=,comm=,args= 2>/dev/null)" || return 2
+    [[ -n "$listing" ]] || return 2
+    local hit
+    hit="$(awk -v self="$$" '
+        $1 == self { next }
+        {
+            comm = $2; a1 = $4; a2 = $5
+            if (comm == "make" || comm == "cargo" || comm == "npm" || comm == "pnpm") { print $2 " " $3 " " $4; exit }
+            if (comm == "go" && a1 == "build") { print "go build"; exit }
+            if (comm == "docker" && (a1 == "build" || (a1 == "buildx" && a2 == "build") || (a1 == "compose" && a2 == "up"))) { print "docker " a1 " " a2; exit }
+            if (comm == "docker-compose" && a1 == "up") { print "docker-compose up"; exit }
+        }
+    ' <<<"$listing")"
+    if [[ -n "$hit" ]]; then
+        echo "$hit"
+        return 1
+    fi
+    return 0
+}
+
+load_ha_env() {
+    local env_file="${PC_CTL_HA_ENV:-$SCRIPT_DIR/secrets/mcp.env}"
+    if [[ -f "$env_file" ]]; then
+        # shellcheck source=/dev/null
+        source "$env_file" 2>/dev/null || true
+    fi
+    HA_URL_VALUE="${HOMEASSISTANT_URL:-http://100.105.143.75:8123}"
+    HA_TOKEN_VALUE="${HOMEASSISTANT_TOKEN:-}"
+}
+
+# Publica no tópico sleeping_until com retain. $1 = payload ("" limpa a mensagem retida).
+# O token vai por stdin (curl --config -), nunca no argv visível em ps.
+ha_publish_sleeping() {
+    local body
+    body="$(python3 -c 'import json, sys; print(json.dumps({"topic": sys.argv[1], "payload": sys.argv[2], "retain": True}))' "$SLEEPING_TOPIC" "$1")" || return 1
+    printf 'header = "Authorization: Bearer %s"\n' "$HA_TOKEN_VALUE" \
+        | curl -fsS -m 10 -o /dev/null -X POST --config - \
+            -H "Content-Type: application/json" \
+            "$HA_URL_VALUE/api/services/mqtt/publish" -d "$body"
+}
+
+# Desfaz o que o schedule-sleep já fez quando um passo seguinte falha (melhor esforço).
+rollback_schedule_sleep() {
+    unregister_wake_task >/dev/null 2>&1 || echo "Aviso: não consegui remover a tarefa $WAKE_TASK_NAME." >&2
+    if [[ "${1:-}" == "clear-mqtt" ]]; then
+        ha_publish_sleeping "" >/dev/null 2>&1 || echo "Aviso: não consegui limpar $SLEEPING_TOPIC." >&2
+    fi
+}
+
+cmd_schedule_sleep() {
+    local until_raw="" agents_checked=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --until)
+                if [[ $# -lt 2 ]]; then
+                    echo "Erro: --until requer uma data ISO-8601." >&2
+                    return 1
+                fi
+                until_raw="$2"
+                shift 2
+                ;;
+            --agents-idle-checked)
+                agents_checked=1
+                shift
+                ;;
+            *)
+                echo "Erro: opção desconhecida para schedule-sleep: '$1'" >&2
+                return 1
+                ;;
+        esac
+    done
+
+    if [[ -z "$until_raw" ]]; then
+        echo "Erro: schedule-sleep requer --until <ISO-8601>." >&2
+        echo "Uso: pc-ctl schedule-sleep --until <ISO-8601> --agents-idle-checked [--dry-run]" >&2
+        return 1
+    fi
+
+    # 1. Valida o until: formato, futuro e pausa de 30 minutos ou mais.
+    local until_iso
+    if ! until_iso="$(normalize_until "$until_raw")"; then
+        echo "Erro: --until '$until_raw' não é uma data ISO-8601 válida." >&2
+        pc_ctl_log --cmd "schedule-sleep" --result "refused" --reason "until_invalid"
+        return 1
+    fi
+    local now_epoch until_epoch
+    now_epoch="$(date +%s)"
+    until_epoch="$(date -u -d "$until_iso" +%s)"
+    if [[ "$until_epoch" -le "$now_epoch" ]]; then
+        echo "Erro: recusado: --until ($until_iso) não está no futuro." >&2
+        pc_ctl_log --cmd "schedule-sleep" --result "refused" --reason "until_past" --until "$until_iso"
+        return 1
+    fi
+    if [[ $((until_epoch - now_epoch)) -lt "$SLEEP_MIN_PAUSE_SECONDS" ]]; then
+        echo "Erro: recusado: a pausa dura menos de 30 minutos (mínimo para compensar suspender)." >&2
+        pc_ctl_log --cmd "schedule-sleep" --result "refused" --reason "pause_too_short" --until "$until_iso"
+        return 1
+    fi
+    local wake_iso
+    wake_iso="$(epoch_to_iso $((until_epoch - WAKE_LEAD_SECONDS)))"
+
+    # 2. Travas. Cada trava que não puder ser lida conta como falha (falha fechada).
+    local fail_reason="" fail_msgs="" mode=""
+    note_fail() {
+        [[ -n "$fail_reason" ]] || fail_reason="$1"
+        fail_msgs+="  - $1: $2"$'\n'
+    }
+
+    if [[ "$agents_checked" -eq 1 ]]; then
+        echo "Trava agentes: OK (--agents-idle-checked informado pelo chamador)"
+    else
+        echo "Trava agentes: FALHOU (falta --agents-idle-checked; o agente chamador checa agentes e shells do Traycer)"
+        note_fail "agents_not_checked" "o chamador precisa checar agentes do Traycer e passar --agents-idle-checked"
+    fi
+
+    local idle
+    if idle="$(get_idle_seconds)"; then
+        if [[ "$idle" -ge "$IDLE_MIN_SECONDS" ]]; then
+            echo "Trava ociosidade: OK (Windows ocioso há ${idle}s, mínimo ${IDLE_MIN_SECONDS}s)"
+        else
+            echo "Trava ociosidade: FALHOU (Windows ocioso há ${idle}s, mínimo ${IDLE_MIN_SECONDS}s)"
+            note_fail "idle_too_short" "Windows ocioso há ${idle}s (mínimo ${IDLE_MIN_SECONDS}s)"
+        fi
+    else
+        echo "Trava ociosidade: FALHOU (não consegui ler a ociosidade do Windows)"
+        note_fail "idle_unknown" "não consegui ler a ociosidade do Windows"
+    fi
+
+    local build_rc=0 build_hit
+    build_hit="$(find_active_build)" || build_rc=$?
+    case "$build_rc" in
+        0) echo "Trava build: OK (nenhum make, cargo, npm, pnpm, go build, docker build ou docker compose up)" ;;
+        1)
+            echo "Trava build: FALHOU (build ativo: $build_hit)"
+            note_fail "build_active" "build ativo no WSL2: $build_hit"
+            ;;
+        *)
+            echo "Trava build: FALHOU (não consegui listar os processos)"
+            note_fail "build_unknown" "não consegui listar os processos do WSL2"
+            ;;
+    esac
+
+    local power_line
+    power_line="$(check_power_line_status)"
+    case "$power_line" in
+        Online)
+            mode="s3"
+            echo "Trava energia: OK (na tomada, modo s3)"
+            ;;
+        Offline)
+            mode="hibernate"
+            echo "Trava energia: OK (na bateria, modo hibernate)"
+            ;;
+        *)
+            mode="s3"
+            echo "Trava energia: FALHOU (estado da tomada: $power_line)"
+            note_fail "power_unknown" "não consegui ler o estado da tomada ($power_line)"
+            ;;
+    esac
+
+    load_ha_env
+    if [[ -n "$HA_TOKEN_VALUE" ]]; then
+        echo "Trava Home Assistant: OK (token configurado)"
+    else
+        echo "Trava Home Assistant: FALHOU (HOMEASSISTANT_TOKEN ausente)"
+        note_fail "no_ha_token" "HOMEASSISTANT_TOKEN ausente (secrets/mcp.env)"
+    fi
+
+    local set_at payload
+    set_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    payload="$(python3 -c 'import json, sys; print(json.dumps({"until": sys.argv[1], "mode": sys.argv[2], "set_at": sys.argv[3]}))' "$until_iso" "$mode" "$set_at")"
+    local suspend_state
+    suspend_state="$(suspend_state_name "$mode")"
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "[DRY-RUN] Plano do schedule-sleep:"
+        echo "[DRY-RUN]   retomada (until): $until_iso"
+        echo "[DRY-RUN]   wake (until menos 5 minutos): $wake_iso"
+        echo "[DRY-RUN]   modo: $mode"
+        echo "[DRY-RUN] 1. $PS_DIR/powershell.exe -EncodedCommand <Register-ScheduledTask $WAKE_TASK_NAME: New-ScheduledTaskTrigger -Once -At $wake_iso, -WakeToRun>"
+        echo "[DRY-RUN] 2. POST $HA_URL_VALUE/api/services/mqtt/publish topic=$SLEEPING_TOPIC retain=true payload=$payload (token: ***)"
+        echo "[DRY-RUN] 3. pc-ctl power-mode eco"
+        echo "[DRY-RUN] 4. $PS_DIR/powershell.exe -EncodedCommand <[System.Windows.Forms.Application]::SetSuspendState('$suspend_state', \$false, \$false)>"
+        if [[ -n "$fail_reason" ]]; then
+            echo "[DRY-RUN] Resultado: o comando real RECUSARIA ($fail_reason):" >&2
+            printf '%s' "$fail_msgs" >&2
+            pc_ctl_log --cmd "schedule-sleep" --result "dry-run" --reason "would_refuse:$fail_reason" --until "$until_iso"
+            return 1
+        fi
+        echo "[DRY-RUN] Resultado: todas as travas passaram. Nada foi registrado, publicado nem suspenso."
+        pc_ctl_log --cmd "schedule-sleep" --result "dry-run" --reason "dry_run" --until "$until_iso"
+        return 0
+    fi
+
+    if [[ -n "$fail_reason" ]]; then
+        echo "Erro: schedule-sleep recusado:" >&2
+        printf '%s' "$fail_msgs" >&2
+        pc_ctl_log --cmd "schedule-sleep" --result "refused" --reason "$fail_reason" --until "$until_iso"
+        return 1
+    fi
+
+    # 4. Tarefa de wake. Sem ela o PC não acorda, então nada abaixo roda se ela falhar.
+    echo "1. Registrando a tarefa $WAKE_TASK_NAME (WakeToRun) para $wake_iso..."
+    local rc=0
+    register_wake_task "$wake_iso" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        echo "Erro: não consegui registrar a tarefa $WAKE_TASK_NAME (código $rc). Não vou suspender." >&2
+        pc_ctl_log --cmd "schedule-sleep" --result "failed" --reason "wake_task_failed" --until "$until_iso"
+        return 1
+    fi
+
+    # 5. Estado retido para a automação de fallback da VPS.
+    echo "2. Publicando $SLEEPING_TOPIC (retain) no Home Assistant..."
+    rc=0
+    ha_publish_sleeping "$payload" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        echo "Erro: a publicação em $SLEEPING_TOPIC falhou (curl código $rc). Não vou suspender." >&2
+        rollback_schedule_sleep
+        pc_ctl_log --cmd "schedule-sleep" --result "failed" --reason "mqtt_publish_failed" --until "$until_iso"
+        return 1
+    fi
+
+    # 6. Perfil eco antes de suspender.
+    echo "3. Pedindo o perfil eco..."
+    rc=0
+    cmd_power_mode eco || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        echo "Erro: pc-ctl power-mode eco falhou (código $rc). Não vou suspender." >&2
+        rollback_schedule_sleep clear-mqtt
+        pc_ctl_log --cmd "schedule-sleep" --result "failed" --reason "power_mode_failed" --until "$until_iso"
+        return 1
+    fi
+    # O schtasks /run é assíncrono: dá tempo para a tarefa elevada aplicar o perfil.
+    sleep "${PC_CTL_ECO_SETTLE:-5}"
+
+    # 7. Suspende. Ao acordar, o powershell.exe retorna e a execução continua aqui.
+    echo "4. Suspendendo ($mode) até $until_iso..."
+    pc_ctl_log --cmd "schedule-sleep" --result "requested" --reason "suspending_$mode" --until "$until_iso"
+    rc=0
+    suspend_host "$mode" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+        echo "Erro: a suspensão ($mode) falhou (código $rc)." >&2
+        rollback_schedule_sleep clear-mqtt
+        pc_ctl_log --cmd "schedule-sleep" --result "failed" --reason "suspend_failed" --until "$until_iso"
+        return 1
+    fi
+
+    pc_ctl_log --cmd "schedule-sleep" --result "applied" --reason "woke_$mode" --until "$until_iso"
+    echo "Host acordou ($mode). Rode 'pc-ctl wake-check' para validar os serviços e limpar $SLEEPING_TOPIC."
 }
 
 cmd_wake_test() {
@@ -335,14 +744,25 @@ cmd_power_mode() {
         mkdir -p "$req_dir" 2>/dev/null || true
     fi
 
-    python3 -c '
+    if ! python3 -c '
 import json, sys
 data = {"profile": sys.argv[1], "ttl_minutes": int(sys.argv[2])}
 with open(sys.argv[3], "w", encoding="utf-8") as f:
     json.dump(data, f)
-' "$profile" "$ttl_minutes" "$req_file"
+' "$profile" "$ttl_minutes" "$req_file"; then
+        echo "Erro: não foi possível gravar $req_file. Rode 'pc-ctl wake-setup'." >&2
+        pc_ctl_log --cmd "power-mode" --result "failed" --reason "request_write_failed" --profile "$profile"
+        return 1
+    fi
 
-    execute "$WIN_DIR/schtasks.exe" /run /tn "pc-ctl-power"
+    # Checa o código de saída: dentro de "pc-ctl power-mode ... || ..." o set -e não vale.
+    local task_rc=0
+    execute "$WIN_DIR/schtasks.exe" /run /tn "pc-ctl-power" || task_rc=$?
+    if [[ "$task_rc" -ne 0 ]]; then
+        echo "Erro: schtasks /run /tn pc-ctl-power falhou (código $task_rc). Rode 'pc-ctl wake-setup'." >&2
+        pc_ctl_log --cmd "power-mode" --result "failed" --reason "task_run_failed" --profile "$profile"
+        return 1
+    fi
 
     # O schtasks /run é assíncrono: só o pedido foi enviado. A tarefa elevada grava o resultado real
     # (applied|refused|failed) no state.json, e "power-mode status" lê esse arquivo.
@@ -436,6 +856,9 @@ case "$COMMAND" in
                 exit 1
                 ;;
         esac
+        ;;
+    schedule-sleep)
+        cmd_schedule_sleep "$@"
         ;;
     wake-test)
         cmd_wake_test "$@"
