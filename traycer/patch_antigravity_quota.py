@@ -32,7 +32,7 @@ async function _enrichAgyBody(restBody) {
         let bin = fs.existsSync(agyBin) ? agyBin : "agy";
         let env = { ...process.env, PATH: (process.env.PATH || "") + ":" + path.join(os.homedir(), ".local", "bin") };
         return await new Promise(res => {
-          cp.execFile(bin, ["-p", "/usage", "--output-format", "json"], { timeout: 6000, env }, (err, stdout) => {
+          cp.execFile(bin, ["-p", "/usage", "--output-format", "json"], { timeout: 20000, env }, (err, stdout) => {
             if (err || !stdout) return res(null);
             try {
               let parsed = JSON.parse(stdout);
