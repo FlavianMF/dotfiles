@@ -139,6 +139,58 @@ PATH="$tmp/bin:$PATH" bash "$LLM_ASK" --apply "$tmp/target_file.py" "$tmp/user.t
 updated_content="$(cat "$tmp/target_file.py")"
 expect "--apply substitui conteúdo com search-replace" "$updated_content" "new_value = 20"
 
+
+# 8. Teste de --no-system no dry-run
+out_nosys="$(bash "$LLM_ASK" --dry-run --no-system "$tmp/user.txt" "$tmp/sys.txt")"
+has_sys="$(jq '[.messages[] | select(.role == "system")] | length' <<<"$out_nosys")"
+expect "--no-system não inclui role system" "$has_sys" "0"
+usr_nosys="$(jq -r '[.messages[] | select(.role == "user")] | .[0].content' <<<"$out_nosys")"
+has "user prompt contém regras do system com --no-system" "SYSTEM PROMPT TEST" "$usr_nosys"
+has "user prompt contém prompt original com --no-system" "USER PROMPT TEST" "$usr_nosys"
+
+# 9. Teste de --log e --save-raw
+log_out="$tmp/test_log.json"
+raw_out="$tmp/test_raw.txt"
+PATH="$tmp/bin:$PATH" bash "$LLM_ASK" --log "$log_out" --save-raw "$raw_out" "$tmp/user.txt" "$tmp/sys.txt" >/dev/null
+if [[ -f "$log_out" && -f "$raw_out" ]]; then
+    echo "✅ PASSOU: --log e --save-raw geram os arquivos informados"
+else
+    echo "❌ FALHA: --log ou --save-raw não geraram arquivos"
+    fail=1
+fi
+
+# 10. Teste de códigos de saída: 2 para rede, 3 para truncado, 4 para vazio
+# Mock de falha de rede
+cat << 'MOCK_NET' > "$tmp/bin/curl"
+#!/bin/bash
+exit 28
+MOCK_NET
+
+set +e
+PATH="$tmp/bin:$PATH" bash "$LLM_ASK" "$tmp/user.txt" "$tmp/sys.txt" >/dev/null 2>&1
+code_net=$?
+expect "código de saída 2 para erro de rede/curl" "$code_net" "2"
+
+# Mock de resposta vazia
+cat << 'MOCK_EMPTY' > "$tmp/bin/curl"
+#!/bin/bash
+echo '{"choices": [{"message": {"content": ""}}]}'
+MOCK_EMPTY
+
+PATH="$tmp/bin:$PATH" bash "$LLM_ASK" "$tmp/user.txt" "$tmp/sys.txt" >/dev/null 2>&1
+code_empty=$?
+expect "código de saída 4 para resposta vazia" "$code_empty" "4"
+
+# Mock de resposta truncada (finish_reason=length)
+cat << 'MOCK_TRUNC' > "$tmp/bin/curl"
+#!/bin/bash
+echo '{"choices": [{"finish_reason": "length", "message": {"content": "partially completed code..."}}]}'
+MOCK_TRUNC
+
+PATH="$tmp/bin:$PATH" bash "$LLM_ASK" "$tmp/user.txt" "$tmp/sys.txt" >/dev/null 2>&1
+code_trunc=$?
+expect "código de saída 3 para resposta truncada" "$code_trunc" "3"
+
 echo "----------------------------------------"
 if [[ $fail -eq 0 ]]; then
     echo "🎉 Todos os testes de bin/llm-ask PASSARAM!"

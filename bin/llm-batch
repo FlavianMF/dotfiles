@@ -1,0 +1,648 @@
+#!/usr/bin/env bash
+# llm-batch: runner da fila de processamento em lote não supervisionado para modelos locais.
+# Agrupa jobs por perfil, gerencia ciclo de vida do llama-server, isola execução em git worktrees,
+# aplica validadores automáticos e gera patches + logs de execução sem tocar no branch principal.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+LLM_ASK_BIN="${LLM_ASK_BIN:-$ROOT_DIR/bin/llm-ask}"
+LLM_SERVE_BIN="${LLM_SERVE_BIN:-$ROOT_DIR/bin/llm-serve}"
+
+PORT="${LLM_PORT:-8080}"
+RESTORE_PROFILE="coder7b"
+DRY_RUN=0
+SKIP_RAM_CHECK=0
+SKIP_POWER_CHECK=0
+QUEUE_DIR="${LLM_BATCH_QUEUE_DIR:-jobs}"
+OUT_DIR="${LLM_BATCH_OUT_DIR:-out}"
+DEFAULT_REPO="${LLM_BATCH_DEFAULT_REPO:-$ROOT_DIR}"
+LOGS_DIR="$ROOT_DIR/logs"
+
+ACTIVE_WORKTREES=()
+PREVIOUS_PROFILE=""
+
+show_help() {
+    cat <<'HELP'
+llm-batch: runner da fila de processamento em lote não supervisionado para modelos locais.
+Uso: llm-batch [comando] [opções]
+
+Comandos:
+  run [caminho]            Processa a fila de jobs (diretório ou arquivo .job/.yaml/.json único)
+  status                   Exibe o status dos jobs na fila e resultados em out/
+  clean                    Limpa worktrees órfãos e arquivos temporários
+
+Opções:
+  -q, --queue-dir DIR      Diretório contendo jobs da fila (padrão: jobs)
+  -o, --out-dir DIR        Diretório de saída para patches e logs (padrão: out)
+  -p, --port PORT          Porta do llama-server (padrão: 8080)
+  --restore-profile NOME   Perfil do llama-server a restaurar ao finalizar (padrão: coder7b)
+  --default-repo DIR       Repositório git padrão se não especificado no job
+  -d, --dry-run            Valida a fila e exibe o plano de execução sem carregar modelos
+  --skip-ram-check         Ignora a verificação de memória RAM disponível
+  --skip-power-check       Ignora a verificação de fonte de alimentação (AC)
+  -h, --help               Exibe esta mensagem de ajuda
+HELP
+}
+
+cleanup() {
+    local exit_code=$?
+    # Limpa worktrees ativos registrados
+    for entry in "${ACTIVE_WORKTREES[@]:-}"; do
+        if [[ -n "$entry" ]]; then
+            local repo="${entry%%:*}"
+            local wt="${entry#*:}"
+            if [[ -d "$wt" ]]; then
+                git -C "$repo" worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+            fi
+        fi
+    done
+
+    # Restaura o servidor original se solicitado e não for dry-run
+    if [[ "$DRY_RUN" -eq 0 && -n "$RESTORE_PROFILE" && "$PREVIOUS_PROFILE" != "$RESTORE_PROFILE" ]]; then
+        if [[ -n "$PREVIOUS_PROFILE" ]]; then
+            echo "Restaurando llama-server para perfil '$RESTORE_PROFILE'..." >&2
+            restore_server "$RESTORE_PROFILE" || true
+        fi
+    fi
+    exit "$exit_code"
+}
+trap cleanup EXIT INT TERM
+
+get_mem_available_mb() {
+    if [[ -f /proc/meminfo ]]; then
+        awk '/MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo
+    else
+        echo "32768"
+    fi
+}
+
+get_profile_ram_requirement_mb() {
+    local profile="$1"
+    case "$profile" in
+        coder7b) echo "1024" ;;
+        deepseek14b|coder14b) echo "4096" ;;
+        main) echo "8192" ;;
+        qwen35b-moe) echo "12288" ;;
+        *) echo "4096" ;;
+    esac
+}
+
+check_ram() {
+    local profile="$1"
+    if [[ "$SKIP_RAM_CHECK" -eq 1 ]]; then
+        return 0
+    fi
+    local avail_mb
+    avail_mb="$(get_mem_available_mb)"
+    local req_mb
+    req_mb="$(get_profile_ram_requirement_mb "$profile")"
+    local safety_buffer_mb=2048
+    local needed_mb=$((req_mb + safety_buffer_mb))
+
+    if [[ "$avail_mb" -lt "$needed_mb" ]]; then
+        echo "RAM insuficiente para perfil '$profile': disponível=${avail_mb}MB, necessário=${needed_mb}MB (${req_mb}MB + 2GB buffer)." >&2
+        return 1
+    fi
+    return 0
+}
+
+check_power() {
+    if [[ "$SKIP_POWER_CHECK" -eq 1 ]]; then
+        return 0
+    fi
+
+    # 1. Verifica via pc-ctl se presente
+    if command -v pc-ctl >/dev/null 2>&1; then
+        local st
+        st="$(pc-ctl status 2>&1 || true)"
+        if grep -qi "battery" <<<"$st" && ! grep -qi "charging\|ac\|online" <<<"$st"; then
+            echo "Aviso de energia: pc-ctl indica operação em bateria sem alimentação AC." >&2
+            return 1
+        fi
+    fi
+
+    # 2. Verifica /sys/class/power_supply se disponível
+    if compgen -G "/sys/class/power_supply/*" > /dev/null; then
+        for ps in /sys/class/power_supply/*; do
+            if [[ -f "$ps/type" && "$(<"$ps/type")" == "Mains" ]]; then
+                if [[ -f "$ps/online" && "$(<"$ps/online")" == "0" ]]; then
+                    echo "Aviso de energia: Alimentação AC desconectada ($ps/online == 0)." >&2
+                    return 1
+                fi
+            fi
+        done
+    fi
+
+    return 0
+}
+
+get_current_running_model() {
+    local models_json
+    if models_json="$(curl -fsS -m 2 "http://127.0.0.1:${PORT}/v1/models" 2>/dev/null)"; then
+        local name
+        name="$(jq -r '.data[0].id // .models[0].name // empty' <<<"$models_json")"
+        echo "$name"
+    else
+        echo ""
+    fi
+}
+
+wait_server_health() {
+    local timeout=180
+    local elapsed=0
+    while [[ $elapsed -lt $timeout ]]; do
+        if curl -fsS -m 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    return 1
+}
+
+ensure_server_profile() {
+    local profile="$1"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        return 0
+    fi
+
+    mkdir -p "$LOGS_DIR"
+    local curr
+    curr="$(get_current_running_model)"
+
+    # Mapeamento do alias esperado por perfil
+    local expected_alias=""
+    case "$profile" in
+        coder7b) expected_alias="qwen2.5-coder-7b" ;;
+        qwen35b-moe) expected_alias="qwen3.6-35b-a3b" ;;
+        deepseek14b) expected_alias="deepseek-r1-14b" ;;
+        coder14b) expected_alias="qwen2.5-coder-14b" ;;
+        main) expected_alias="gpt-oss-20b" ;;
+        *) expected_alias="$profile" ;;
+    esac
+
+    if [[ -n "$curr" && ("$curr" == "$expected_alias" || "$curr" == *"$profile"*) ]]; then
+        return 0
+    fi
+
+    if [[ -z "$PREVIOUS_PROFILE" ]]; then
+        PREVIOUS_PROFILE="${curr:-unknown}"
+    fi
+
+    echo "Subindo llama-server com perfil '$profile'..."
+    pkill -f llama-server 2>/dev/null || true
+    sleep 2
+
+    nohup "$LLM_SERVE_BIN" "$profile" > "$LOGS_DIR/llama-server-${profile}.log" 2>&1 &
+    local s_pid=$!
+
+    if ! wait_server_health; then
+        echo "Erro: Timeout de 180s ao aguardar inicialização do perfil '$profile'." >&2
+        kill -9 "$s_pid" 2>/dev/null || true
+        return 1
+    fi
+    echo "✓ Perfil '$profile' pronto na porta $PORT."
+    return 0
+}
+
+restore_server() {
+    local profile="$1"
+    pkill -f llama-server 2>/dev/null || true
+    sleep 1
+    nohup "$LLM_SERVE_BIN" "$profile" > "$LOGS_DIR/llama-server-${profile}.log" 2>&1 &
+    wait_server_health || echo "Aviso: Servidor restaurado para '$profile' demorou para responder." >&2
+}
+
+parse_job_file() {
+    local job_file="$1"
+    python3 -c '
+import sys, json, yaml, os
+
+job_path = sys.argv[1]
+with open(job_path, "r", encoding="utf-8") as f:
+    text = f.read()
+
+# Tenta carregar JSON ou YAML
+try:
+    data = json.loads(text)
+except Exception:
+    data = yaml.safe_load(text) or {}
+
+job_id = data.get("id") or os.path.splitext(os.path.basename(job_path))[0]
+profile = data.get("profile") or "coder7b"
+prompt_file = data.get("prompt_file") or ""
+if prompt_file and not os.path.isabs(prompt_file):
+    prompt_file = os.path.normpath(os.path.join(os.path.dirname(job_path), prompt_file))
+
+system_file = data.get("system_file") or ""
+if system_file and not os.path.isabs(system_file):
+    system_file = os.path.normpath(os.path.join(os.path.dirname(job_path), system_file))
+
+repo = data.get("repo") or ""
+base_ref = data.get("base_ref") or "HEAD"
+target_file = data.get("target_file") or ""
+validators = data.get("validators") or []
+if isinstance(validators, str):
+    validators = [validators]
+
+max_tokens = int(data.get("max_tokens") or 6000)
+timeout_s = int(data.get("timeout_s") or 3600)
+retries = int(data.get("retries") or 1)
+
+normalized = {
+    "id": job_id,
+    "profile": profile,
+    "prompt_file": prompt_file,
+    "system_file": system_file,
+    "repo": repo,
+    "base_ref": base_ref,
+    "target_file": target_file,
+    "validators": validators,
+    "max_tokens": max_tokens,
+    "timeout_s": timeout_s,
+    "retries": retries
+}
+print(json.dumps(normalized))
+' "$job_file"
+}
+
+get_sampler_args_for_profile() {
+    local profile="$1"
+    case "$profile" in
+        deepseek14b)
+            echo "--no-system --temp 0.6 --top-p 0.95"
+            ;;
+        qwen35b-moe)
+            echo "--temp 0.6 --top-p 0.95 --top-k 20"
+            ;;
+        main)
+            echo "--temp 1.0 --top-p 1.0"
+            ;;
+        coder14b|coder7b)
+            echo "--temp 0.2 --top-p 0.9"
+            ;;
+        *)
+            echo "--temp 0.2 --top-p 0.9"
+            ;;
+    esac
+}
+
+run_single_job() {
+    local job_json="$1"
+    local job_id
+    job_id="$(jq -r '.id' <<<"$job_json")"
+    local profile
+    profile="$(jq -r '.profile' <<<"$job_json")"
+    local prompt_file
+    prompt_file="$(jq -r '.prompt_file' <<<"$job_json")"
+    local system_file
+    system_file="$(jq -r '.system_file' <<<"$job_json")"
+    local repo
+    repo="$(jq -r '.repo' <<<"$job_json")"
+    [[ -z "$repo" ]] && repo="$DEFAULT_REPO"
+    local base_ref
+    base_ref="$(jq -r '.base_ref' <<<"$job_json")"
+    local target_file
+    target_file="$(jq -r '.target_file' <<<"$job_json")"
+    local max_tokens
+    max_tokens="$(jq -r '.max_tokens' <<<"$job_json")"
+    local timeout_s
+    timeout_s="$(jq -r '.timeout_s' <<<"$job_json")"
+
+    local job_out="$OUT_DIR/$job_id"
+    mkdir -p "$job_out"
+
+    echo "=================================================="
+    echo "Executando Job: $job_id [Perfil: $profile]"
+    echo "=================================================="
+
+    local start_time
+    start_time="$(date +%s)"
+
+    # Verificação de arquivos necessários
+    if [[ ! -f "$prompt_file" ]]; then
+        echo "Erro: Arquivo de prompt não encontrado: '$prompt_file'" >&2
+        echo "PROMPT_FILE_NOT_FOUND" > "$job_out/FAILED"
+        return 1
+    fi
+
+    # Verificação de RAM para o perfil
+    if ! check_ram "$profile"; then
+        echo "SKIPPED_LOW_RAM" > "$job_out/FAILED"
+        cat <<LOG_RAM > "$job_out/log.json"
+{
+  "id": "$job_id",
+  "profile": "$profile",
+  "status": "SKIPPED_LOW_RAM",
+  "timestamp": "$(date -Iseconds)",
+  "error": "Memória RAM insuficiente para carregar o modelo de forma estável."
+}
+LOG_RAM
+        return 0
+    fi
+
+    # Criação do worktree isolado
+    local wt_dir
+    wt_dir="$(mktemp -d "/tmp/llm-batch-${job_id}-XXXXXX")"
+    ACTIVE_WORKTREES+=("${repo}:${wt_dir}")
+
+    if ! git -C "$repo" worktree add --detach "$wt_dir" "$base_ref" >/dev/null 2>&1; then
+        echo "Erro: Falha ao criar worktree isolado a partir de $base_ref." >&2
+        echo "GIT_WORKTREE_FAILED" > "$job_out/FAILED"
+        rm -rf "$wt_dir"
+        return 1
+    fi
+
+    # Garante llama-server com o perfil correto
+    if ! ensure_server_profile "$profile"; then
+        echo "SERVER_START_FAILED" > "$job_out/FAILED"
+        git -C "$repo" worktree remove --force "$wt_dir" 2>/dev/null || rm -rf "$wt_dir"
+        return 1
+    fi
+
+    # Configuração dos argumentos do llm-ask
+    local sampler_args
+    sampler_args="$(get_sampler_args_for_profile "$profile")"
+
+    local ask_cmd=("$LLM_ASK_BIN" "--port" "$PORT" "--timeout" "$timeout_s" "--max-tokens" "$max_tokens")
+    # shellcheck disable=SC2086
+    read -r -a parsed_sampler <<< "$sampler_args"
+    ask_cmd+=("${parsed_sampler[@]}")
+
+    ask_cmd+=("--log" "$job_out/response.json")
+    ask_cmd+=("--save-raw" "$job_out/raw_output.txt")
+
+    if [[ -n "$target_file" ]]; then
+        ask_cmd+=("--apply" "$wt_dir/$target_file")
+    fi
+
+    ask_cmd+=("$prompt_file")
+    if [[ -n "$system_file" && -f "$system_file" ]]; then
+        ask_cmd+=("$system_file")
+    fi
+
+    echo "Disparando llm-ask..."
+    set +e
+    "${ask_cmd[@]}" > "$job_out/output.txt" 2>&1
+    local ask_code=$?
+    set -e
+
+    local finish_reason=""
+    if [[ -f "$job_out/response.json" ]]; then
+        finish_reason="$(jq -r '.choices[0].finish_reason // empty' "$job_out/response.json" 2>/dev/null || echo "")"
+    fi
+
+    if [[ $ask_code -eq 2 ]]; then
+        echo "Falha de rede / servidor na execução do llm-ask." >&2
+        echo "NETWORK_ERROR" > "$job_out/FAILED"
+    elif [[ $ask_code -eq 3 ]]; then
+        echo "Aviso: Resposta do modelo foi truncada por max_tokens." >&2
+    elif [[ $ask_code -eq 4 ]]; then
+        echo "Erro: Resposta vazia da API." >&2
+        echo "EMPTY_RESPONSE" > "$job_out/FAILED"
+    fi
+
+    # Se target_file não foi definido, mas foi gerado um patch/diff, tenta aplicar
+    if [[ -z "$target_file" && -f "$job_out/raw_output.txt" ]]; then
+        if grep -E -q '^(diff --git|--- |\+\+\+ |@@ )' "$job_out/raw_output.txt"; then
+            git -C "$wt_dir" apply --recount "$job_out/raw_output.txt" 2>/dev/null || true
+        fi
+    fi
+
+    # Execução de validadores no worktree
+    local val_count
+    val_count="$(jq '.validators | length' <<<"$job_json")"
+    local all_validators_passed=1
+    local val_results="[]"
+
+    for ((i=0; i<val_count; i++)); do
+        local val_cmd
+        val_cmd="$(jq -r ".validators[$i]" <<<"$job_json")"
+        echo "Rodando validador: $val_cmd"
+        set +e
+        (cd "$wt_dir" && eval "$val_cmd") > "$job_out/validator_${i}.log" 2>&1
+        local v_code=$?
+        set -e
+        local v_passed=false
+        if [[ $v_code -eq 0 ]]; then
+            v_passed=true
+            echo "✓ Validador passou."
+        else
+            echo "❌ Validador falhou (código $v_code)."
+            all_validators_passed=0
+        fi
+
+        val_results="$(jq --arg cmd "$val_cmd" --argjson code "$v_code" --argjson passed "$v_passed"             '. += [{"command": $cmd, "exit_code": $code, "passed": $passed}]' <<<"$val_results")"
+
+        if [[ $all_validators_passed -eq 0 ]]; then
+            break
+        fi
+    done
+
+    local end_time
+    end_time="$(date +%s)"
+    local duration=$((end_time - start_time))
+
+    # Geração do patch diff
+    git -C "$wt_dir" diff > "$job_out/patch.diff"
+
+    local final_status="SUCCESS"
+    if [[ $ask_code -ne 0 && $ask_code -ne 3 ]]; then
+        final_status="FAILED"
+        echo "ASK_ERROR_CODE_${ask_code}" > "$job_out/FAILED"
+    elif [[ $all_validators_passed -eq 0 ]]; then
+        final_status="FAILED"
+        echo "VALIDATOR_FAILED" > "$job_out/FAILED"
+    else
+        echo "OK" > "$job_out/SUCCESS"
+    fi
+
+    # Extrai raciocínio e métricas de tokens
+    local reasoning_txt=""
+    if [[ -f "$job_out/response.json" ]]; then
+        reasoning_txt="$(jq -r '.choices[0].message.reasoning_content // empty' "$job_out/response.json" 2>/dev/null || echo "")"
+    fi
+
+    jq -n         --arg id "$job_id"         --arg profile "$profile"         --arg status "$final_status"         --arg finish_reason "$finish_reason"         --arg reasoning "$reasoning_txt"         --argjson duration "$duration"         --argjson validators "$val_results"         --rawfile response "${job_out}/response.json"         '{
+            id: $id,
+            profile: $profile,
+            status: $status,
+            finish_reason: $finish_reason,
+            duration_seconds: $duration,
+            reasoning_content: (if $reasoning != "" then $reasoning else null end),
+            usage: (try ($response | fromjson | .usage) catch null),
+            timings: (try ($response | fromjson | .timings) catch null),
+            validators: $validators,
+            timestamp: (now | todate)
+        }' > "$job_out/log.json" 2>/dev/null || true
+
+    # Limpeza do worktree
+    git -C "$repo" worktree remove --force "$wt_dir" 2>/dev/null || rm -rf "$wt_dir"
+    git -C "$repo" worktree prune 2>/dev/null || true
+
+    echo "Job $job_id concluído com status: $final_status (duração: ${duration}s)"
+}
+
+cmd="${1:-run}"
+shift || true
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -q|--queue-dir)
+            [[ $# -gt 1 ]] || { echo "Erro: --queue-dir requer um caminho." >&2; exit 1; }
+            QUEUE_DIR="$2"
+            shift 2
+            ;;
+        -o|--out-dir)
+            [[ $# -gt 1 ]] || { echo "Erro: --out-dir requer um caminho." >&2; exit 1; }
+            OUT_DIR="$2"
+            shift 2
+            ;;
+        -p|--port)
+            [[ $# -gt 1 ]] || { echo "Erro: --port requer um valor." >&2; exit 1; }
+            PORT="$2"
+            shift 2
+            ;;
+        --restore-profile)
+            [[ $# -gt 1 ]] || { echo "Erro: --restore-profile requer um perfil." >&2; exit 1; }
+            RESTORE_PROFILE="$2"
+            shift 2
+            ;;
+        --default-repo)
+            [[ $# -gt 1 ]] || { echo "Erro: --default-repo requer um caminho." >&2; exit 1; }
+            DEFAULT_REPO="$2"
+            shift 2
+            ;;
+        -d|--dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --skip-ram-check)
+            SKIP_RAM_CHECK=1
+            shift
+            ;;
+        --skip-power-check)
+            SKIP_POWER_CHECK=1
+            shift
+            ;;
+        *)
+            # Se for argumento posicional para o comando
+            QUEUE_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+case "$cmd" in
+    clean)
+        echo "Limpando worktrees temporários de llm-batch..."
+        for wt in /tmp/llm-batch-*; do
+            if [[ -d "$wt" ]]; then
+                echo "Removendo $wt"
+                rm -rf "$wt"
+            fi
+        done
+        git -C "$DEFAULT_REPO" worktree prune 2>/dev/null || true
+        echo "✓ Limpeza concluída."
+        exit 0
+        ;;
+    status)
+        echo "=== Status da Fila llm-batch ==="
+        if [[ ! -d "$OUT_DIR" ]]; then
+            echo "Nenhum resultado gerado em $OUT_DIR ainda."
+            exit 0
+        fi
+        for d in "$OUT_DIR"/*; do
+            if [[ -d "$d" ]]; then
+                job_id="$(basename "$d")"
+                st="UNKNOWN"
+                if [[ -f "$d/SUCCESS" ]]; then
+                    st="SUCCESS"
+                elif [[ -f "$d/FAILED" ]]; then
+                    st="FAILED ($(cat "$d/FAILED"))"
+                fi
+                echo "• $job_id: $st"
+            fi
+        done
+        exit 0
+        ;;
+    run)
+        ;;
+    *)
+        echo "Erro: Comando desconhecido '$cmd'." >&2
+        show_help >&2
+        exit 1
+        ;;
+esac
+
+# Pré-checagem de energia
+if ! check_power; then
+    echo "Erro: Pré-checagem de energia falhou. Conecte o computador à tomada para rodar o lote (ou use --skip-power-check)." >&2
+    exit 1
+fi
+
+# Coleta de arquivos de job
+JOB_FILES=()
+if [[ -f "$QUEUE_DIR" ]]; then
+    JOB_FILES+=("$QUEUE_DIR")
+elif [[ -d "$QUEUE_DIR" ]]; then
+    while IFS= read -r f; do
+        [[ -n "$f" ]] && JOB_FILES+=("$f")
+    done < <(find "$QUEUE_DIR" -maxdepth 1 -type f \( -name "*.job" -o -name "*.yaml" -o -name "*.yml" -o -name "*.json" \) | sort)
+fi
+
+if [[ ${#JOB_FILES[@]} -eq 0 ]]; then
+    echo "Nenhum job encontrado em '$QUEUE_DIR'."
+    exit 0
+fi
+
+echo "Encontrados ${#JOB_FILES[@]} job(s) para execução."
+
+# Parse e agrupamento por perfil
+declare -A JOBS_BY_PROFILE
+PROFILES=()
+
+for jf in "${JOB_FILES[@]}"; do
+    j_json="$(parse_job_file "$jf")"
+    prof="$(jq -r '.profile' <<<"$j_json")"
+    if [[ -z "${JOBS_BY_PROFILE[$prof]:-}" ]]; then
+        PROFILES+=("$prof")
+        JOBS_BY_PROFILE[$prof]="$j_json"
+    else
+        JOBS_BY_PROFILE[$prof]="${JOBS_BY_PROFILE[$prof]}"$'
+'"$j_json"
+    fi
+done
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "=== Modo Dry-Run Ativado ==="
+    echo "Perfis detectados: ${PROFILES[*]}"
+    for p in "${PROFILES[@]}"; do
+        echo "• Perfil: $p"
+        while IFS= read -r line; do
+            [[ -n "$line" ]] || continue
+            jid="$(jq -r '.id' <<<"$line")"
+            pfile="$(jq -r '.prompt_file' <<<"$line")"
+            val_num="$(jq '.validators | length' <<<"$line")"
+            echo "    - Job $jid | Prompt: $pfile | Validadores: $val_num"
+        done <<<"${JOBS_BY_PROFILE[$p]}"
+    done
+    echo "Dry-run concluído com sucesso."
+    exit 0
+fi
+
+# Execução ordenada por perfil para minimizar troca de modelos na VRAM
+for p in "${PROFILES[@]}"; do
+    while IFS= read -r j_json; do
+        [[ -n "$j_json" ]] || continue
+        run_single_job "$j_json"
+    done <<<"${JOBS_BY_PROFILE[$p]}"
+done
+
+echo "🎉 Execução da fila concluída!"

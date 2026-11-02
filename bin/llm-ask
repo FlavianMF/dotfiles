@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # llm-ask: chamada direta ao llama-server local em bounded context (sem ferramentas, sem histórico).
 # Suporta extração de blocos cercados, modo raw, think extraction e aplicação determinística (--apply).
+# Suporta timeout longo (--timeout), --no-system, presets/samplers e códigos de saída semânticos.
 # Uso: llm-ask [opções] <arquivo-prompt-usuario> [arquivo-prompt-sistema]
 set -euo pipefail
 
@@ -13,13 +14,19 @@ if [[ ! -f "$DEFAULT_SYS" && -f "$HOME/dotfiles/agents/local-llm/system.txt" ]];
 fi
 
 PORT="${LLM_PORT:-8080}"
+TIMEOUT="${LLM_TIMEOUT:-3600}"
 TEMP="0.2"
+TOP_P="0.9"
+TOP_K="20"
 MAX_TOKENS="6000"
 RAW=0
 SHOW_THINK=0
+NO_SYSTEM=0
 DRY_RUN=0
 APPLY_TARGET=""
 GRAMMAR_FILE=""
+SAVE_RAW=""
+LOG_FILE=""
 ARGS=()
 
 show_help() {
@@ -28,19 +35,32 @@ llm-ask: chamada direta ao llama-server local em bounded context (sem ferramenta
 Uso: llm-ask [opções] <arquivo-prompt-usuario> [arquivo-prompt-sistema]
 
 Argumentos:
-  arquivo-prompt-usuario   Arquivo com o prompt do usuário (ou '-' para stdin)
+  arquivo-prompt-usuario   Arquivo com o prompt do usuário (ou "-" para stdin)
   arquivo-prompt-sistema   (Opcional) System prompt (padrão: agents/local-llm/system.txt)
 
 Opções:
   -t, --temp FLOAT         Temperatura de amostragem (padrão: 0.2)
+  --top-p FLOAT            Top-p de amostragem (padrão: 0.9)
+  --top-k INT              Top-k de amostragem (padrão: 20)
   -p, --port PORT          Porta do llama-server (padrão: 8080 ou $LLM_PORT)
   -m, --max-tokens N       Máximo de tokens gerados (padrão: 6000)
+  --timeout SECS           Timeout da requisição HTTP em segundos (padrão: 3600 ou $LLM_TIMEOUT)
+  --no-system              Não envia mensagem de sistema (concatena regras ao turno do usuário)
   --raw                    Retorna a resposta bruta completa sem extrair bloco de código
   --think                  Exibe apenas o raciocínio (<think>...</think> ou reasoning_content)
   --apply <arquivo>        Aplica o diff ou bloco search-replace gerado diretamente ao arquivo
+  --save-raw <arquivo>     Grava o texto bruto da resposta no arquivo informado
+  --log <arquivo>          Grava a resposta JSON completa no arquivo informado
   --grammar <arquivo>      Aplica uma gramática GBNF do llama-server para amostragem estrita
   -d, --dry-run            Imprime o payload JSON formatado sem enviar a requisição
   -h, --help               Exibe esta mensagem de ajuda
+
+Códigos de saída:
+  0: Sucesso
+  1: Erro de argumento, arquivo ou validação
+  2: Falha de rede / comunicação com o servidor
+  3: Resposta truncada por limite de tokens (finish_reason=length)
+  4: Resposta vazia da API
 HELP
 }
 
@@ -55,6 +75,16 @@ while [[ $# -gt 0 ]]; do
             TEMP="$2"
             shift 2
             ;;
+        --top-p)
+            [[ $# -gt 1 ]] || { echo "Erro: --top-p requer um valor." >&2; exit 1; }
+            TOP_P="$2"
+            shift 2
+            ;;
+        --top-k)
+            [[ $# -gt 1 ]] || { echo "Erro: --top-k requer um valor." >&2; exit 1; }
+            TOP_K="$2"
+            shift 2
+            ;;
         -p|--port)
             [[ $# -gt 1 ]] || { echo "Erro: --port requer um valor." >&2; exit 1; }
             PORT="$2"
@@ -64,6 +94,15 @@ while [[ $# -gt 0 ]]; do
             [[ $# -gt 1 ]] || { echo "Erro: --max-tokens requer um valor." >&2; exit 1; }
             MAX_TOKENS="$2"
             shift 2
+            ;;
+        --timeout)
+            [[ $# -gt 1 ]] || { echo "Erro: --timeout requer um valor em segundos." >&2; exit 1; }
+            TIMEOUT="$2"
+            shift 2
+            ;;
+        --no-system)
+            NO_SYSTEM=1
+            shift
             ;;
         --raw)
             RAW=1
@@ -76,6 +115,16 @@ while [[ $# -gt 0 ]]; do
         --apply)
             [[ $# -gt 1 ]] || { echo "Erro: --apply requer o caminho do arquivo alvo." >&2; exit 1; }
             APPLY_TARGET="$2"
+            shift 2
+            ;;
+        --save-raw)
+            [[ $# -gt 1 ]] || { echo "Erro: --save-raw requer o caminho do arquivo." >&2; exit 1; }
+            SAVE_RAW="$2"
+            shift 2
+            ;;
+        --log)
+            [[ $# -gt 1 ]] || { echo "Erro: --log requer o caminho do arquivo." >&2; exit 1; }
+            LOG_FILE="$2"
             shift 2
             ;;
         --grammar)
@@ -139,26 +188,41 @@ if [[ -n "$GRAMMAR_FILE" ]]; then
     grammar_arg="$(<"$GRAMMAR_FILE")"
 fi
 
-PAYLOAD="$(jq -n \
-    --rawfile sys "$SYS_FILE" \
-    --rawfile usr "$USER_FILE" \
-    --argjson temp "$TEMP" \
-    --argjson max_tokens "$MAX_TOKENS" \
-    --arg grammar "$grammar_arg" \
-    '{
-        model: "local",
-        cache_prompt: true,
-        max_tokens: $max_tokens,
-        temperature: $temp,
-        top_p: 0.9,
-        top_k: 20,
-        min_p: 0.05,
-        repeat_penalty: 1.05,
-        messages: [
-            {role: "system", content: $sys},
-            {role: "user", content: $usr}
-        ]
-    } + (if $grammar != "" then {grammar: $grammar} else {} end)')"
+if [[ "$NO_SYSTEM" -eq 1 ]]; then
+    PAYLOAD="$(jq -n         --rawfile sys "$SYS_FILE"         --rawfile usr "$USER_FILE"         --argjson temp "$TEMP"         --argjson top_p "$TOP_P"         --argjson top_k "$TOP_K"         --argjson max_tokens "$MAX_TOKENS"         --arg grammar "$grammar_arg"         '{
+            model: "local",
+            cache_prompt: true,
+            max_tokens: $max_tokens,
+            temperature: $temp,
+            top_p: $top_p,
+            top_k: $top_k,
+            min_p: 0.05,
+            repeat_penalty: 1.05,
+            messages: [
+                {
+                    role: "user",
+                    content: (if ($sys | length) > 0 then ($sys + "
+
+" + $usr) else $usr end)
+                }
+            ]
+        } + (if $grammar != "" then {grammar: $grammar} else {} end)')"
+else
+    PAYLOAD="$(jq -n         --rawfile sys "$SYS_FILE"         --rawfile usr "$USER_FILE"         --argjson temp "$TEMP"         --argjson top_p "$TOP_P"         --argjson top_k "$TOP_K"         --argjson max_tokens "$MAX_TOKENS"         --arg grammar "$grammar_arg"         '{
+            model: "local",
+            cache_prompt: true,
+            max_tokens: $max_tokens,
+            temperature: $temp,
+            top_p: $top_p,
+            top_k: $top_k,
+            min_p: 0.05,
+            repeat_penalty: 1.05,
+            messages: [
+                {role: "system", content: $sys},
+                {role: "user", content: $usr}
+            ]
+        } + (if $grammar != "" then {grammar: $grammar} else {} end)')"
+fi
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "$PAYLOAD"
@@ -167,36 +231,59 @@ fi
 
 API_URL="http://127.0.0.1:${PORT}/v1/chat/completions"
 
-if ! RESPONSE="$(echo "$PAYLOAD" | curl -fsS -m 300 "$API_URL" -H 'Content-Type: application/json' -d @- 2>&1)"; then
+if ! RESPONSE="$(echo "$PAYLOAD" | curl -fsS -m "$TIMEOUT" "$API_URL" -H 'Content-Type: application/json' -d @- 2>&1)"; then
     echo "Erro: Falha na comunicação com o llama-server em $API_URL." >&2
     echo "Detalhes: $RESPONSE" >&2
     echo "Verifique se o backend local está em execução (llm-serve)." >&2
-    exit 1
+    exit 2
 fi
 
+if [[ -n "$LOG_FILE" ]]; then
+    mkdir -p "$(dirname "$LOG_FILE")"
+    echo "$RESPONSE" > "$LOG_FILE"
+fi
+
+FINISH_REASON="$(echo "$RESPONSE" | jq -r '.choices[0].finish_reason // empty')"
 CONTENT="$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')"
 REASONING="$(echo "$RESPONSE" | jq -r '.choices[0].message.reasoning_content // empty')"
+
+if [[ -n "$SAVE_RAW" ]]; then
+    mkdir -p "$(dirname "$SAVE_RAW")"
+    if [[ -n "$CONTENT" ]]; then
+        echo "$CONTENT" > "$SAVE_RAW"
+    elif [[ -n "$REASONING" ]]; then
+        echo "$REASONING" > "$SAVE_RAW"
+    else
+        echo "" > "$SAVE_RAW"
+    fi
+fi
 
 if [[ -z "$CONTENT" && -z "$REASONING" ]]; then
     echo "Erro: Resposta vazia ou inesperada da API local:" >&2
     echo "$RESPONSE" >&2
-    exit 1
+    exit 4
 fi
 
-# Se solicitado apenas o pensamento
+# Tratamento se solicitado apenas raciocínio
 if [[ "$SHOW_THINK" -eq 1 ]]; then
+    think_text=""
     if [[ -n "$REASONING" ]]; then
-        echo "$REASONING"
+        think_text="$REASONING"
     elif grep -q '<think>' <<<"$CONTENT"; then
-        python3 -c '
+        think_text="$(python3 -c '
 import sys, re
 text = sys.stdin.read()
 m = re.search(r"<think>(.*?)</think>", text, re.DOTALL)
 if m:
     print(m.group(1).strip())
-' <<<"$CONTENT"
+' <<<"$CONTENT")"
     else
-        echo "Nenhum raciocínio explícito retornado pelo modelo."
+        think_text="Nenhum raciocínio explícito retornado pelo modelo."
+    fi
+    echo "$think_text"
+    if [[ "$FINISH_REASON" == "length" ]]; then
+        echo "Aviso: Raciocínio truncado pelo limite de max_tokens." >&2
+        exit 3
     fi
     exit 0
 fi
@@ -249,30 +336,32 @@ with open(target_file, "w", encoding="utf-8") as f:
     f.write(content)
 print(f"✓ {len(matches)} bloco(s) Search/Replace aplicado(s) com sucesso em {target_file}.")
 ' "$APPLY_TARGET" <<<"$FINAL_OUTPUT"
-        exit $?
-    fi
-
     # Caso 2: Unified diff (git apply com recount)
-    if grep -E -q '^(diff --git|--- |\+\+\+ |@@ )' <<<"$FINAL_OUTPUT"; then
+    elif grep -E -q '^(diff --git|--- |\+\+\+ |@@ )' <<<"$FINAL_OUTPUT"; then
         tmp_patch="$(mktemp)"
         echo "$FINAL_OUTPUT" > "$tmp_patch"
         if git apply --recount --ignore-space-change "$tmp_patch" 2>/dev/null; then
             echo "✓ Unified diff aplicado com sucesso via git apply (--recount)."
             rm -f "$tmp_patch"
-            exit 0
         elif patch -p1 --batch < "$tmp_patch" 2>/dev/null; then
             echo "✓ Unified diff aplicado com sucesso via patch."
             rm -f "$tmp_patch"
-            exit 0
         else
             echo "Erro: git apply / patch falhou ao aplicar o diff unificado." >&2
             git apply --recount --check "$tmp_patch" || true
             rm -f "$tmp_patch"
             exit 1
         fi
+    else
+        echo "Aviso: A saída não continha blocos diff nem search-replace identificáveis." >&2
     fi
-
-    echo "Aviso: A saída não continha blocos diff nem search-replace identificáveis." >&2
 fi
 
 echo "$FINAL_OUTPUT"
+
+if [[ "$FINISH_REASON" == "length" ]]; then
+    echo "Aviso: Geração truncada pelo limite de max_tokens (finish_reason=length)." >&2
+    exit 3
+fi
+
+exit 0

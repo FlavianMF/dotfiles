@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Sobe o llama-server no WSL2 como backend único dos agentes locais (opencode e Traycer).
-# Uso: llm-serve [main|coder7b|ARQUIVO.gguf|USUARIO/REPO[:QUANT]] [args extras do llama-server]
+# Uso: llm-serve [main|coder7b|qwen35b-moe|deepseek14b|coder14b|ARQUIVO.gguf|USUARIO/REPO[:QUANT]] [args extras]
 # Porta e host: LLM_PORT (8080) e 127.0.0.1. Um modelo residente por vez (-np 1).
 set -euo pipefail
 
 PORT="${LLM_PORT:-8080}"
 CTX="${LLM_CTX:-32768}"
+THREADS="${LLM_THREADS:-6}"
 BASE="http://127.0.0.1:${PORT}"
 
 command -v llama-server >/dev/null || { echo "llama-server não está no PATH. Rode: llama-build-sm120a" >&2; exit 1; }
@@ -39,9 +40,11 @@ spec="${1:-main}"
 
 model_args=()
 alias_name=""
+extra=()
+
 case "$spec" in
   main)
-    # Perfil principal: MoE de código com offload de experts. Valores iniciais; a Fase 1 mede e ajusta.
+    # Perfil principal: MoE de código com offload de experts.
     model_args=(-hf "${LLM_MAIN_HF:-ggml-org/gpt-oss-20b-GGUF}")
     alias_name="${LLM_MAIN_ALIAS:-gpt-oss-20b}"
     ;;
@@ -49,6 +52,32 @@ case "$spec" in
     # Perfil Qwen 2.5 Coder 7B Instruct: 100% offload na VRAM da RTX 5050 (~4,8 GB VRAM, ~46 tok/s)
     model_args=(-hf "${LLM_CODER7B_HF:-Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:Q4_K_M}")
     alias_name="${LLM_CODER7B_ALIAS:-qwen2.5-coder-7b}"
+    ;;
+  qwen35b-moe)
+    # Perfil Qwen 3.6 35B-A3B MoE: raciocínio nativo, offload de 30 experts para CPU, sem mmproj
+    local_q35="/home/flv/.cache/huggingface/hub/models--unsloth--Qwen3.6-35B-A3B-GGUF/snapshots/a483e9e6cbd595906af30beda3187c2663a1118c/Qwen3.6-35B-A3B-UD-IQ4_XS.gguf"
+    if [[ -f "$local_q35" ]]; then
+      model_args=(-m "$local_q35")
+    else
+      model_args=(-hf "${LLM_QWEN35B_HF:-unsloth/Qwen3.6-35B-A3B-GGUF:UD-IQ3_S}")
+    fi
+    alias_name="${LLM_QWEN35B_ALIAS:-qwen3.6-35b-a3b}"
+    extra+=(-ngl 99 --n-cpu-moe 30 -fit off)
+    CTX="${LLM_CTX:-16384}"
+    ;;
+  deepseek14b)
+    # Perfil DeepSeek-R1-Distill-Qwen-14B: raciocínio estendido para lógica complexa
+    model_args=(-hf "${LLM_DEEPSEEK14B_HF:-bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF:Q4_K_M}")
+    alias_name="${LLM_DEEPSEEK14B_ALIAS:-deepseek-r1-14b}"
+    extra+=(-ngl 30)
+    CTX="${LLM_CTX:-16384}"
+    ;;
+  coder14b)
+    # Perfil Qwen 2.5 Coder 14B: modelo denso com inteligência superior ao 7B
+    model_args=(-hf "${LLM_CODER14B_HF:-Qwen/Qwen2.5-Coder-14B-Instruct-GGUF:Q4_K_M}")
+    alias_name="${LLM_CODER14B_ALIAS:-qwen2.5-coder-14b}"
+    extra+=(-ngl 30)
+    CTX="${LLM_CTX:-16384}"
     ;;
   *.gguf)
     [[ -f "$spec" ]] || { echo "Arquivo não existe: $spec" >&2; exit 1; }
@@ -60,18 +89,17 @@ case "$spec" in
     alias_name="${spec##*/}"
     ;;
   *)
-    echo "Perfil desconhecido: $spec. Use main, coder7b, um arquivo .gguf ou USUARIO/REPO[:QUANT]." >&2
+    echo "Perfil desconhecido: $spec. Use main, coder7b, qwen35b-moe, deepseek14b, coder14b, um arquivo .gguf ou USUARIO/REPO[:QUANT]." >&2
     exit 2
     ;;
 esac
 
-# Sem -ngl nem --n-cpu-moe, o --fit (padrão: ligado) ajusta camadas e experts à VRAM livre.
-# Fixar um deles faz o --fit abortar: com LLM_N_CPU_MOE=N, desligue o --fit.
-extra=()
+# Suporte a LLM_LOAD_MODE (-lm) e ajuste de --n-cpu-moe manual
+[[ -n "${LLM_LOAD_MODE:-}" ]] && extra+=(-lm "$LLM_LOAD_MODE")
 [[ -n "${LLM_N_CPU_MOE:-}" ]] && extra+=(--n-cpu-moe "$LLM_N_CPU_MOE" -fit off)
 
 echo "llama-server em $BASE: modelo '$alias_name', contexto $CTX"
 exec llama-server "${model_args[@]}" --alias "$alias_name" \
   --host 127.0.0.1 --port "$PORT" -np 1 -c "$CTX" \
-  --threads 6 -fa on -ctk q8_0 -ctv q8_0 \
+  --threads "$THREADS" -fa on -ctk q8_0 -ctv q8_0 \
   --no-webui "${extra[@]}" "$@"
