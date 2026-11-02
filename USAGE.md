@@ -222,6 +222,16 @@ git pull
 ```
 
 
+## 🧠 Second Brain Projects & Dashboard Web (Tailscale)
+
+Para expor o dashboard com autenticação segura e acesso pelo celular via Tailscale:
+
+1. Habilite HTTPS na tailnet (painel administrativo do Tailscale -> DNS -> HTTPS Certificates).
+2. Rode `make sb-web-token` e `make sb-web-install`.
+3. Rode `tailscale serve --bg --https=443 http://127.0.0.1:8765`.
+4. Confira que `curl -s -o /dev/null -w '%{http_code}' https://loq-wsl-flv.tail48e6f7.ts.net/api/projects` imprime `401`. Se imprimir outro código, desligue o serve com `tailscale serve reset` e reporte.
+5. No celular, abra `https://loq-wsl-flv.tail48e6f7.ts.net/login` e cole o token.
+
 ## 🎮 Controle Remoto & Home Assistant
 
 O repositório inclui automação para controle remoto da máquina física e do Windows via Home Assistant (app mobile no celular) e utilitário de linha de comando no WSL2:

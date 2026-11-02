@@ -1,4 +1,4 @@
-.PHONY: install help clean sb-install sb-projects-timer pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -188,6 +188,17 @@ sb-projects-timer: sb-install
 	systemctl --user daemon-reload
 	systemctl --user enable --now sb-projects-scan.timer sb-projects-scan-tests.timer
 	@echo "✓ Timers sb-projects-scan instalados e ativados"
+
+sb-web-token:
+	@mkdir -p $(CURDIR)/secrets
+	@(umask 077 && python3 -c 'import secrets; tok = secrets.token_urlsafe(32); open("$(CURDIR)/secrets/sb-web.env", "w").write(f"SB_WEB_TOKEN={tok}\n"); print(f"Token gerado em secrets/sb-web.env:\n{tok}")')
+
+sb-web-install: sb-install
+	@mkdir -p $(HOME)/.config/systemd/user
+	ln -sfn $(CURDIR)/systemd/user/sb-web.service $(HOME)/.config/systemd/user/sb-web.service
+	systemctl --user daemon-reload
+	systemctl --user enable --now sb-web.service
+	@echo "✓ sb-web.service instalado e ativado"
 
 ha-vps-pack:
 	@tar -czvf /tmp/homeassistant-vps-stack.tar.gz homeassistant/
