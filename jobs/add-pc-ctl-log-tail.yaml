@@ -1,0 +1,13 @@
+id: add-pc-ctl-log-tail
+profile: coder7b
+repo: /home/flv/.traycer/worktrees/flavianmf__dotfiles/traycer-dotfiles-control-pc
+base_ref: HEAD
+prompt_file: prompts/add-pc-ctl-log-tail.txt
+target_file: lib/pc-ctl-log.sh
+validators:
+  - bash -n lib/pc-ctl-log.sh
+  - bash -c 'source lib/pc-ctl-log.sh && type pc_ctl_log_tail >/dev/null'
+  - bash tests/pc_ctl_test.sh
+max_tokens: 1024
+timeout_s: 180
+retries: 1

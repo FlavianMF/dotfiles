@@ -183,7 +183,12 @@ ensure_server_profile() {
         *) expected_alias="$profile" ;;
     esac
 
-    if [[ -n "$curr" && ("$curr" == "$expected_alias" || "$curr" == *"$profile"*) ]]; then
+    local curr_norm exp_norm prof_norm
+    curr_norm="$(echo "$curr" | tr "[:upper:]" "[:lower:]" | tr -d -- "-._ ")"
+    exp_norm="$(echo "$expected_alias" | tr "[:upper:]" "[:lower:]" | tr -d -- "-._ ")"
+    prof_norm="$(echo "$profile" | tr "[:upper:]" "[:lower:]" | tr -d -- "-._ ")"
+
+    if [[ -n "$curr" && ("$curr_norm" == *"$exp_norm"* || "$curr_norm" == *"$prof_norm"*) ]]; then
         return 0
     fi
 
@@ -234,11 +239,23 @@ job_id = data.get("id") or os.path.splitext(os.path.basename(job_path))[0]
 profile = data.get("profile") or "coder7b"
 prompt_file = data.get("prompt_file") or ""
 if prompt_file and not os.path.isabs(prompt_file):
-    prompt_file = os.path.normpath(os.path.join(os.path.dirname(job_path), prompt_file))
+    cand = os.path.normpath(os.path.join(os.path.dirname(job_path), prompt_file))
+    if os.path.exists(cand):
+        prompt_file = cand
+    elif os.path.exists(prompt_file):
+        prompt_file = os.path.abspath(prompt_file)
+    else:
+        prompt_file = cand
 
 system_file = data.get("system_file") or ""
 if system_file and not os.path.isabs(system_file):
-    system_file = os.path.normpath(os.path.join(os.path.dirname(job_path), system_file))
+    cand = os.path.normpath(os.path.join(os.path.dirname(job_path), system_file))
+    if os.path.exists(cand):
+        system_file = cand
+    elif os.path.exists(system_file):
+        system_file = os.path.abspath(system_file)
+    else:
+        system_file = cand
 
 repo = data.get("repo") or ""
 base_ref = data.get("base_ref") or "HEAD"
