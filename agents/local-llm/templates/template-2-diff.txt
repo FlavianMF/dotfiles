@@ -1,0 +1,17 @@
+TASK: Fix the issues below in {PATH}. Change nothing else.
+
+ISSUES (verbatim tool output):
+```
+{LINTER_OR_TEST_OUTPUT}
+```
+
+FILE {PATH} (with line numbers):
+```{LANG}
+{NUMBERED_FILE_OR_RANGE}
+```
+
+CONSTRAINTS:
+- Keep public names and signatures.
+- Do not reorder imports or reformat untouched lines.
+
+Output: one ```diff block, unified format, paths a/{PATH} b/{PATH}.

@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+# llm-ask: chamada direta ao llama-server local em bounded context (sem ferramentas, sem histórico).
+# Uso: llm-ask [opções] <arquivo-prompt-usuario> [arquivo-prompt-sistema]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+DEFAULT_SYS="$ROOT_DIR/agents/local-llm/system.txt"
+if [[ ! -f "$DEFAULT_SYS" && -f "$HOME/dotfiles/agents/local-llm/system.txt" ]]; then
+    DEFAULT_SYS="$HOME/dotfiles/agents/local-llm/system.txt"
+fi
+
+PORT="${LLM_PORT:-8080}"
+TEMP="0.2"
+MAX_TOKENS="6000"
+RAW=0
+DRY_RUN=0
+ARGS=()
+
+show_help() {
+    cat <<'HELP'
+llm-ask: chamada direta ao llama-server local em bounded context (sem ferramentas, sem histórico).
+Uso: llm-ask [opções] <arquivo-prompt-usuario> [arquivo-prompt-sistema]
+
+Argumentos:
+  arquivo-prompt-usuario   Arquivo com o prompt do usuário (ou '-' para stdin)
+  arquivo-prompt-sistema   (Opcional) System prompt (padrão: agents/local-llm/system.txt)
+
+Opções:
+  -t, --temp FLOAT         Temperatura de amostragem (padrão: 0.2)
+  -p, --port PORT          Porta do llama-server (padrão: 8080 ou $LLM_PORT)
+  -m, --max-tokens N       Máximo de tokens gerados (padrão: 6000)
+  --raw                    Retorna a resposta bruta completa sem extrair bloco de código
+  -d, --dry-run            Imprime o payload JSON formatado sem enviar a requisição
+  -h, --help               Exibe esta mensagem de ajuda
+HELP
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -t|--temp)
+            [[ $# -gt 1 ]] || { echo "Erro: --temp requer um valor." >&2; exit 1; }
+            TEMP="$2"
+            shift 2
+            ;;
+        -p|--port)
+            [[ $# -gt 1 ]] || { echo "Erro: --port requer um valor." >&2; exit 1; }
+            PORT="$2"
+            shift 2
+            ;;
+        -m|--max-tokens)
+            [[ $# -gt 1 ]] || { echo "Erro: --max-tokens requer um valor." >&2; exit 1; }
+            MAX_TOKENS="$2"
+            shift 2
+            ;;
+        --raw)
+            RAW=1
+            shift
+            ;;
+        -d|--dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        *)
+            ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ${#ARGS[@]} -eq 0 ]]; then
+    echo "Erro: Arquivo de prompt do usuário é obrigatório." >&2
+    show_help >&2
+    exit 1
+fi
+
+USER_INPUT="${ARGS[0]}"
+SYS_FILE="${ARGS[1]:-$DEFAULT_SYS}"
+
+command -v jq >/dev/null 2>&1 || { echo "Erro: jq não está instalado no PATH." >&2; exit 1; }
+
+tmp_user=""
+if [[ "$USER_INPUT" == "-" ]]; then
+    tmp_user="$(mktemp)"
+    cat > "$tmp_user"
+    USER_FILE="$tmp_user"
+else
+    USER_FILE="$USER_INPUT"
+    if [[ ! -f "$USER_FILE" ]]; then
+        echo "Erro: Arquivo de prompt do usuário não encontrado: '$USER_FILE'" >&2
+        exit 1
+    fi
+fi
+
+cleanup() {
+    if [[ -n "$tmp_user" && -f "$tmp_user" ]]; then
+        rm -f "$tmp_user"
+    fi
+}
+trap cleanup EXIT
+
+if [[ ! -f "$SYS_FILE" ]]; then
+    echo "Erro: Arquivo de prompt de sistema não encontrado: '$SYS_FILE'" >&2
+    exit 1
+fi
+
+PAYLOAD="$(jq -n \
+    --rawfile sys "$SYS_FILE" \
+    --rawfile usr "$USER_FILE" \
+    --argjson temp "$TEMP" \
+    --argjson max_tokens "$MAX_TOKENS" \
+    '{
+        model: "local",
+        cache_prompt: true,
+        max_tokens: $max_tokens,
+        temperature: $temp,
+        top_p: 0.9,
+        top_k: 20,
+        min_p: 0.05,
+        repeat_penalty: 1.05,
+        messages: [
+            {role: "system", content: $sys},
+            {role: "user", content: $usr}
+        ]
+    }')"
+
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "$PAYLOAD"
+    exit 0
+fi
+
+API_URL="http://127.0.0.1:${PORT}/v1/chat/completions"
+
+if ! RESPONSE="$(echo "$PAYLOAD" | curl -fsS -m 300 "$API_URL" -H 'Content-Type: application/json' -d @- 2>&1)"; then
+    echo "Erro: Falha na comunicação com o llama-server em $API_URL." >&2
+    echo "Detalhes: $RESPONSE" >&2
+    echo "Verifique se o backend local está em execução (llm-serve)." >&2
+    exit 1
+fi
+
+CONTENT="$(echo "$RESPONSE" | jq -r '.choices[0].message.content // empty')"
+
+if [[ -z "$CONTENT" ]]; then
+    echo "Erro: Resposta vazia ou inesperada da API local:" >&2
+    echo "$RESPONSE" >&2
+    exit 1
+fi
+
+if [[ "$RAW" -eq 1 ]]; then
+    echo "$CONTENT"
+else
+    # Extrai o conteúdo dentro do bloco cercado (``` ... ```) se houver
+    if grep -q '^```' <<<"$CONTENT"; then
+        echo "$CONTENT" | awk '/^```/{f=!f; next} f'
+    else
+        echo "$CONTENT"
+    fi
+fi

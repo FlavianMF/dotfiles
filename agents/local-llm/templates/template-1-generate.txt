@@ -1,0 +1,20 @@
+TASK: Create the file {PATH}.
+GOAL: {ONE_SENTENCE_GOAL}
+
+DOMAIN RULES:
+{DOMAIN_BLOCK}
+
+EXACT FACTS (use verbatim):
+- {FACT_1}
+- {FACT_2}
+
+REFERENCE FILE (same style, do not copy content):
+```{LANG}
+{REFERENCE_EXCERPT}
+```
+
+DONE WHEN:
+- [ ] {CHECK_1}
+- [ ] {CHECK_2}
+
+Output: one ```{LANG} block with the full file.

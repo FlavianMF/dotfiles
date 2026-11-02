@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sobe o llama-server no WSL2 como backend único dos agentes locais (opencode e Traycer).
-# Uso: llm-serve [main|ARQUIVO.gguf|USUARIO/REPO[:QUANT]] [args extras do llama-server]
+# Uso: llm-serve [main|coder7b|ARQUIVO.gguf|USUARIO/REPO[:QUANT]] [args extras do llama-server]
 # Porta e host: LLM_PORT (8080) e 127.0.0.1. Um modelo residente por vez (-np 1).
 set -euo pipefail
 
@@ -45,6 +45,11 @@ case "$spec" in
     model_args=(-hf "${LLM_MAIN_HF:-ggml-org/gpt-oss-20b-GGUF}")
     alias_name="${LLM_MAIN_ALIAS:-gpt-oss-20b}"
     ;;
+  coder7b)
+    # Perfil Qwen 2.5 Coder 7B Instruct: 100% offload na VRAM da RTX 5050 (~4,8 GB VRAM, ~46 tok/s)
+    model_args=(-hf "${LLM_CODER7B_HF:-Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:Q4_K_M}")
+    alias_name="${LLM_CODER7B_ALIAS:-qwen2.5-coder-7b}"
+    ;;
   *.gguf)
     [[ -f "$spec" ]] || { echo "Arquivo não existe: $spec" >&2; exit 1; }
     model_args=(-m "$spec")
@@ -55,7 +60,7 @@ case "$spec" in
     alias_name="${spec##*/}"
     ;;
   *)
-    echo "Perfil desconhecido: $spec. Use main, um arquivo .gguf ou USUARIO/REPO[:QUANT]." >&2
+    echo "Perfil desconhecido: $spec. Use main, coder7b, um arquivo .gguf ou USUARIO/REPO[:QUANT]." >&2
     exit 2
     ;;
 esac
