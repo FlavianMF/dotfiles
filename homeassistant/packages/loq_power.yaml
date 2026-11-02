@@ -1,0 +1,67 @@
+# Package Home Assistant: Gestão de Energia e Fallback WoL para Lenovo LOQ
+# Tópico MQTT retido: pc/loq/sleeping_until (gerado pelo pc-ctl schedule-sleep)
+
+mqtt:
+  sensor:
+    - name: "LOQ Sleeping Until"
+      unique_id: loq_sleeping_until
+      state_topic: "pc/loq/sleeping_until"
+      device_class: timestamp
+      icon: "mdi:clock-end"
+
+template:
+  - binary_sensor:
+      - name: "LOQ Online"
+        unique_id: loq_online
+        device_class: running
+        state: >-
+          {{ states('sensor.loq_windows_cargadacpu') not in ['unavailable', 'unknown'] }}
+
+automation:
+  - id: loq_wake_fallback_esp32_wol
+    alias: "LOQ: Wake Fallback 1 (ESP32 WoL +10m)"
+    description: "Se 10 minutos após o horário agendado de wake o PC ainda estiver offline, o ESP32 envia Magic Packet WoL."
+    mode: single
+    trigger:
+      - platform: template
+        value_template: >-
+          {% set target = states('sensor.loq_sleeping_until') %}
+          {% if target not in ['unknown', 'unavailable', 'none', ''] %}
+            {{ now() >= (as_datetime(target) + timedelta(minutes=10)) }}
+          {% else %}
+            False
+          {% endif %}
+    condition:
+      # O PC só deve ser acordado se o HASS.Agent estiver offline (sensor indisponível)
+      - condition: template
+        value_template: >-
+          {{ states('sensor.loq_windows_cargadacpu') in ['unavailable', 'unknown'] }}
+    action:
+      - service: button.press
+        target:
+          entity_id: button.wake_loq_pc
+
+  - id: loq_wake_fallback_notify_mobile
+    alias: "LOQ: Wake Fallback 2 (Notificação Celular +20m)"
+    description: "Se 20 minutos após o horário agendado de wake o PC permanecer offline, notifica o smartphone do usuário."
+    mode: single
+    trigger:
+      - platform: template
+        value_template: >-
+          {% set target = states('sensor.loq_sleeping_until') %}
+          {% if target not in ['unknown', 'unavailable', 'none', ''] %}
+            {{ now() >= (as_datetime(target) + timedelta(minutes=20)) }}
+          {% else %}
+            False
+          {% endif %}
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.loq_windows_cargadacpu') in ['unavailable', 'unknown'] }}
+    action:
+      - action: notify.send_message
+        target:
+          entity_id: notify.iphone_de_flavian
+        data:
+          title: "Alerta: Falha de Wake do Lenovo LOQ"
+          message: "O PC LOQ não respondeu após o wake agendado (+20 min). Verifique a conexão física e energia."

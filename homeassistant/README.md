@@ -185,3 +185,11 @@ make ha-mcp-config
     }
   }
   ```
+
+## Cadeia de Fallback Wake-on-LAN (Sprint 08)
+
+O Lenovo LOQ opera primariamente via agendamento RTC (`WakeToRun` no Windows Task Scheduler disparado via `pc-ctl schedule-sleep`). Como redundância:
+
+1. **RTC Wake Local**: Mecanismo primário (dispara 5 minutos antes do término da quota/espera).
+2. **ESP32 WoL (+10 min)**: Se 10 minutos após o wake previsto o PC ainda não responder no MQTT (`sensor.loq_windows_cargadacpu` indisponível / `binary_sensor.loq_online` off), a automação `loq_wake_fallback_esp32_wol` aciona o botão `button.wake_loq_pc` no firmware ESPHome (`homeassistant/esphome/pc-wol.yaml` via `target_mac_address`).
+3. **Notificação Mobile (+20 min)**: Se passados 20 minutos o dispositivo ainda estiver indisponível, a automação `loq_wake_fallback_notify_mobile` dispara um alerta push para o smartphone do usuário via `notify.send_message` direcionado a `notify.iphone_de_flavian`.
