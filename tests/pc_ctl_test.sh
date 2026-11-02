@@ -51,6 +51,7 @@ has "help lista sleep" "sleep" "$out"
 has "help lista lock" "lock" "$out"
 has "help lista app" "app <nome>" "$out"
 has "help lista status" "status" "$out"
+has "help lista wake-test wol" "wake-test wol" "$out"
 
 out_empty="$(bash "$PC_CTL" 2>&1)"
 rc_empty=$?
@@ -81,6 +82,20 @@ fi
 
 out_lock="$(bash "$PC_CTL" --dry-run lock 2>&1)"
 has "dry-run lock" "rundll32.exe user32.dll,LockWorkStation" "$out_lock"
+
+out_wake_test="$(bash "$PC_CTL" --dry-run wake-test wol 2>&1)"
+has "dry-run wake-test wol menciona WoL" "Wake-on-LAN" "$out_wake_test"
+has "dry-run wake-test wol menciona S3" "S3" "$out_wake_test"
+
+out_wake_test_noargs="$(bash "$PC_CTL" wake-test 2>&1)"
+rc_wake_test_noargs=$?
+expect "wake-test sem alvo sai com 1" "$rc_wake_test_noargs" "1"
+has "wake-test sem alvo avisa erro" "requer argumento 'wol'" "$out_wake_test_noargs"
+
+out_wake_test_invalid="$(bash "$PC_CTL" wake-test invalido 2>&1)"
+rc_wake_test_invalid=$?
+expect "wake-test com alvo invalido sai com 1" "$rc_wake_test_invalid" "1"
+has "wake-test com alvo invalido avisa erro" "Alvo desconhecido" "$out_wake_test_invalid"
 
 # 4. Testes de Launcher de Apps
 out_app_obsidian="$(bash "$PC_CTL" --dry-run app obsidian 2>&1)"
