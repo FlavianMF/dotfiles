@@ -232,6 +232,9 @@ Para expor o dashboard com autenticação segura e acesso pelo celular via Tails
 4. Confira que `curl -s -o /dev/null -w '%{http_code}' https://loq-wsl-flv.tail48e6f7.ts.net/api/projects` imprime `401`. Se imprimir outro código, desligue o serve com `tailscale serve reset` e reporte.
 5. No celular, abra `https://loq-wsl-flv.tail48e6f7.ts.net/login` e cole o token.
 
+> [!CAUTION]
+> **Segurança:** Nunca use `tailscale funnel`, pois ele expõe o serviço para a internet pública (use apenas `tailscale serve`). O token gerado por `make sb-web-token` é exibido apenas uma vez no terminal e protegido com permissão `0600` em `secrets/sb-web.env`; evite salvá-lo em histórico ou comandos expostos.
+
 ## 🎮 Controle Remoto & Home Assistant
 
 O repositório inclui automação para controle remoto da máquina física e do Windows via Home Assistant (app mobile no celular) e utilitário de linha de comando no WSL2:

@@ -9,6 +9,7 @@ EnvironmentFile=%h/dotfiles/secrets/sb-web.env
 ExecStart=%h/.local/bin/sb review web --exposed --host 127.0.0.1 --port 8765 --no-browser --allow-host loq-wsl-flv.tail48e6f7.ts.net
 Restart=on-failure
 RestartSec=5
+RestartPreventExitStatus=2
 
 [Install]
 WantedBy=default.target

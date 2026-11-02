@@ -189,11 +189,14 @@ sb-projects-timer: sb-install
 	systemctl --user enable --now sb-projects-scan.timer sb-projects-scan-tests.timer
 	@echo "✓ Timers sb-projects-scan instalados e ativados"
 
+SECRETS_DIR ?= $(CURDIR)/secrets
+
 sb-web-token:
-	@mkdir -p $(CURDIR)/secrets
-	@(umask 077 && python3 -c 'import secrets; tok = secrets.token_urlsafe(32); open("$(CURDIR)/secrets/sb-web.env", "w").write(f"SB_WEB_TOKEN={tok}\n"); print(f"Token gerado em secrets/sb-web.env:\n{tok}")')
+	@mkdir -p -m 700 $(SECRETS_DIR)
+	@python3 -c 'import os, secrets, sys; p = os.path.join(sys.argv[1], "sb-web.env"); tok = secrets.token_urlsafe(32); fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600); os.fchmod(fd, 0o600); os.write(fd, f"SB_WEB_TOKEN={tok}\n".encode("utf-8")); os.close(fd); print(f"Token gerado em {p}:\n{tok}")' $(SECRETS_DIR)
 
 sb-web-install: sb-install
+	@if [ ! -f $(SECRETS_DIR)/sb-web.env ]; then echo "Erro: $(SECRETS_DIR)/sb-web.env não encontrado. Rode 'make sb-web-token' primeiro." >&2; exit 1; fi
 	@mkdir -p $(HOME)/.config/systemd/user
 	ln -sfn $(CURDIR)/systemd/user/sb-web.service $(HOME)/.config/systemd/user/sb-web.service
 	systemctl --user daemon-reload
