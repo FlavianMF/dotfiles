@@ -5,20 +5,22 @@ to include Gemini Flash, Gemini Pro, and Gemini 4 Argon quota groups extracted
 from `agy -p "/usage" --output-format json`.
 """
 import os
+import re
 import sys
 import shutil
 import subprocess
 
 TARGET = os.path.expanduser("~/.traycer/host/install/host-runtime/host-main.cjs")
 
-PATCH_MARKER = "/* __TRAYCER_ANTIGRAVITY_QUOTA_ENRICHER__ */"
+PATCH_MARKER = "/* __TRAYCER_ANTIGRAVITY_QUOTA_ENRICHER_V2__ */"
 
-ENRICHER_CODE = """/* __TRAYCER_ANTIGRAVITY_QUOTA_ENRICHER__ */
+ENRICHER_CODE = """/* __TRAYCER_ANTIGRAVITY_QUOTA_ENRICHER_V2__ */
 let _agyQCache = { d: null, t: 0, p: null };
-async function _enrichAgyRateLimits(restBody, planName) {
+const _AGY_TTL_MS = 600000;
+async function _enrichAgyBody(restBody) {
   let agyGroups = null;
   let now = Date.now();
-  if (_agyQCache.d && now - _agyQCache.t < 60000) {
+  if (_agyQCache.d && now - _agyQCache.t < _AGY_TTL_MS) {
     agyGroups = _agyQCache.d;
   } else if (_agyQCache.p) {
     agyGroups = await _agyQCache.p;
@@ -61,11 +63,10 @@ async function _enrichAgyRateLimits(restBody, planName) {
     try {
       let r = await _agyQCache.p;
       _agyQCache.p = null;
-      if (r) {
-        _agyQCache.d = r;
-        _agyQCache.t = Date.now();
-        agyGroups = r;
-      }
+      // Cacheia também a falha: sem isso cada consulta sobe um language server do agy.
+      if (r) _agyQCache.d = r;
+      _agyQCache.t = Date.now();
+      agyGroups = _agyQCache.d;
     } catch (_) {
       _agyQCache.p = null;
     }
@@ -89,16 +90,41 @@ async function _enrichAgyRateLimits(restBody, planName) {
       }
     }
   }
-  if (merged.length > 0) {
-    return zzf({ groups: merged }, planName);
-  }
-  return restBody ? zzf(restBody, planName) : null;
+  return merged.length > 0 ? { groups: merged } : restBody;
 }
 """
 
-TARGET_PATTERN = 'async function rll(L2,M5,G9,B6,F5){let u10=L2.project??M5;if(u10===null)return{kind:"done",rateLimits:to("antigravity","rate_limits_not_available")};let Y9=await oll(L2.endpoint+"/v1internal:retrieveUserQuotaSummary",G9,B6,{project:u10},F5);'
+# Os nomes minificados mudam a cada release do Traycer, então o ponto de inserção
+# é achado por regex. O caso "ok" de retrieveUserQuotaSummary converte o corpo da
+# resposta (`PARSE(body, planName)`); o enricher mescla os grupos do agy no corpo.
+TARGET_RE = re.compile(
+    r'(async function [\w$]+\([\w$]+,[\w$]+,[\w$]+,[\w$]+,[\w$]+\)\{.{0,300}?'
+    r'retrieveUserQuotaSummary.{0,600}?case"ok":return\{kind:"done",rateLimits:await [\w$]+\([\w$]+\()([\w$]+)\.body,',
+    re.S,
+)
 
-REPLACEMENT = ENRICHER_CODE + '\nasync function rll(L2,M5,G9,B6,F5){let u10=L2.project??M5;if(u10===null)return{kind:"done",rateLimits:to("antigravity","rate_limits_not_available")};let Y9=await oll(L2.endpoint+"/v1internal:retrieveUserQuotaSummary",G9,B6,{project:u10},F5);let _qRes=await _enrichAgyRateLimits(Y9.kind==="ok"?Y9.body:null,L2.planName);if(_qRes&&_qRes.available)return{kind:"done",rateLimits:_qRes};'
+
+def _write_validated(target_path: str, content: str) -> bool:
+    backup_path = target_path + ".bak"
+    if not os.path.exists(backup_path):
+        shutil.copy2(target_path, backup_path)
+        print(f"Created backup at {backup_path}")
+
+    tmp_path = target_path + ".tmp.cjs"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Verify node syntax
+    res = subprocess.run(["node", "-c", tmp_path], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"Syntax validation failed on patched file:\n{res.stderr}", file=sys.stderr)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        return False
+
+    os.replace(tmp_path, target_path)
+    print(f"Successfully patched {target_path}")
+    return True
 
 
 def patch_file(target_path: str = TARGET) -> bool:
@@ -113,32 +139,21 @@ def patch_file(target_path: str = TARGET) -> bool:
         print("Target file is already patched with antigravity quota enricher.")
         return True
 
-    if TARGET_PATTERN not in content:
-        print("Could not locate rll insertion point in host-main.cjs", file=sys.stderr)
+    m = TARGET_RE.search(content)
+    if m is None:
+        print("Could not locate retrieveUserQuotaSummary call site in host-main.cjs", file=sys.stderr)
         return False
 
-    backup_path = target_path + ".bak"
-    if not os.path.exists(backup_path):
-        shutil.copy2(target_path, backup_path)
-        print(f"Created backup at {backup_path}")
-
-    patched_content = content.replace(TARGET_PATTERN, REPLACEMENT, 1)
-
-    tmp_path = target_path + ".tmp.cjs"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        f.write(patched_content)
-
-    # Verify node syntax
-    res = subprocess.run(["node", "-c", tmp_path], capture_output=True, text=True)
-    if res.returncode != 0:
-        print(f"Syntax validation failed on patched file:\n{res.stderr}", file=sys.stderr)
-        if os.path.exists(tmp_path):
-            os.remove(tmp_path)
-        return False
-
-    os.replace(tmp_path, target_path)
-    print(f"Successfully patched {target_path}")
-    return True
+    var = m.group(2)
+    patched_content = (
+        content[: m.start()]
+        + ENRICHER_CODE
+        + "\n"
+        + content[m.start() : m.end(1)]
+        + f"await _enrichAgyBody({var}.body),"
+        + content[m.end() :]
+    )
+    return _write_validated(target_path, patched_content)
 
 
 if __name__ == "__main__":
