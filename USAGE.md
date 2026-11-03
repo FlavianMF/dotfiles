@@ -235,6 +235,20 @@ Para expor o dashboard com autenticação segura e acesso pelo celular via Tails
 > [!CAUTION]
 > **Segurança:** Nunca use `tailscale funnel`, pois ele expõe o serviço para a internet pública (use apenas `tailscale serve`). O token gerado por `make sb-web-token` é exibido apenas uma vez no terminal e protegido com permissão `0600` em `secrets/sb-web.env`; evite salvá-lo em histórico ou comandos expostos.
 
+### Configuração da Task "Secretário" no Traycer
+
+Para ativar o Secretário de Projetos em segundo plano:
+
+1. No Traycer, crie uma Task intitulada `Secretário de Projetos` vinculando os repositórios `dotfiles`, `obsidian_vault` e `outlet_promo`.
+2. Configure o prompt do Secretário com o conteúdo de `00_META/projects/secretario.md`.
+3. Anote o `taskId` e o `agentId` da Task do Secretário e registre-os no manifesto do vault (`00_META/projects/manifest.yaml`):
+   ```yaml
+   secretary:
+     traycer_task: "<taskId>"
+     agent_id: "<agentId>"
+   ```
+4. O Secretário acordará a cada 20-30 minutos, sincronizará o estado com `sb projects activity set`, verificará quotas e despachará implementadores autorizados via `sb projects gate`.
+
 ## 🎮 Controle Remoto & Home Assistant
 
 O repositório inclui automação para controle remoto da máquina física e do Windows via Home Assistant (app mobile no celular) e utilitário de linha de comando no WSL2:
