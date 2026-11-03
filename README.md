@@ -64,7 +64,7 @@ One set of instructions, skills and MCPs for Claude Code, Codex, OpenCode and An
 | Codex config | `codex/config.base.toml` (+ `codex/yolo.config.toml` profile) | rendered into `~/.codex/config.toml`, keeping machine-only keys such as `[projects.*]`. `make codex-drift` shows differences |
 | OpenCode config | `opencode/opencode.json` | symlinked (OpenCode doesn't rewrite it). `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` in `.zshrc` avoids loading skills twice |
 
-Components `codex`, `opencode` and `antigravity` are **off by default** (`./install.sh --with=codex,opencode,antigravity`); `codex` and `opencode` install from npm into `~/.local`, `antigravity` downloads a native binary into `~/.local/bin`, and all are skipped if already installed. Logins are manual: the install prints a checklist at the end.
+Components `codex`, `opencode`, `antigravity` and `harness2` are **off by default** (`./install.sh --with=codex,opencode,antigravity,harness2`); `codex` and `opencode` install from npm into `~/.local`, `antigravity` downloads a native binary into `~/.local/bin`, and all are skipped if already installed. Logins are manual: the install prints a checklist at the end.
 
 Claude Code extras (all in `claude/`): `statusline.sh` (model, cwd, git branch/dirty, % context left, caveman badge), `hooks/` (compact suggestion after ~50 tool calls, opt-in format/typecheck on Stop, second-brain hints/reminder behind `SECOND_BRAIN_HOOKS=1`) and `contexts/` (session modes via the `claude-dev`, `claude-review`, `claude-research` aliases).
 
@@ -72,7 +72,13 @@ Claude Code extras (all in `claude/`): `statusline.sh` (model, cwd, git branch/d
 
 **Deny lists** (same intent in the 4 harnesses): secrets reads (`~/.ssh`, `~/.aws`, `.env*`, `secrets/`), `curl | bash`, `ssh`/`scp`/`nc`, `rm -rf` (and variants), `sudo`, `chmod 777`. Claude: `permissions.deny`; OpenCode: `permission.bash`/`read`; Codex: sandbox + `codex/dotfiles.rules` (execpolicy, linked as `~/.codex/rules/dotfiles.rules`); Antigravity: `permissions.deny`/`ask` in `antigravity/settings.base.json`, merged into `~/.gemini/antigravity-cli/settings.json`.
 
-Useful targets: `make harness`, `make harness-dry-run`, `make plugins-freeze`, `make plugins-update`, `make codex-drift`, `make antigravity-config`, `make audit` (AgentShield, pinned, via npx), `make lint`, and the ECC ones below (`make ecc-on|ecc-off|ecc-status DIR=...`, `make ecc-rules`).
+Useful targets: `make harness`, `make harness-dry-run`, `make harness2-install`, `make harness2-update`, `make harness2-check`, `make plugins-freeze`, `make plugins-update`, `make codex-drift`, `make antigravity-config`, `make audit` (AgentShield, pinned, via npx), `make lint`, and the ECC ones below (`make ecc-on|ecc-off|ecc-status DIR=...`, `make ecc-rules`).
+
+### Harness² (Google Research)
+
+[Harness²](https://github.com/google-research/harness2) (Apache 2.0) is a recursive agent harnessing framework in an open world (component `harness2`, off by default: `./install.sh --with=harness2` or `make harness2-install`).
+It is cloned into `~/projetos_harness/harness2`, manages its virtualenv via `uv`, and links executables (`harness2`, `harness2-setup`, `harness2-check`, `harness2-demo`, `harness2-judge`, `harness2-report`, `harness2-bridge`) to `~/.local/bin`.
+Configure credentials via `secrets/harness2.env` (template in `secrets/harness2.env.example`) and inspect with `make harness2-check`. See `harness2/README.md`.
 
 ### ECC (affaan-m/ECC)
 

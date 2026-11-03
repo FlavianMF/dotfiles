@@ -145,6 +145,12 @@ docker run -it dev-env
   `-a claude-code`).
 - **Codex**: edite `codex/config.base.toml`, rode `make harness` e confira `make codex-drift`.
   Perfil sem sandbox: `codex --profile yolo`.
+- **Harness²** (componente `harness2`, desligado): `./install.sh --with=harness2` ou `make harness2-install`.
+  Clona o framework de recursive agent harnessing (Google Research) em `~/projetos_harness/harness2`,
+  gerencia o venv Python 3.12+ com `uv` e expõe executáveis em `~/.local/bin` (`harness2`, `harness2-setup`,
+  `harness2-check`, `harness2-demo`, `harness2-judge`, `harness2-report`, `harness2-bridge`). Configure
+  `secrets/harness2.env` (a partir de `secrets/harness2.env.example`) e teste com `make harness2-check`.
+  Aliases de terminal no zsh: `harness2-cd` e `harness2-venv`. Documentação completa em `harness2/README.md`.
 - **Antigravity CLI** (`agy`): edite `antigravity/mcp_config.base.json` ou
   `antigravity/settings.base.json` (ou `antigravity/hooks.base.json`) e rode `make antigravity-config` (merge: o que o `agy`
   gravou sozinho fica). Skills vêm de `~/.agents/skills` via `skills.json` (renderizado com caminho absoluto). Os hooks do second brain

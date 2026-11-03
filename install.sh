@@ -147,6 +147,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [yazi]="yazi (terminal file manager)"
     [usbip]="usbip client (attach USB devices shared by usbipd-win from Windows)"
     [tailscale]="Tailscale VPN Mesh (WireGuard client para acesso remoto seguro)"
+    [harness2]="Harness² framework (recursive agent harnessing, CLI em ~/projetos_harness/harness2)"
 )
 
 # Packages for each optional component
@@ -183,6 +184,7 @@ declare -A SELECTED_COMPONENTS=(
     [yazi]=0
     [usbip]=0
     [tailscale]=0
+    [harness2]=0
 )
 
 # System-wide vs current-user-only install scope for non-apt tools (Neovim, lazygit, fd)
@@ -203,7 +205,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer harness2 ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip tailscale)
     local current=0
     local done=0
     local old_stty
@@ -881,6 +883,14 @@ if [[ ${SELECTED_COMPONENTS[tailscale]} -eq 1 ]]; then
     bash "$REPO_DIR/tailscale/install.sh" "${sub_dry[@]}" || log_warn "tailscale install failed"
 fi
 
+if [[ ${SELECTED_COMPONENTS[harness2]} -eq 1 ]]; then
+    log_info "Installing Harness² framework (harness2/install.sh)..."
+    as_user bash "$REPO_DIR/harness2/install.sh" "${sub_dry[@]}" || log_warn "harness2 install failed"
+    HARNESS_CHECKLIST+=(
+        "Harness²: configure ~/dotfiles/secrets/harness2.env (ver .env.example) e valide com 'harness2-check'"
+    )
+fi
+
 CODEX_ACTIVE=0
 if [[ ${SELECTED_COMPONENTS[codex]} -eq 1 ]] || has_native_cmd codex || [[ -d "$HOME/.codex" ]]; then
     CODEX_ACTIVE=1
@@ -1240,6 +1250,7 @@ echo "✓ rea MCP registered for Claude Code (user scope)"
 [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
 [[ $OPENCODE_ACTIVE -eq 1 ]] && echo "✓ OpenCode configured (~/.config/opencode/opencode.json + AGENTS.md linked)"
 [[ $ANTIGRAVITY_ACTIVE -eq 1 ]] && echo "✓ Antigravity CLI configured (~/.gemini/config AGENTS.md linked; skills.json, MCPs and permissions rendered)"
+[[ ${SELECTED_COMPONENTS[harness2]} -eq 1 ]] && echo "✓ Harness² framework installed (~/projetos_harness/harness2)"
 if [[ $HARNESS_ONLY -eq 0 ]]; then
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"

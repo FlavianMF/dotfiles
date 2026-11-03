@@ -3,6 +3,12 @@ node_modules/
 *.lock
 *.log
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+
 # Backup files
 *.backup
 *.bak
@@ -58,14 +64,4 @@ homeassistant/config/
 
 # Temporary files
 tmp/
-temp/
-*.tmp
-.cache/
-
-# Executables and installers
-exes/
-*.exe
-*.zip
-
-# Python
-__pycache__/
+skills/

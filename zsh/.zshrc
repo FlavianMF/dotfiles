@@ -173,6 +173,9 @@ alias claude-research='claude --append-system-prompt-file "$HOME/dotfiles/claude
 # Helpers de LLM local (RTX 5050 / llama.cpp); ver zsh/llm-blackwell.zsh
 [[ -r "$HOME/dotfiles/zsh/llm-blackwell.zsh" ]] && source "$HOME/dotfiles/zsh/llm-blackwell.zsh"
 
+# Harness² (Recursive Agent Harnessing); ver zsh/harness2.zsh
+[[ -r "$HOME/dotfiles/zsh/harness2.zsh" ]] && source "$HOME/dotfiles/zsh/harness2.zsh"
+
 # Aliases
 alias vim='nvim'
 alias vi='nvim'

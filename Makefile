@@ -128,9 +128,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
-	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; zsh -n zsh/harness2.zsh || exit 1; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -161,6 +161,16 @@ antigravity-install:
 
 antigravity-config:
 	./antigravity/render_config.sh
+
+harness2-install:
+	./harness2/install.sh
+
+harness2-update:
+	./harness2/install.sh --update
+
+BENCH ?= jb
+harness2-check:
+	@if command -v harness2-check >/dev/null 2>&1; then harness2-check --bench $(BENCH); elif [[ -x "$$HOME/projetos_harness/harness2/.venv/bin/harness2-check" ]]; then "$$HOME/projetos_harness/harness2/.venv/bin/harness2-check" --bench $(BENCH); else echo "harness2-check não encontrado. Execute 'make harness2-install' primeiro."; exit 1; fi
 
 test:
 	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" </dev/null || exit 1; done
