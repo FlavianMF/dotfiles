@@ -44,3 +44,28 @@ def test_unreadable_prompt_on_a_retry_also_ends_in_awaiting_upgrade(env):
         prompt.chmod(0o644)
     assert env.states(run_id) == {"a": "awaiting_upgrade"}
     assert env.history(run_id, "a") == ["running", "failed", "running", "failed", "awaiting_upgrade"]
+
+
+# 2. abort_run não pode depender do YAML --------------------------------------------------------
+
+
+@pytest.mark.parametrize("damage", ["remove", "change_nodes", "invalid"])
+def test_abort_run_works_when_the_flow_file_is_gone_or_changed(env, damage):
+    env.flow(env.node("a"), env.node("b", ["out/a.md"]))
+    env.fake.queue({"active_polls": 100})
+    run_id = env.start()
+    env.runner.step(run_id)
+    if damage == "remove":
+        env.flow_path.unlink()
+    elif damage == "change_nodes":
+        env.flow(env.node("zzz"))
+    else:
+        env.flow_path.write_text("nodes: [")
+    env.runner.abort_run(run_id)
+    status = env.runner.status(run_id)
+    assert status["status"] == "aborted"
+    assert env.states(run_id) == {"a": "aborted", "b": "aborted"}
+    (agent,) = env.fake.agents.values()
+    assert agent["archived"] and len(env.fake.commands("stop")) == 1
+    env.flow(env.node("a"))
+    env.start()  # o repo ficou livre

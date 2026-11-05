@@ -264,14 +264,13 @@ class Runner:
         """Aborta o run: para e arquiva os filhos, aborta os nós abertos e libera o repo."""
         with self.store.lock(run_id):
             state = self.store.load(run_id)
-            flow = self._flow(state)
             if state["status"] != "active":
                 return
-            for node in flow.nodes:
-                ns = state["nodes"][node.id]
+            # Só o estado salvo: o YAML pode ter mudado ou sumido, e abortar tem de funcionar assim mesmo.
+            for node_id, ns in state["nodes"].items():
                 if ns["state"] not in TERMINAL_NODE_STATES:
-                    self._release(state, node, ns, stop=True)
-                    self._to(state, node, "aborted", "run aborted by a human")
+                    self._release(state, node_id, ns, stop=True)
+                    self._to(state, node_id, "aborted", "run aborted by a human")
             state["status"] = "aborted"
             add_event(state, None, "run aborted", self._now())
             self._save(state)
@@ -489,8 +488,9 @@ class Runner:
             self._to(state, node, "awaiting_upgrade", f"retries exhausted: {reason}")
         return Step.PROGRESS
 
-    def _release(self, state: dict[str, Any], node: Node, ns: dict[str, Any], *, stop: bool = False) -> None:
+    def _release(self, state: dict[str, Any], node: Node | str, ns: dict[str, Any], *, stop: bool = False) -> None:
         """Para (opcional) e arquiva o filho do nó. Falha do CLI aqui só vira evento."""
+        node_id = node if isinstance(node, str) else node.id
         child_id = ns["child_id"]
         if not child_id:
             return
@@ -500,7 +500,7 @@ class Runner:
             try:
                 action(child_id)
             except CliError as exc:
-                add_event(state, node.id, f"could not {label} child {child_id}: {exc}", self._now())
+                add_event(state, node_id, f"could not {label} child {child_id}: {exc}", self._now())
         ns.update(child_id=None, sent=False, snapshot=None, pending_message=None, replies_before=0)
         ns["last_child_id"] = child_id
 
@@ -574,11 +574,12 @@ class Runner:
         now = self._signature(state, node)
         return all(now[p] is not None and now[p] != before.get(p) for p in node.outputs)
 
-    def _to(self, state: dict[str, Any], node: Node, to: str, reason: str) -> None:
-        ns = state["nodes"][node.id]
+    def _to(self, state: dict[str, Any], node: Node | str, to: str, reason: str) -> None:
+        node_id = node if isinstance(node, str) else node.id
+        ns = state["nodes"][node_id]
         frm = ns["state"]
         transition(ns, to, reason, self._now())
-        add_event(state, node.id, f"{frm} -> {to}: {reason}", self._now())
+        add_event(state, node_id, f"{frm} -> {to}: {reason}", self._now())
 
     def _save(self, state: dict[str, Any]) -> None:
         state["updated_at"] = iso(self._now())
