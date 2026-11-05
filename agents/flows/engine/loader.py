@@ -34,6 +34,7 @@ from engine.schema import (
     FlowError,
     Node,
     OnFail,
+    prompt_problem,
 )
 from engine.validate import validate_flow
 from engine.when import WhenError, parse_when
@@ -194,10 +195,14 @@ def _parse_node(raw: Any, index: int, slug: str, base: str, errors: list[str]) -
         if not _is_str(raw["prompt"]):
             c.add("prompt", f"must be a non-empty string, got {_fmt(raw['prompt'])}")
         else:
-            # `..` vale: o YAML fica em flows/ e os prompts em ../prompts/.
+            # `..` vale: o YAML fica em flows/ e os prompts em ../prompts/. Mas só dentro das raízes de prompts.
             rel = _safe_relpath(c, "prompt", raw["prompt"], raw["prompt"], allow_parent=True)
             if rel is not None:
                 prompt = os.path.normpath(os.path.join(base, rel))
+                problem = prompt_problem(prompt, base)
+                if problem:
+                    c.add("prompt", f"{_fmt(raw['prompt'])} {problem}")
+                    prompt = None
 
     mode = raw.get("mode", OPTIONAL_NODE_FIELDS["mode"])
     _expect_enum(c, "mode", mode, MODES)

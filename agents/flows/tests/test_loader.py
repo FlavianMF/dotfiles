@@ -351,3 +351,45 @@ def test_invalid_after(write_flow, flow_data, bad):
     flow_data["nodes"][2]["after"] = bad
     errs = errors_of(write_flow, flow_data)
     assert any("node 'c'" in e and "field 'after'" in e for e in errs), errs
+
+
+# --- achado da revisão a frio: `prompt` com `..` sem raiz ------------------------------------------
+
+
+@pytest.mark.parametrize("bad", ["../../x.md", "../../../etc/hostname", "prompts/../../x.md", "x.md", "../other/a.md"])
+def test_prompt_outside_the_prompts_roots_is_rejected(write_flow, flow_data, bad):
+    flow_data["nodes"][1]["prompt"] = bad
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'b'" in e and "field 'prompt'" in e and "prompts" in e for e in errs), errs
+
+
+@pytest.mark.parametrize("good", ["prompts/a.md", "../prompts/a.md", "prompts/sub/a.md", "./prompts//a.md"])
+def test_prompt_inside_the_prompts_roots_is_accepted(write_flow, flow_data, tmp_path, good):
+    flow_data["nodes"][0]["prompt"] = good
+    target = (tmp_path / good).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.touch()
+    assert load(write_flow, flow_data).nodes[0].prompt.endswith("a.md")
+
+
+def test_prompt_symlink_pointing_outside_the_roots_is_rejected(write_flow, flow_data, tmp_path):
+    outside = tmp_path / "secret.txt"
+    outside.write_text("segredo\n")
+    flow_data["nodes"][0]["prompt"] = "prompts/evil.md"
+    write_flow(flow_data)  # cria o arquivo vazio
+    link = tmp_path / "prompts" / "evil.md"
+    link.unlink()
+    link.symlink_to(outside)
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'a'" in e and "field 'prompt'" in e and "outside" in e for e in errs), errs
+
+
+def test_prompt_symlink_inside_the_roots_is_accepted(write_flow, flow_data, tmp_path):
+    real = tmp_path / "prompts" / "real.md"
+    flow_data["nodes"][0]["prompt"] = "prompts/alias.md"
+    write_flow(flow_data)
+    real.write_text("x\n")
+    alias = tmp_path / "prompts" / "alias.md"
+    alias.unlink()
+    alias.symlink_to(real)
+    assert load(write_flow, flow_data).nodes[0].prompt.endswith("alias.md")
