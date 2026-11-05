@@ -65,7 +65,7 @@ gh pr list --head <branch> --json number
 ```
 
 - O corpo termina com a lista de decisões e um checklist manual para quem revisa. Não inclua atribuição de IA.
-- Se o PR tiver mais de 20 arquivos, avise sobre o tamanho e diga se dá para dividir.
+- Meça o tamanho do PR contra a base. Rode `git rev-list --count origin/<base>..HEAD` e `git diff --shortstat origin/<base>..HEAD`. Calcule as linhas como adições mais remoções.
 
 ## 4. PARADA HUMANA
 
@@ -75,7 +75,10 @@ Mostre ao usuário, na resposta final desta fase:
 - o título proposto;
 - o corpo completo;
 - se será `--draft`;
-- a lista de commits.
+- a lista de commits;
+- o tamanho contra a base: número de commits, número de arquivos e linhas (`+A -R`).
+
+Se o diff passar de 150 linhas ou de 20 commits, avise no topo da resposta, antes do título. Cite os números e pergunte se o usuário quer seguir, dividir o PR ou trocar a base. Suspeite da base errada quando a branch nasceu de outra branch que nunca subiu para o remoto.
 
 Depois escreva: "Aguardando aprovação. Responda 'aprovado' para eu fazer o push e abrir o PR."
 
