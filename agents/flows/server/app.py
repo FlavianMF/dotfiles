@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import logging
+import os
 import re
 import secrets
 import threading
@@ -176,31 +177,58 @@ def create_app(
     port: int = DEFAULT_PORT,
     token: str | None = None,
     spawn: Callable[[Callable[[], None]], None] = _thread_spawn,
+    resume: bool = False,
 ) -> FastAPI:
     token = token or secrets.token_urlsafe(32)
     allowed_hosts = frozenset({f"{HOST}:{port}", f"localhost:{port}"})
     page = PAGE.read_text(encoding="utf-8")
     view = RunView()
     driving: set[str] = set()
+    again: set[str] = set()  # kicks que chegaram com a thread do run ainda viva
     guard = threading.Lock()
 
     def kick(run_id: str) -> None:
-        """Põe o motor para andar em segundo plano, no máximo uma execução por run."""
+        """Põe o motor para andar em segundo plano, no máximo uma thread por run.
+
+        Se a thread do run ainda existe, ela pode já ter decidido parar (`BLOCKED`) antes da mudança
+        que motivou este `kick`. Por isso o id vai para `again` e a thread repete o `drive`."""
         with guard:
             if run_id in driving:
+                again.add(run_id)
                 return
             driving.add(run_id)
 
         def work() -> None:
             try:
-                runner.drive(run_id)
-            except Exception as exc:  # o estado do run guarda a causa; o log só diz o tipo
-                log.error("drive of run %s stopped: %s", run_id, type(exc).__name__)
-            finally:
+                while True:
+                    runner.drive(run_id)
+                    with guard:
+                        if run_id not in again:
+                            driving.discard(run_id)
+                            return
+                        again.discard(run_id)
+            except BaseException as exc:  # o estado do run guarda a causa; o log só diz o tipo
                 with guard:
                     driving.discard(run_id)
+                    again.discard(run_id)
+                if not isinstance(exc, Exception):
+                    raise
+                log.error("drive of run %s stopped: %s", run_id, type(exc).__name__)
 
         spawn(work)
+
+    def resume_active_runs() -> None:
+        """Depois de um reinício, religa os runs ativos deste repo e deste fluxo (o motor rechecha os filhos)."""
+        try:
+            runs = runner.store.list_runs()
+        except Exception as exc:
+            log.error("cannot list runs to resume: %s", type(exc).__name__)
+            return
+        mine = (os.path.realpath(repo), os.path.realpath(flow_path))
+        for state in runs:
+            ours = (os.path.realpath(str(state.get("repo", ""))), os.path.realpath(str(state.get("flow_file", ""))))
+            if state.get("status") == "active" and ours == mine:
+                kick(state["run_id"])
 
     app = FastAPI(title="flows", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -232,7 +260,7 @@ def create_app(
 
     @app.get("/runs/{run_id}")
     def get_run(run_id: str = PathParam(pattern=RUN_ID_PATTERN)) -> dict[str, Any]:
-        return view.build(_engine(runner.status, run_id))
+        return _engine(view.build, _engine(runner.status, run_id))
 
     @app.post("/runs/{run_id}/gates/{node}/approve")
     def approve(
@@ -240,14 +268,16 @@ def create_app(
     ) -> dict[str, Any]:
         _engine(runner.approve_gate, run_id, node)
         kick(run_id)
-        return view.build(_engine(runner.status, run_id))
+        return _engine(view.build, _engine(runner.status, run_id))
 
     @app.post("/runs/{run_id}/upgrade")
     def upgrade(body: UpgradeBody, run_id: str = PathParam(pattern=RUN_ID_PATTERN)) -> dict[str, Any]:
         _engine(runner.choose_upgrade, run_id, body.node, model=body.model, effort=body.effort)
         kick(run_id)
-        return view.build(_engine(runner.status, run_id))
+        return _engine(view.build, _engine(runner.status, run_id))
 
+    if resume:
+        resume_active_runs()
     return app
 
 
@@ -263,7 +293,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     runner = Runner(adapter, state_dir=Path(args.state_dir).expanduser())
-    app = create_app(runner, flow_path=args.flow, repo=Path(args.repo).resolve(), port=args.port)
+    app = create_app(runner, flow_path=args.flow, repo=Path(args.repo).resolve(), port=args.port, resume=True)
     print(f"flows: http://{HOST}:{args.port}/")
     uvicorn.run(app, host=HOST, port=args.port, log_level="info")
 

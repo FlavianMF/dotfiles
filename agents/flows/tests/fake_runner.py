@@ -14,9 +14,21 @@ from engine.runner import RunError
 NOW = 1_000_000.0
 
 
+class _Store:
+    """Só o `list_runs` do `RunStore`: o servidor o usa para religar runs ativos na partida."""
+
+    def __init__(self, runner):
+        self._runner = runner
+
+    def list_runs(self):
+        return [copy.deepcopy(state) for state in self._runner.runs.values()]
+
+
 class FakeRunner:
     def __init__(self):
         self.runs = {}
+        self.store = _Store(self)
+        self.after_drive = None  # chamado uma vez ao fim do próximo `drive`: simula um POST no meio do drive
         self.driven = []  # run_id de cada chamada a `drive`
         self.raise_on = {}  # método -> exceção levantada na próxima chamada
         self._ids = itertools.count(1)
@@ -52,6 +64,9 @@ class FakeRunner:
             if ns["state"] == "pending":
                 transition(ns, "awaiting_gate", "waiting for a human", NOW)
                 break
+        callback, self.after_drive = self.after_drive, None
+        if callback is not None:
+            callback()
 
     def status(self, run_id):
         self._maybe_raise("status")

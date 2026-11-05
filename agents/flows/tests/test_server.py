@@ -135,6 +135,7 @@ def test_upgrade_requires_awaiting_upgrade(client, auth, runner):
         {"node": "c", "model": "opus; rm -rf /"},
         {"node": "../c", "model": "opus"},
         {"node": "c", "model": "opus", "extra": 1},
+        {"node": "c", "model": "opus\n"},  # `$` aceitaria a quebra de linha final
     ],
 )
 def test_upgrade_rejects_bad_body(client, auth, runner, body):
@@ -223,7 +224,7 @@ def test_unknown_run_and_invalid_ids(client, auth):
 
 
 def test_start_rejects_bad_slug_and_extra_fields(client, auth, runner):
-    for body in ({}, {"slug": ""}, {"slug": "a b"}, {"slug": "../x"}, {"slug": "x" * 200}, {"slug": "x", "repo": "/etc"}):
+    for body in ({}, {"slug": ""}, {"slug": "a b"}, {"slug": "../x"}, {"slug": "x" * 200}, {"slug": "x", "repo": "/etc"}, {"slug": "feat\n"}):
         assert client.post("/runs", json=body, headers=auth).status_code == 422, body
     assert runner.runs == {}
 
@@ -289,6 +290,117 @@ def test_drive_is_not_started_twice_for_the_same_run(runner, repo, flow_data, wr
     assert len(pending) == 1
 
 
+def test_approve_during_a_drive_is_not_lost(runner, repo, flow_data, write_flow):
+    """O `drive` decidiu parar (BLOCKED) e o approve chega antes de a thread sair: o motor roda de novo."""
+    pending = []
+    app = create_app(runner, flow_path=write_flow(flow_data), repo=repo, port=PORT, token=TOKEN, spawn=pending.append)
+    client = TestClient(app, base_url=BASE)
+    auth = {"X-Flow-Token": TOKEN}
+    run_id = start(client, auth)
+    (work,) = pending
+    runner.after_drive = lambda: client.post(f"/runs/{run_id}/gates/a/approve", headers=auth)
+    work()
+    assert runner.driven == [run_id, run_id]  # a thread repetiu o drive, sem abrir outra
+    assert len(pending) == 1
+    assert runner.runs[run_id]["nodes"]["a"]["state"] == "done"
+    assert runner.runs[run_id]["nodes"]["b"]["state"] == "awaiting_gate"  # o segundo drive andou
+
+
+def test_a_finished_drive_releases_the_run_for_the_next_kick(runner, repo, flow_data, write_flow):
+    pending = []
+    app = create_app(runner, flow_path=write_flow(flow_data), repo=repo, port=PORT, token=TOKEN, spawn=pending.append)
+    client = TestClient(app, base_url=BASE)
+    auth = {"X-Flow-Token": TOKEN}
+    run_id = start(client, auth)
+    pending.pop()()
+    runner.force(run_id, "a", "awaiting_gate")
+    client.post(f"/runs/{run_id}/gates/a/approve", headers=auth)
+    assert len(pending) == 1 and runner.driven == [run_id]  # nenhum `again` sobrou do drive anterior
+    pending.pop()()
+    assert runner.driven == [run_id, run_id]
+
+
+def test_drive_error_releases_the_run(runner, repo, flow_data, write_flow):
+    pending = []
+    app = create_app(runner, flow_path=write_flow(flow_data), repo=repo, port=PORT, token=TOKEN, spawn=pending.append)
+    client = TestClient(app, base_url=BASE)
+    auth = {"X-Flow-Token": TOKEN}
+    runner.raise_on["drive"] = RuntimeError("boom")
+    run_id = start(client, auth)
+    pending.pop()()
+    runner.force(run_id, "a", "awaiting_gate")
+    client.post(f"/runs/{run_id}/gates/a/approve", headers=auth)
+    assert len(pending) == 1  # um drive que caiu não deixa o run preso em `driving`
+
+
+# --- religar runs ativos na partida --------------------------------------------------------
+
+
+def _resumed(runner, repo, flow_data, write_flow, **kwargs):
+    return create_app(
+        runner, flow_path=write_flow(flow_data), repo=repo, port=PORT, token=TOKEN, spawn=lambda fn: fn(), **kwargs
+    )
+
+
+def test_startup_resumes_active_runs_of_this_repo_and_flow(runner, repo, tmp_path, flow_data, write_flow):
+    flow = write_flow(flow_data)
+    mine = runner.start_run(flow, slug="mine", repo=repo)
+    finished = runner.start_run(flow, slug="done", repo=repo)
+    runner.runs[finished]["status"] = "done"
+    other_repo = runner.start_run(flow, slug="other", repo=tmp_path / "elsewhere")
+    other_flow = runner.start_run(flow, slug="flow", repo=repo)
+    runner.runs[other_flow]["flow_file"] = str(tmp_path / "another.yaml")
+
+    create_app(runner, flow_path=flow, repo=repo, port=PORT, token=TOKEN, spawn=lambda fn: fn(), resume=True)
+
+    assert runner.driven == [mine]
+    assert other_repo not in runner.driven and finished not in runner.driven and other_flow not in runner.driven
+
+
+def test_startup_does_not_resume_unless_asked(runner, repo, flow_data, write_flow):
+    runner.start_run(write_flow(flow_data), slug="mine", repo=repo)
+    _resumed(runner, repo, flow_data, write_flow)
+    assert runner.driven == []
+
+
+def test_startup_survives_an_unreadable_state_dir(runner, repo, flow_data, write_flow):
+    class Broken:
+        def list_runs(self):
+            raise OSError("disk gone")
+
+    runner.store = Broken()
+    _resumed(runner, repo, flow_data, write_flow, resume=True)  # não derruba a partida
+
+
+# --- CORS ----------------------------------------------------------------------------------
+
+
+def test_cross_origin_preflight_is_not_authorized(client, auth):
+    preflight = client.options(
+        "/runs",
+        headers={
+            "Origin": "http://evil.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "x-flow-token,content-type",
+        },
+    )
+    assert not preflight.is_success
+    posted = client.post("/runs", json={"slug": "feat"}, headers={"Origin": "http://evil.com"})
+    assert posted.status_code == 403
+    page = client.get("/", headers={"Origin": "http://evil.com"})
+    for response in (preflight, posted, page, client.post("/runs", json={"slug": "feat"}, headers=auth)):
+        assert not any(name.lower().startswith("access-control-") for name in response.headers)
+
+
+def test_unexpected_view_error_is_internal_error_and_logged_by_type(client, auth, runner, caplog):
+    run_id = start(client, auth)
+    caplog.set_level(logging.DEBUG)
+    runner.status = lambda _id: {"run_id": _id, "secret": TOKEN}  # sem `nodes`: montar a resposta falha
+    response = client.get(f"/runs/{run_id}")
+    assert response.status_code == 500 and response.json() == {"detail": "internal error"}
+    assert "KeyError" in caplog.text and TOKEN not in caplog.text
+
+
 # --- bind ----------------------------------------------------------------------------------
 
 
@@ -306,3 +418,13 @@ def test_main_starts_uvicorn_on_loopback_explicitly(monkeypatch, tmp_path, repo)
 def test_main_has_no_option_to_change_the_host():
     with pytest.raises(SystemExit):
         server_app.main(["--host", "0.0.0.0"])
+
+
+def test_main_resumes_active_runs(monkeypatch, tmp_path, repo):
+    for key, value in {"HOME": str(tmp_path), "PATH": "/usr/bin", "TRAYCER_EPIC_ID": "e", "TRAYCER_AGENT_ID": "a"}.items():
+        monkeypatch.setenv(key, value)
+    seen = {}
+    monkeypatch.setattr(server_app, "create_app", lambda *args, **kwargs: seen.update(kwargs) or object())
+    monkeypatch.setattr(server_app.uvicorn, "run", lambda *args, **kwargs: None)
+    server_app.main(["--repo", str(repo), "--state-dir", str(tmp_path / "state")])
+    assert seen["resume"] is True
