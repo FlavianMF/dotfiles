@@ -304,3 +304,41 @@ def test_missing_executable_raises_cli_error():
     adapter = Adapter(executable=["/nonexistent/traycer"], env=ENV)
     with pytest.raises(CliError):
         adapter.poll_status("x")
+
+
+# --- achados da revisão a frio (commit 7c91766) ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        {"active": True},  # sem id
+        "texto solto",
+        None,
+        42,
+        ["lista"],
+        {"id": 7, "active": True},  # id que não é string
+    ],
+)
+def test_malformed_agent_list_row_is_a_cli_error(adapter, monkeypatch, row):
+    monkeypatch.setattr(adapter, "_call", lambda *a, **k: {"agents": [row]})
+    with pytest.raises(CliError):
+        adapter.list_agents()
+    with pytest.raises(CliError):
+        adapter.poll_status("x")
+
+
+@pytest.mark.parametrize("config", ["texto", 5, ["x"]])
+def test_malformed_run_config_is_tolerated_or_a_cli_error(adapter, monkeypatch, config):
+    monkeypatch.setattr(adapter, "_call", lambda *a, **k: {"agents": [{"id": "a", "runConfig": config}]})
+    try:
+        (info,) = adapter.list_agents()
+    except CliError:
+        return
+    assert info.agent_id == "a" and info.model is None and info.effort is None
+
+
+def test_agents_field_that_is_not_a_list_is_a_cli_error(adapter, monkeypatch):
+    monkeypatch.setattr(adapter, "_call", lambda *a, **k: {"agents": {"id": "a"}})
+    with pytest.raises(CliError):
+        adapter.list_agents()

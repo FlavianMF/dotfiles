@@ -238,16 +238,21 @@ class Adapter:
             raise CliError("agent list: the answer has no agents")
         infos = []
         for row in rows:
-            config = row.get("runConfig") or {}
+            if not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"]:
+                raise CliError(f"agent list: malformed agent row: {str(row)[:120]}")
+            config = row.get("runConfig")
+            config = config if isinstance(config, dict) else {}
             model = config.get("model")
+            model = model.get("slug") if isinstance(model, dict) else model
+            effort = config.get("reasoningEffort")
             infos.append(
                 AgentInfo(
                     agent_id=row["id"],
                     active=bool(row.get("active")),
                     archived=bool(row.get("archived")),
                     harness=row.get("harnessId"),
-                    model=model.get("slug") if isinstance(model, dict) else model,
-                    effort=config.get("reasoningEffort"),
+                    model=model if isinstance(model, str) else None,
+                    effort=effort if isinstance(effort, str) else None,
                     profile=row.get("profile"),
                 )
             )
