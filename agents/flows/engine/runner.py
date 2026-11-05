@@ -56,6 +56,7 @@ from engine.run_state import (
     START_LOCK,
     TERMINAL_NODE_STATES,
     VERSION,
+    LockTimeout,
     RunStore,
     StateError,
     add_event,
@@ -148,9 +149,10 @@ class Runner:
         poll_interval: float = 5.0,
         now: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
+        lock_timeout: float = 30.0,
     ) -> None:
         self.adapter = adapter
-        self.store = RunStore(state_dir)
+        self.store = RunStore(state_dir, lock_timeout=lock_timeout)
         self._provider = variables_provider
         self._threshold = quota_threshold
         self._turn_timeout = turn_timeout
@@ -654,4 +656,4 @@ def _fingerprint(state: dict[str, Any]) -> str:
     return json.dumps(state, sort_keys=True)
 
 
-__all__ = ["RepoBusy", "RunError", "Runner", "StateError", "Step", "git_variables"]
+__all__ = ["LockTimeout", "RepoBusy", "RunError", "Runner", "StateError", "Step", "git_variables"]

@@ -24,6 +24,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
@@ -59,11 +60,16 @@ TRANSITIONS: dict[str, frozenset[str]] = {
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 MAX_EVENTS = 300
+_LOCK_POLL = 0.05
 START_LOCK = "start"  # trava interna da criação de run; nenhum run_id é só "start" (tem sufixo)
 
 
 class StateError(Exception):
     """Estado ausente, ilegível ou com id inválido."""
+
+
+class LockTimeout(StateError):
+    """Outra thread ou outro processo segura a trava do run por mais que `lock_timeout` segundos."""
 
 
 def iso(epoch: float) -> str:
@@ -109,8 +115,9 @@ def add_event(state: dict[str, Any], node_id: str | None, msg: str, at: float) -
 class RunStore:
     """Diretório de estado: `<run_id>.json` por run."""
 
-    def __init__(self, state_dir: str | os.PathLike[str]) -> None:
+    def __init__(self, state_dir: str | os.PathLike[str], *, lock_timeout: float = 30.0) -> None:
         self.dir = Path(state_dir)
+        self.lock_timeout = lock_timeout
         self._threads: dict[str, threading.RLock] = {}
         self._guard = threading.Lock()
 
@@ -177,13 +184,27 @@ class RunStore:
         self._ensure_dir()
         with self._guard:
             thread_lock = self._threads.setdefault(name, threading.RLock())
-        with thread_lock:
+        deadline = time.monotonic() + self.lock_timeout
+        if not thread_lock.acquire(timeout=max(self.lock_timeout, 0)):
+            raise LockTimeout(f"lock timeout: run {name} is busy in this process (waited {self.lock_timeout:g}s)")
+        try:
             fd = os.open(self.dir / f".{name}.lock", os.O_CREAT | os.O_RDWR, 0o600)
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX)
+                while True:
+                    try:
+                        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        if time.monotonic() >= deadline:
+                            raise LockTimeout(
+                                f"lock timeout: run {name} is held by another process (waited {self.lock_timeout:g}s)"
+                            ) from None
+                        time.sleep(_LOCK_POLL)
                 try:
                     yield
                 finally:
                     fcntl.flock(fd, fcntl.LOCK_UN)
             finally:
                 os.close(fd)
+        finally:
+            thread_lock.release()

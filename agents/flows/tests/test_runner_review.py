@@ -274,3 +274,80 @@ def test_symlinked_prompt_swapped_in_after_start_never_reaches_the_child(env):
     with pytest.raises(FlowError):  # o fluxo é validado de novo a cada step
         env.runner.step(run_id)
     assert env.fake.commands("create") == []
+
+
+# 10. flock sem prazo -> prazo configurável e erro tipado -------------------------------------------
+
+
+def _hold_flock(env, run_id):
+    import fcntl
+
+    fd = os.open(env.tmp_path / "state" / f".{run_id}.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def test_lock_held_by_another_process_times_out_with_a_typed_error(env):
+    import time
+
+    from engine.run_state import LockTimeout
+
+    env.flow(env.node("a", gate="human"))
+    run_id = env.start()
+    env.restart(lock_timeout=0.3)
+    fd = _hold_flock(env, run_id)  # outro "processo" (outro fd) segura a trava
+    try:
+        started = time.monotonic()
+        for call in (
+            lambda: env.runner.step(run_id),
+            lambda: env.runner.approve_gate(run_id, "a"),
+            lambda: env.runner.abort_run(run_id),
+        ):
+            with pytest.raises(LockTimeout) as exc:
+                call()
+            assert "lock timeout" in str(exc.value) and run_id in str(exc.value)
+            assert isinstance(exc.value, StateError)
+        assert time.monotonic() - started < 5
+    finally:
+        os.close(fd)
+    env.runner.step(run_id)  # solta a trava: volta a funcionar
+
+
+def test_lock_held_by_another_thread_times_out(env):
+    import threading
+    import time
+
+    from engine.run_state import LockTimeout
+
+    env.flow(env.node("a", gate="human"))
+    run_id = env.start()
+    env.restart(lock_timeout=0.3)
+    inside, release = threading.Event(), threading.Event()
+
+    def holder():
+        with env.runner.store.lock(run_id):
+            inside.set()
+            release.wait(10)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    assert inside.wait(5)
+    try:
+        started = time.monotonic()
+        with pytest.raises(LockTimeout):
+            env.runner.step(run_id)
+        assert time.monotonic() - started < 5
+    finally:
+        release.set()
+        thread.join()
+
+
+def test_lock_timeout_is_configurable_and_defaults_to_30_seconds(env):
+    assert env.runner.store.lock_timeout == 30.0
+    assert env.new_runner(lock_timeout=2.5).store.lock_timeout == 2.5
+
+
+def test_lock_timeout_is_exported_by_the_runner_module():
+    from engine import runner
+
+    assert issubclass(runner.LockTimeout, runner.StateError)
