@@ -60,3 +60,9 @@ def test_pr_stop_shows_commits_files_and_lines_against_the_base_and_asks_when_la
     for term in ("commits", "arquivos", "linhas", "150 linhas", "20 commits", "pergunte"):
         assert term in stop, f"a parada do pr não cita '{term}'"
     assert "git diff --shortstat origin/<base>..HEAD" in _prompt("pr")
+
+
+def test_pr_child_creates_no_tag_release_or_extra_push_after_the_pr():
+    after = _section(_prompt("pr"), "8. Depois do PR")
+    for term in ("tag", "release", "push", "CI", "reporte", "pergunte"):
+        assert term in after, f"a seção pós-PR não cita '{term}'"
