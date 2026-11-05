@@ -210,3 +210,35 @@ def test_git_variables_passes_a_minimal_environment_to_git(tmp_path, monkeypatch
     assert seen["env"]["GIT_CONFIG_NOSYSTEM"] == "1"
     assert "SECRET_TOKEN" not in seen["env"] and "GIT_DIR" not in seen["env"]
     assert ["-c", "core.fsmonitor=false"] == seen["argv"][1:3]
+
+
+# 8. state_dir com modo 0o700 ---------------------------------------------------------------------
+
+
+def _mode(path):
+    return path.stat().st_mode & 0o777
+
+
+def test_state_dir_is_created_private(env):
+    env.flow(env.node("a", gate="human"))
+    env.start()
+    assert _mode(env.tmp_path / "state") == 0o700
+
+
+def test_state_dir_created_with_parents_is_private(tmp_path):
+    store = RunStore(tmp_path / "x" / "y" / "state")
+    store.save({"version": 1, "run_id": "r1", "status": "active", "nodes": {}})
+    assert _mode(tmp_path / "x" / "y" / "state") == 0o700
+
+
+def test_existing_open_state_dir_is_tightened(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o755)
+    state.chmod(0o755)
+    store = RunStore(state)
+    store.save({"version": 1, "run_id": "r1", "status": "active", "nodes": {}})
+    assert _mode(state) == 0o700
+    state.chmod(0o755)
+    with store.lock("start"):
+        pass
+    assert _mode(state) == 0o700

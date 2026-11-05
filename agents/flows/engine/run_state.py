@@ -114,6 +114,12 @@ class RunStore:
         self._threads: dict[str, threading.RLock] = {}
         self._guard = threading.Lock()
 
+    def _ensure_dir(self) -> None:
+        """Cria `state_dir` com modo 0o700 e aperta o modo se ele já existia mais aberto."""
+        self.dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.dir.stat().st_mode & 0o077:
+            os.chmod(self.dir, 0o700)
+
     def path(self, run_id: str) -> Path:
         if not isinstance(run_id, str) or not RUN_ID_RE.fullmatch(run_id):
             raise StateError(f"invalid run id {run_id!r}")
@@ -134,7 +140,7 @@ class RunStore:
     def save(self, state: dict[str, Any]) -> None:
         """Escreve em arquivo temporário no mesmo diretório e troca por `rename`: ninguém lê meio arquivo."""
         path = self.path(state["run_id"])
-        self.dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_dir()
         fd, tmp_name = tempfile.mkstemp(dir=self.dir, prefix=f".{path.name}.", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -168,7 +174,7 @@ class RunStore:
         `StateError` antes de tocar o disco (nada de `.lock` fora de `state_dir`, nada de `_threads` inflado)."""
         if name != START_LOCK and not self.path(name).is_file():
             raise StateError(f"run {name} not found")
-        self.dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_dir()
         with self._guard:
             thread_lock = self._threads.setdefault(name, threading.RLock())
         with thread_lock:
