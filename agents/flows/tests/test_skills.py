@@ -39,11 +39,18 @@ def test_skill_has_at_most_40_lines_and_does_not_repeat_the_yaml(name):
 
 
 @pytest.mark.parametrize("name", SKILLS)
-def test_install_links_the_skill_for_the_three_harnesses(name):
+def test_install_links_the_skill_for_claude_code_only(name):
+    """Codex e OpenCode leem ~/.agents/skills e podem ignorar `disable-model-invocation`: não entram lá."""
     install = (REPO / "install.sh").read_text(encoding="utf-8")
-    assert f'link_shared_skill {name} "$REPO_DIR/agents/skills/{name}"' in install
+    assert f'link_claude_skill {name} "$REPO_DIR/agents/skills/{name}"' in install
+    assert f'link_shared_skill {name}' not in install
     assert f'"$HOME/.claude/skills/{name}"' in install  # backup list
-    assert f'"$HOME/.agents/skills/{name}"' in install
+    assert f'remove_stale_shared_link {name}' in install  # install anterior deixou o link em ~/.agents/skills
+
+
+def test_skills_readme_documents_the_claude_only_install():
+    readme = (REPO / "agents" / "skills" / "README.md").read_text(encoding="utf-8")
+    assert "disable-model-invocation" in readme and "Codex" in readme and "OpenCode" in readme
 
 
 def test_the_command_in_the_skills_runs_from_any_directory(tmp_path):

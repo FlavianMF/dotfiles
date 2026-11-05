@@ -771,6 +771,21 @@ link_shared_skill() {
     create_config_link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 }
 
+# Claude-only skill: no ~/.agents/skills entry, so Codex and OpenCode never see it.
+link_claude_skill() {
+    local name="$1" source="$2"
+    create_config_link "$source" "$HOME/.claude/skills/$name"
+}
+
+# Drop the ~/.agents/skills link an older install made for a skill that is now Claude-only.
+# Only a symlink into this repo goes; a real dir or a foreign link stays.
+remove_stale_shared_link() {
+    local link="$HOME/.agents/skills/$1"
+    if [[ -L "$link" && "$(readlink "$link")" == "$REPO_DIR/"* ]]; then
+        as_user rm -f "$link"
+    fi
+}
+
 create_config_link "$REPO_DIR/zsh/.zshrc" "$HOME/.zshrc"
 create_config_link "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
 as_user mkdir -p "$HOME/.tmux"
@@ -810,8 +825,11 @@ link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-eng
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
 # flow and phase: explicit-only (disable-model-invocation) front ends of agents/flows (engine.cli).
-link_shared_skill flow "$REPO_DIR/agents/skills/flow"
-link_shared_skill phase "$REPO_DIR/agents/skills/phase"
+# Claude Code only: Codex/OpenCode read ~/.agents/skills and may ignore that key (see agents/skills/README.md).
+link_claude_skill flow "$REPO_DIR/agents/skills/flow"
+link_claude_skill phase "$REPO_DIR/agents/skills/phase"
+remove_stale_shared_link flow
+remove_stale_shared_link phase
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode, Antigravity CLI =====
 # Declarative, not symlinked where the tool keeps machine state:
