@@ -476,7 +476,7 @@ class Runner:
 
     def _fail(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any], reason: str) -> Step:
         self._release(state, node, ns, stop=True)
-        if ns["state"] in ("pending", "awaiting_quota"):  # falhou ao criar o filho: a tentativa começou mesmo assim
+        if ns["state"] in ("pending", "awaiting_quota", "failed"):  # falhou ao criar o filho: a tentativa começou mesmo assim
             ns["attempts"] += 1
             self._to(state, node, "running", f"attempt {ns['attempts']}")
         self._to(state, node, "failed", reason)
