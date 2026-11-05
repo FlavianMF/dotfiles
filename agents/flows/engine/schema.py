@@ -24,6 +24,7 @@ que terminou bem é o `gate: human` desse nó, não o `after`.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -46,6 +47,30 @@ REQUIRED_AGENT_FIELDS = ("harness", "profile", "model", "effort")
 OPTIONAL_AGENT_FIELDS = {"skills": ()}
 REQUIRED_ON_FAIL_FIELDS = ("retry", "then")
 FLOW_FIELDS = ("name", "run_inputs", "nodes")
+
+
+def prompt_roots(base_dir: str | os.PathLike[str]) -> tuple[str, ...]:
+    """Diretórios onde um `prompt` pode ficar: `prompts/` ao lado do YAML e `../prompts/` (o layout de
+    `agents/flows/`: YAML em `flows/`, prompts em `prompts/`)."""
+    base = os.path.abspath(base_dir)
+    return (os.path.normpath(os.path.join(base, "prompts")), os.path.normpath(os.path.join(base, "..", "prompts")))
+
+
+def _inside(path: str, root: str) -> bool:
+    return path == root or path.startswith(root + os.sep)
+
+
+def prompt_problem(prompt: str, base_dir: str | os.PathLike[str]) -> str | None:
+    """None se `prompt` (caminho absoluto) está dentro de uma raiz de prompts, no texto e depois de
+    resolver symlinks. Senão, a mensagem do problema."""
+    roots = prompt_roots(base_dir)
+    where = " or ".join(roots)
+    if not any(_inside(os.path.normpath(prompt), root) for root in roots):
+        return f"must stay inside the prompts directory ({where})"
+    real = os.path.realpath(prompt)
+    if not any(_inside(real, os.path.realpath(root)) for root in roots):
+        return f"resolves outside the prompts directory ({real}): a symlink points out of {where}"
+    return None
 
 
 class FlowError(Exception):

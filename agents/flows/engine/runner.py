@@ -63,7 +63,7 @@ from engine.run_state import (
     new_node_state,
     transition,
 )
-from engine.schema import EFFORTS, Flow, FlowError, Node
+from engine.schema import EFFORTS, Flow, FlowError, Node, prompt_problem
 from engine.traycer_cli import Adapter, AgentNotFound, CliError
 from engine.validate import execution_order
 from engine.when import evaluate_when
@@ -544,6 +544,9 @@ class Runner:
     # --- mensagem e pacote de contexto -----------------------------------------------------
 
     def _message(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any]) -> str:
+        problem = prompt_problem(node.prompt, flow.source.parent)  # confere de novo: um symlink pode ter mudado
+        if problem:
+            raise PermissionError(f"prompt of node '{node.id}' {problem}")
         text = Path(node.prompt).read_text(encoding="utf-8")
         text = text.replace("${slug}", state["slug"]).replace("{{input}}", ", ".join(node.inputs) or "(nenhuma)")
         return f"{text.rstrip()}\n\n{self._pack(state, flow, node, ns)}\n"

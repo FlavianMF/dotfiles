@@ -242,3 +242,35 @@ def test_existing_open_state_dir_is_tightened(tmp_path):
     with store.lock("start"):
         pass
     assert _mode(state) == 0o700
+
+
+# 9. o runner confere o prompt antes de ler (symlink trocado depois da validação) -------------------
+
+
+def test_runner_refuses_a_prompt_that_became_a_symlink_to_outside(env):
+    env.flow(env.node("a"))
+    run_id = env.start()
+    flow = env.runner._flow(env.runner.store.load(run_id))
+    state = env.runner.store.load(run_id)
+    secret = env.tmp_path / "secret.txt"
+    secret.write_text("segredo\n")
+    prompt = env.tmp_path / "prompts" / "a.md"
+    prompt.unlink()
+    prompt.symlink_to(secret)  # trocado depois da validação do fluxo
+    with pytest.raises(OSError):
+        env.runner._message(state, flow, flow.nodes[0], state["nodes"]["a"])
+
+
+def test_symlinked_prompt_swapped_in_after_start_never_reaches_the_child(env):
+    env.flow(env.node("a", on_fail={"retry": 0, "then": "abort"}))
+    run_id = env.start()
+    secret = env.tmp_path / "secret.txt"
+    secret.write_text("segredo\n")
+    prompt = env.tmp_path / "prompts" / "a.md"
+    prompt.unlink()
+    prompt.symlink_to(secret)
+    from engine.schema import FlowError
+
+    with pytest.raises(FlowError):  # o fluxo é validado de novo a cada step
+        env.runner.step(run_id)
+    assert env.fake.commands("create") == []
