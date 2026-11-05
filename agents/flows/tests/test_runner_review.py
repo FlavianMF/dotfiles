@@ -351,3 +351,47 @@ def test_lock_timeout_is_exported_by_the_runner_module():
     from engine import runner
 
     assert issubclass(runner.LockTimeout, runner.StateError)
+
+
+# 11. trava presa durante chamadas ao CLI: erro tipado para o T5 e comportamento documentado --------
+
+
+def test_drive_propagates_the_typed_lock_error_to_the_caller(env):
+    from engine.runner import LockTimeout
+
+    env.flow(env.node("a", gate="human"))
+    run_id = env.start()
+    env.restart(lock_timeout=0.2)
+    fd = _hold_flock(env, run_id)
+    try:
+        with pytest.raises(LockTimeout):
+            env.runner.drive(run_id)
+        with pytest.raises(LockTimeout):
+            env.runner.request_adjustment(run_id, "a", "x")
+        with pytest.raises(LockTimeout):
+            env.runner.reject_gate(run_id, "a")
+        with pytest.raises(LockTimeout):
+            env.runner.choose_upgrade(run_id, "a", model="opus")
+    finally:
+        os.close(fd)
+
+
+def test_status_does_not_wait_for_the_lock(env):
+    """`status` só lê o JSON (escrita atômica): um passo lento no CLI não trava a tela do T5."""
+    import time
+
+    env.flow(env.node("a", gate="human"))
+    run_id = env.start()
+    env.restart(lock_timeout=30)
+    fd = _hold_flock(env, run_id)
+    try:
+        started = time.monotonic()
+        assert env.runner.status(run_id)["run_id"] == run_id
+        assert time.monotonic() - started < 2
+    finally:
+        os.close(fd)
+
+
+def test_runner_docstring_documents_the_lock_held_during_cli_calls():
+    doc = Runner.__doc__ or ""
+    assert "60 s" in doc and "LockTimeout" in doc and "status" in doc

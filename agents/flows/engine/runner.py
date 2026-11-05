@@ -138,6 +138,16 @@ def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
 
 
 class Runner:
+    """Motor de fluxo. Ver o docstring do módulo para a API e as regras.
+
+    Concorrência: `step`, `drive` e os métodos que mudam o run seguram a trava do run
+    (`RunStore.lock`) do começo ao fim, inclusive durante as chamadas ao CLI do Traycer. Cada
+    chamada ao CLI tem teto de 60 s (`Adapter.command_timeout`), então um `step` lento segura a
+    trava por esse tempo. Comportamento aceito na v1. Quem espera a trava por mais de
+    `lock_timeout` s (30 por padrão) recebe `LockTimeout` (subclasse de `StateError`), que o
+    servidor deve tratar (por exemplo, responder "ocupado, tente de novo"). `status` não usa
+    a trava: lê o JSON, que é gravado de forma atômica, e responde sem esperar."""
+
     def __init__(
         self,
         adapter: Adapter,
