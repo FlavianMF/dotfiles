@@ -71,6 +71,7 @@ class AgentInfo:
     model: str | None
     effort: str | None
     profile: str | None
+    name: str | None = None  # `title` do agente em `agent list`: o `--name` do `create`
 
 
 @dataclass(frozen=True)
@@ -264,9 +265,17 @@ class Adapter:
                     model=model if isinstance(model, str) else None,
                     effort=effort if isinstance(effort, str) else None,
                     profile=row.get("profile"),
+                    name=row.get("title") if isinstance(row.get("title"), str) else None,
                 )
             )
         return infos
+
+    def find_by_name(self, name: str) -> AgentInfo | None:
+        """O agente vivo (não arquivado) com este nome, ou None. Serve para achar um filho órfão."""
+        for info in self.list_agents():
+            if info.name == name and not info.archived:
+                return info
+        return None
 
     def poll_status(self, agent_id: str) -> AgentInfo:
         for info in self.list_agents():

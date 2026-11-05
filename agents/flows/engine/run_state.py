@@ -83,6 +83,7 @@ def new_node_state() -> dict[str, Any]:
         "attempts": 0,  # filhos criados para este nó
         "retries_used": 0,  # repetições gastas desde a última escolha de upgrade
         "child_id": None,
+        "creating": None,  # {"name", "model", "effort"} gravado antes de `create_child`: acha o órfão após uma queda
         "sent": False,
         "pending_message": None,
         "snapshot": None,  # assinatura das saídas antes do send: sucesso = mudou

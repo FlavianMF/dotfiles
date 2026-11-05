@@ -100,6 +100,7 @@ def _agent_row(agent_id: str, agent: dict) -> dict:
     return {
         "id": agent_id,
         "parentId": os.environ.get("TRAYCER_AGENT_ID"),
+        "title": agent["name"],
         "active": agent["active_polls"] > 0,
         "archived": agent["archived"],
         "harnessId": agent["harness"],

@@ -65,7 +65,7 @@ from engine.run_state import (
     transition,
 )
 from engine.schema import EFFORTS, Flow, FlowError, Node, prompt_problem
-from engine.traycer_cli import Adapter, AgentNotFound, CliError
+from engine.traycer_cli import Adapter, AgentNotFound, Child, CliError
 from engine.validate import execution_order
 from engine.when import evaluate_when
 
@@ -358,7 +358,7 @@ class Runner:
             if node.mode == "manual":
                 return self._advance_manual(state, node, ns)
             return self._spawn(state, flow, node, ns)
-        if current == "awaiting_quota":
+        if current in ("awaiting_quota", "failed"):  # `failed` só persiste no meio de uma repetição
             return self._spawn(state, flow, node, ns)
         if current == "running":
             return self._poll(state, flow, node, ns)
@@ -410,28 +410,44 @@ class Runner:
 
     def _spawn(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any]) -> Step | None:
         agent = node.agent
-        try:
-            percent = self.adapter.rate_limit_used_percent(agent.harness, agent.profile)
-        except CliError as exc:
-            return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {exc}")
-        if percent is not None and percent > self._threshold:
-            return self._wait_quota(
-                state, node, ns, f"quota at {percent:g}% (limit {self._threshold:g}%) for {agent.harness}/{agent.profile}"
-            )
         model = ns["model"] or agent.model
         effort = ns["effort"] or agent.effort
         try:
             message = self._message(state, flow, node, ns)
-            child = self.adapter.create_child(
-                harness=agent.harness,
-                model=model,
-                effort=effort,
-                profile=agent.profile,
-                cwd=state["repo"],
-                name=f"{flow.name}:{node.id} ({state['run_id'][:12]})",
-            )
         except (CliError, OSError) as exc:
             return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+        child = None
+        if ns.get("creating"):  # queda entre `create_child` e o `_save`: procure o filho pelo nome
+            try:
+                child = self._recover_orphan(ns)
+            except CliError as exc:
+                ns["reason"] = f"cannot look for an orphan child: {exc}"
+                return None
+        if child is None:
+            try:
+                percent = self.adapter.rate_limit_used_percent(agent.harness, agent.profile)
+            except CliError as exc:
+                return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {exc}")
+            if percent is not None and percent > self._threshold:
+                return self._wait_quota(
+                    state, node, ns, f"quota at {percent:g}% (limit {self._threshold:g}%) for {agent.harness}/{agent.profile}"
+                )
+            name = f"{flow.name}:{node.id} ({state['run_id'][:12]}) {uuid.uuid4().hex[:8]}"
+            ns["creating"] = {"name": name, "model": model, "effort": effort}
+            self._save(state)  # a marca fica no disco antes do `create_child`: uma queda deixa rastro
+            try:
+                child = self.adapter.create_child(
+                    harness=agent.harness,
+                    model=model,
+                    effort=effort,
+                    profile=agent.profile,
+                    cwd=state["repo"],
+                    name=name,
+                )
+            except (CliError, OSError) as exc:
+                ns["creating"] = None
+                return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+        ns["creating"] = None
         ns.update(
             child_id=child.agent_id,
             attempts=ns["attempts"] + 1,
@@ -459,6 +475,15 @@ class Runner:
         self._save(state)  # o id do filho fica gravado antes do envio
         self._send(state, flow, node, ns)
         return Step.PROGRESS
+
+    def _recover_orphan(self, ns: dict[str, Any]) -> Child | None:
+        """Acha o filho da marca `creating` pelo nome em `agent list`. Reusa o filho vivo (sem criar outro)."""
+        mark = ns["creating"]
+        found = self.adapter.find_by_name(mark["name"])
+        ns["creating"] = None
+        if found is None:
+            return None
+        return Child(found.agent_id, mark["model"], mark["effort"], found.model, found.effort)
 
     def _wait_quota(self, state: dict[str, Any], node: Node, ns: dict[str, Any], reason: str) -> Step | None:
         if ns["state"] == "awaiting_quota":

@@ -395,3 +395,93 @@ def test_status_does_not_wait_for_the_lock(env):
 def test_runner_docstring_documents_the_lock_held_during_cli_calls():
     doc = Runner.__doc__ or ""
     assert "60 s" in doc and "LockTimeout" in doc and "status" in doc
+
+
+# 12. órfão: queda entre `create_child` e o `_save` -----------------------------------------------
+
+
+class Crash(BaseException):
+    """Simula a queda do processo: nada depois dela roda, e `except Exception` não a pega."""
+
+
+def _crash_after_create(env):
+    real = env.runner.adapter.create_child
+
+    def create_then_crash(**kwargs):
+        real(**kwargs)
+        raise Crash
+
+    env.runner.adapter.create_child = create_then_crash
+
+
+def test_restart_after_a_crash_between_create_and_save_reuses_the_orphan_child(env):
+    env.flow(env.node("a"), env.node("b", ["out/a.md"]))
+    env.fake.queue(env.done("a"), env.done("b"))
+    run_id = env.start()
+    _crash_after_create(env)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    assert len(env.fake.agents) == 1  # o filho existe no Traycer...
+    assert env.states(run_id)["a"] == "pending"  # ...mas o estado não sabe dele
+    env.restart()
+    assert env.drive(run_id) is Step.FINISHED
+    assert len(env.fake.commands("create")) == 2  # um para a (o órfão), um para b: nenhum a mais
+    assert len(env.fake.agents) == 2
+    node = env.runner.status(run_id)["nodes"]["a"]
+    assert node["attempts"] == 1 and node["creating"] is None
+    assert env.states(run_id) == {"a": "done", "b": "done"}
+
+
+def test_restart_when_the_crash_came_before_the_create_creates_one_child(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    env.fake.update(fail={"create": "caiu antes"})
+    env.restart()
+    state_path = env.tmp_path / "state" / f"{run_id}.json"
+    state = json.loads(state_path.read_text())
+    state["nodes"]["a"]["creating"] = {"name": "demo:a (marca sem filho)", "model": "sonnet", "effort": "medium"}
+    state_path.write_text(json.dumps(state))
+    env.fake.update(fail={})
+    assert env.drive(run_id) is Step.FINISHED
+    assert len(env.fake.agents) == 1  # a marca não achou filho: o motor criou um só
+    assert env.runner.status(run_id)["nodes"]["a"]["creating"] is None
+
+
+def test_orphan_found_after_a_failed_attempt_is_reused_for_the_retry(env):
+    env.flow(env.node("a", on_fail={"retry": 1, "then": "abort"}))
+    env.fake.queue({"write": {}}, env.done("a"))
+    run_id = env.start()
+    env.runner.step(run_id)  # 1ª tentativa
+    real = env.runner.adapter.create_child
+    calls = []
+
+    def create_then_crash(**kwargs):
+        calls.append(kwargs)
+        real(**kwargs)
+        raise Crash
+
+    env.runner.adapter.create_child = create_then_crash
+    with pytest.raises(Crash):
+        env.runner.step(run_id)  # a repetição cria o filho e cai antes de gravar
+    assert len(env.fake.agents) == 2
+    env.restart()
+    assert env.drive(run_id) is Step.FINISHED
+    assert len(env.fake.agents) == 2  # nenhum filho a mais
+    assert env.states(run_id) == {"a": "done"}
+
+
+def test_orphan_search_ignores_archived_agents_and_other_names(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    other = env.runner.adapter.create_child(
+        harness="claude", model="haiku", effort="low", profile=PROFILE_FOR_TEST, cwd=str(env.repo), name="demo:a (alheio)"
+    )
+    env.runner.adapter.archive(other.agent_id)
+    env.drive(run_id)
+    assert env.states(run_id) == {"a": "done"}
+    assert len(env.fake.agents) == 2  # o alheio ficou como estava; o motor criou o seu
+
+
+PROFILE_FOR_TEST = "p-fit"

@@ -376,3 +376,10 @@ def test_other_os_errors_still_mean_a_missing_cli(monkeypatch):
     with pytest.raises(CliError) as exc:
         Adapter(executable="traycer", env=ENV).poll_status("x")
     assert exc.value.code == "E_CLI_MISSING"
+
+
+def test_poll_status_exposes_the_agent_name(adapter):
+    child = create(adapter, name="fase plan")
+    assert adapter.poll_status(child.agent_id).name == "fase plan"
+    assert adapter.find_by_name("fase plan").agent_id == child.agent_id
+    assert adapter.find_by_name("outro") is None
