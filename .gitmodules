@@ -1,0 +1,3 @@
+[submodule "vendor/flows-editor"]
+	path = vendor/flows-editor
+	url = https://github.com/FlavianMF/flows-editor.git
