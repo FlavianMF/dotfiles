@@ -39,6 +39,7 @@ class FakeTraycer:
                 "rate_available": True,
                 "apply_model": {},  # modelo pedido -> modelo aplicado (simula divergência)
                 "fail": {},  # comando -> mensagem de erro
+                "fail_after_send": {},  # comando -> mensagem de erro, só depois do primeiro `send`
                 "sends": 0,
             }
         )
@@ -129,6 +130,8 @@ def _dispatch(state: dict, args: list[str]) -> int:
     name = args[1] if args[0] == "agent" else args[0]
     if state["fail"].get(name):
         return _error("E_FAKE", state["fail"][name])
+    if state["sends"] and state.get("fail_after_send", {}).get(name):
+        return _error("E_FAKE", state["fail_after_send"][name])
     if not os.environ.get("TRAYCER_EPIC_ID") or not os.environ.get("TRAYCER_AGENT_ID"):
         return _error("E_INVALID_ARGUMENT", "traycer: epic id required - set TRAYCER_EPIC_ID.")
 
@@ -189,6 +192,8 @@ def _dispatch(state: dict, args: list[str]) -> int:
         agent = state["agents"].get(_arg(args, "--agent-id"))
         if agent is None:
             return _error("E_AGENT_NOT_FOUND", "traycer: unknown agent")
+        if agent["active_polls"] > 0:  # o Traycer real recusa arquivar com turno em curso
+            return _error("E_AGENT_BUSY", "traycer: cannot archive an agent with a turn in progress")
         agent["archived"] = True
         _out({"updated": True, "outcome": "applied"})
         return 0
