@@ -342,3 +342,37 @@ def test_agents_field_that_is_not_a_list_is_a_cli_error(adapter, monkeypatch):
     monkeypatch.setattr(adapter, "_call", lambda *a, **k: {"agents": {"id": "a"}})
     with pytest.raises(CliError):
         adapter.list_agents()
+
+
+def test_oversized_prompt_is_reported_as_too_large_not_as_a_missing_cli(fake, monkeypatch):
+    import errno
+
+    def too_big(argv, **kwargs):
+        raise OSError(errno.E2BIG, "Argument list too long")
+
+    monkeypatch.setattr("engine.traycer_cli.subprocess.run", too_big)
+    adapter = Adapter(executable="traycer", env=ENV)
+    with pytest.raises(CliError) as exc:
+        adapter.send("agent-1", "x" * 10)
+    assert exc.value.code == "E_PROMPT_TOO_LARGE"
+    assert "prompt too large" in str(exc.value)
+    assert "E_CLI_MISSING" != exc.value.code
+
+
+def test_real_oversized_argument_hits_the_same_error(adapter):
+    """O Linux recusa um argumento único acima de 128 KiB (MAX_ARG_STRLEN) com E2BIG."""
+    with pytest.raises(CliError) as exc:
+        adapter.send("agent-1", "x" * 300_000)
+    assert exc.value.code == "E_PROMPT_TOO_LARGE"
+
+
+def test_other_os_errors_still_mean_a_missing_cli(monkeypatch):
+    import errno
+
+    def denied(argv, **kwargs):
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr("engine.traycer_cli.subprocess.run", denied)
+    with pytest.raises(CliError) as exc:
+        Adapter(executable="traycer", env=ENV).poll_status("x")
+    assert exc.value.code == "E_CLI_MISSING"

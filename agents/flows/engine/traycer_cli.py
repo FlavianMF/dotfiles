@@ -16,6 +16,10 @@ Regras:
 - O executável e o ambiente chegam por injeção; os testes usam um CLI falso.
 - O adaptador nunca espera por `responseId`. `send` não pede resposta, e o fim do turno sai de
   `agent list` (campo `active`). Quem decide o sucesso da fase é o motor, pela saída em disco.
+- O prompt viaja em argv (`--message=...`): o `traycer agent send` não lê mensagem de stdin nem de
+  arquivo (conferido em `--help`). Então ele fica visível em `ps` para quem usa a mesma máquina, e o
+  Linux recusa um argumento acima de ~128 KiB com E2BIG, que vira `CliError` com código
+  `E_PROMPT_TOO_LARGE`. Não ponha segredo em prompt.
 - Valores de opção vão na forma `--opção=valor`: uma mensagem que começa com `---` (frontmatter
   de prompt) seria lida como opção na forma `--message valor`.
 - `traycer monitor` não funciona em ambiente limpo e não é usado.
@@ -23,6 +27,7 @@ Regras:
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -152,6 +157,11 @@ class Adapter:
         except subprocess.TimeoutExpired as exc:
             raise CliError(f"traycer {' '.join(args[:2])}: no answer in {self._command_timeout}s", "E_CLI_TIMEOUT") from exc
         except OSError as exc:
+            if exc.errno == errno.E2BIG:
+                raise CliError(
+                    "prompt too large: the operating system refuses an argument this long (limit ~128 KiB)",
+                    "E_PROMPT_TOO_LARGE",
+                ) from exc
             raise CliError(f"cannot run {self._executable[0]}: {exc.strerror or exc}", "E_CLI_MISSING") from exc
         result = self._parse(proc.stdout)
         if result is None:
