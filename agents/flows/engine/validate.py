@@ -2,7 +2,7 @@
 
 Regras: ids únicos; toda entrada é saída de outro nó ou está em `run_inputs`;
 nenhuma saída aparece em dois nós; nenhuma entrada depende só de nó condicional (`when`);
-`after` cita ids existentes; sem ciclo (as arestas de `after` contam). Os erros citam o nó e o campo.
+o arquivo de `prompt` existe em disco; `after` cita ids existentes; sem ciclo (as arestas de `after` contam). Os erros citam o nó e o campo.
 
     python3 -m engine.validate flows/ecc-dev.yaml [--slug SLUG]
 """
@@ -10,6 +10,7 @@ nenhuma saída aparece em dois nós; nenhuma entrada depende só de nó condicio
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections import defaultdict
 
@@ -91,6 +92,10 @@ def check_flow(flow: Flow) -> list[str]:
             owners = ", ".join(f"node '{flow.nodes[i].id}'" for i in indexes)
             first = flow.nodes[indexes[0]].id
             errors.append(f"node '{first}': field 'outputs': '{path}' is produced more than once ({owners})")
+
+    for node in flow.nodes:
+        if not os.path.isfile(node.prompt):
+            errors.append(f"node '{node.id}': field 'prompt': file not found: '{node.prompt}'")
 
     for node in flow.nodes:
         for node_id in node.after:

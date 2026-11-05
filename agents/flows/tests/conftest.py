@@ -1,4 +1,5 @@
 import copy
+import os
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,18 @@ def write_flow(tmp_path):
     def _write(data):
         path = tmp_path / "flow.yaml"
         path.write_text(yaml.safe_dump(copy.deepcopy(data), sort_keys=False), encoding="utf-8")
+        # O validador exige que o prompt exista: cada nó válido ganha um arquivo vazio.
+        nodes = data.get("nodes") if isinstance(data, dict) else None
+        for raw in nodes if isinstance(nodes, list) else ():
+            prompt = raw.get("prompt") if isinstance(raw, dict) else None
+            if isinstance(prompt, str) and prompt.strip() and not os.path.isabs(prompt):
+                target = Path(os.path.normpath(os.path.join(tmp_path, prompt)))
+                if target.is_relative_to(tmp_path.parent):
+                    try:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.touch()
+                    except (OSError, ValueError):
+                        pass  # prompt inválido de propósito: o loader reporta o erro
         return path
 
     return _write

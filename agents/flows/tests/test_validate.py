@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from engine.loader import load_flow
@@ -241,3 +243,14 @@ def test_after_mixes_with_data_edges_in_cycle(write_flow, node):
         "nodes": [node("a", ["b.md"], ["a.md"]), node("b", [], ["b.md"], after=["a"])],
     }
     assert any("cycle" in e for e in errors_of(write_flow, data))
+
+
+def test_missing_prompt_file(write_flow, flow_data):
+    flow = flow_of(write_flow, flow_data)
+    missing = flow.nodes[1].prompt
+    os.remove(missing)
+    expected = [f"node 'b': field 'prompt': file not found: '{missing}'"]
+    assert check_flow(flow) == expected
+    with pytest.raises(FlowError) as exc:
+        validate_flow(flow)
+    assert exc.value.errors == expected
