@@ -30,7 +30,7 @@ SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 # Campos do nó: obrigatórios e opcionais (com o padrão aplicado pelo loader).
 REQUIRED_NODE_FIELDS = ("id", "title", "agent", "prompt", "inputs", "outputs", "gate", "context", "on_fail")
-OPTIONAL_NODE_FIELDS = {"mode": "auto", "when": None}
+OPTIONAL_NODE_FIELDS = {"mode": "auto", "when": None, "after": ()}
 REQUIRED_AGENT_FIELDS = ("harness", "profile", "model", "effort")
 OPTIONAL_AGENT_FIELDS = {"skills": ()}
 REQUIRED_ON_FAIL_FIELDS = ("retry", "then")
@@ -73,6 +73,9 @@ class Node:
     when: str | None  # expressão validada por engine.when; None = sempre roda
     context: str  # pack | fork
     on_fail: OnFail
+    # ids que rodam antes deste nó, sem produzir saída que ele consuma (ordem explícita).
+    # Um nó em `after` que foi pulado (`when` falso) conta como satisfeito.
+    after: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

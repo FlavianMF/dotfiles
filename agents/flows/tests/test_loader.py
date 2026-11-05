@@ -338,3 +338,16 @@ def test_prompt_may_point_to_a_sibling_directory(write_flow, flow_data, tmp_path
 def test_prompt_is_normalized(write_flow, flow_data, tmp_path):
     flow_data["nodes"][0]["prompt"] = "./prompts//a.md"
     assert load(write_flow, flow_data).nodes[0].prompt == str(tmp_path / "prompts" / "a.md")
+
+
+def test_after_defaults_to_empty_and_is_kept(write_flow, flow_data):
+    flow_data["nodes"][2]["after"] = ["b"]
+    flow = load(write_flow, flow_data)
+    assert flow.nodes[0].after == () and flow.nodes[2].after == ("b",)
+
+
+@pytest.mark.parametrize("bad", ["b", 3, ["B"], [1], ["b", "b"]])
+def test_invalid_after(write_flow, flow_data, bad):
+    flow_data["nodes"][2]["after"] = bad
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'c'" in e and "field 'after'" in e for e in errs), errs

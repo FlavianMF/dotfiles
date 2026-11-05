@@ -2,7 +2,7 @@
 
 Regras: ids únicos; toda entrada é saída de outro nó ou está em `run_inputs`;
 nenhuma saída aparece em dois nós; nenhuma entrada depende só de nó condicional (`when`);
-sem ciclo. Os erros citam o nó e o campo.
+`after` cita ids existentes; sem ciclo (as arestas de `after` contam). Os erros citam o nó e o campo.
 
     python3 -m engine.validate flows/ecc-dev.yaml [--slug SLUG]
 """
@@ -27,9 +27,16 @@ def _producers(flow: Flow) -> dict[str, list[int]]:
 
 
 def _edges(flow: Flow) -> dict[int, set[int]]:
-    """Aresta produtor -> consumidor, por índice (um nó que consome a própria saída é um laço)."""
+    """Aresta produtor -> consumidor, por índice, mais as arestas `after` (um laço é um ciclo)."""
     producers = _producers(flow)
+    by_id: dict[str, list[int]] = defaultdict(list)
+    for i, node in enumerate(flow.nodes):
+        by_id[node.id].append(i)
     edges: dict[int, set[int]] = {i: set() for i in range(len(flow.nodes))}
+    for j, node in enumerate(flow.nodes):
+        for node_id in node.after:
+            for i in by_id.get(node_id, ()):
+                edges[i].add(j)
     for j, node in enumerate(flow.nodes):
         for path in node.inputs:
             for i in producers.get(path, ()):
@@ -64,7 +71,7 @@ def _cycle_errors(flow: Flow, edges: dict[int, set[int]]) -> list[str]:
     for cycle in _find_cycles(flow, edges):
         ids = [flow.nodes[i].id for i in cycle]
         errors.append(
-            f"node '{ids[0]}': field 'inputs': cycle {' -> '.join(repr(i) for i in ids)}"
+            f"node '{ids[0]}': field 'inputs/after': cycle {' -> '.join(repr(i) for i in ids)}"
         )
     return errors
 
@@ -84,6 +91,11 @@ def check_flow(flow: Flow) -> list[str]:
             owners = ", ".join(f"node '{flow.nodes[i].id}'" for i in indexes)
             first = flow.nodes[indexes[0]].id
             errors.append(f"node '{first}': field 'outputs': '{path}' is produced more than once ({owners})")
+
+    for node in flow.nodes:
+        for node_id in node.after:
+            if node_id not in seen_ids:
+                errors.append(f"node '{node.id}': field 'after': unknown node id '{node_id}'")
 
     declared = set(flow.run_inputs)
     for path in sorted(declared & producers.keys()):

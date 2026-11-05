@@ -56,6 +56,7 @@ nodes:
     agent: {harness: claude, profile: ambient, model: haiku, effort: low, skills: []}
     prompt: ../prompts/prp-commit.md
     inputs: [".claude/PRPs/reports/${slug}-report.md"]
+    after: [review] # a revisão (se rodar) bloqueia o commit; pulada, conta como satisfeita
     outputs: [".claude/PRPs/reports/${slug}-commit.md"] # recibo com o hash do commit
     gate: none
     when: null

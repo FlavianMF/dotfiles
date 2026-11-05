@@ -35,3 +35,9 @@ def test_ecc_dev_execution_order_is_declaration_order():
 
     flow = load_flow(ECC_DEV, slug="demo")
     assert [n.id for n in execution_order(flow)] == ["prd", "plan", "implement", "review", "commit", "pr"]
+
+
+def test_commit_runs_after_review():
+    flow = load_flow(ECC_DEV, slug="demo")
+    assert flow.node("commit").after == ("review",)
+    assert all(n.after == () for n in flow.nodes if n.id != "commit")

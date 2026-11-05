@@ -213,6 +213,15 @@ def _parse_node(raw: Any, index: int, slug: str, base: str, errors: list[str]) -
         except WhenError as exc:
             c.add("when", f"invalid expression {_fmt(when)}: {exc}")
 
+    after = raw.get("after")
+    if after is None:
+        after = []
+    if not isinstance(after, list) or not all(isinstance(i, str) and NODE_ID_RE.fullmatch(i) for i in after):
+        c.add("after", f"must be a list of node ids, got {_fmt(after)}")
+        after = []
+    elif len(set(after)) != len(after):
+        c.add("after", f"duplicate ids in {_fmt(after)}")
+
     agent = _parse_agent(c, raw["agent"]) if "agent" in raw else None
     on_fail = _parse_on_fail(c, raw["on_fail"]) if "on_fail" in raw else None
     inputs = _resolve_paths(c, "inputs", raw["inputs"], slug) if "inputs" in raw else ()
@@ -232,6 +241,7 @@ def _parse_node(raw: Any, index: int, slug: str, base: str, errors: list[str]) -
         when=when,
         context=raw["context"],
         on_fail=on_fail,  # type: ignore[arg-type]
+        after=tuple(after),
     )
 
 

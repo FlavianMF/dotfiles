@@ -203,3 +203,41 @@ def test_conditional_producer_nobody_consumes_is_fine(write_flow, node):
         "nodes": [node("a", ["seed.md"], ["a.md"], when="sensitive"), node("b", ["seed.md"], ["b.md"])],
     }
     validate_flow(flow_of(write_flow, data))
+
+
+def test_after_unknown_node_id(write_flow, node):
+    data = {"name": "x", "nodes": [node("a", [], ["a.md"], after=["ghost"])]}
+    errs = errors_of(write_flow, data)
+    assert any("node 'a'" in e and "field 'after'" in e and "ghost" in e for e in errs), errs
+
+
+def test_after_orders_nodes_without_data_dependency(write_flow, node):
+    data = {
+        "name": "x",
+        "nodes": [node("commit", [], ["c.md"], after=["review"]), node("review", [], ["r.md"], when="sensitive")],
+    }
+    assert [n.id for n in execution_order(flow_of(write_flow, data))] == ["review", "commit"]
+
+
+def test_after_cycle(write_flow, node):
+    data = {
+        "name": "x",
+        "nodes": [node("a", [], ["a.md"], after=["b"]), node("b", [], ["b.md"], after=["a"])],
+    }
+    errs = errors_of(write_flow, data)
+    cyc = [e for e in errs if "cycle" in e]
+    assert cyc and "'a'" in cyc[0] and "'b'" in cyc[0], errs
+
+
+def test_after_self_reference_is_a_cycle(write_flow, node):
+    data = {"name": "x", "nodes": [node("a", [], ["a.md"], after=["a"])]}
+    errs = errors_of(write_flow, data)
+    assert any("node 'a'" in e and "cycle" in e for e in errs), errs
+
+
+def test_after_mixes_with_data_edges_in_cycle(write_flow, node):
+    data = {
+        "name": "x",
+        "nodes": [node("a", ["b.md"], ["a.md"]), node("b", [], ["b.md"], after=["a"])],
+    }
+    assert any("cycle" in e for e in errors_of(write_flow, data))
