@@ -7,7 +7,8 @@ Contrato com T3/T4:
     from engine.validate import execution_order
     for node in execution_order(flow): ...                # ordem topológica estável
 
-Cada `Node` traz caminhos de `inputs`/`outputs` relativos à raiz do repo, sem `${slug}`.
+Cada `Node` traz `inputs`/`outputs` relativos à raiz do repo, sem `${slug}`. `Node.prompt` é
+absoluto (resolvido a partir do diretório do YAML), então não depende do cwd.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 MODES = ("auto", "manual")
 GATES = ("none", "human")
@@ -62,7 +64,7 @@ class Node:
     title: str
     mode: str  # auto | manual
     agent: AgentSpec
-    prompt: str
+    prompt: str  # caminho absoluto, resolvido a partir do diretório do YAML
     inputs: tuple[str, ...]  # caminhos já resolvidos
     outputs: tuple[str, ...]  # caminhos já resolvidos
     gate: str  # none | human
@@ -75,6 +77,7 @@ class Node:
 class Flow:
     name: str
     slug: str
+    source: Path  # caminho absoluto do YAML de origem
     run_inputs: tuple[str, ...]  # caminhos que o run fornece (resolvidos)
     nodes: tuple[Node, ...]  # na ordem de declaração do YAML
 

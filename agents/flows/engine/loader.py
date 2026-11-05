@@ -7,6 +7,7 @@ Levanta `FlowError` (com todos os problemas) se o YAML ou o grafo forem inválid
 
 from __future__ import annotations
 
+import os
 import posixpath
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -89,12 +90,14 @@ def _resolve_path(c: _Collector, field: str, raw: Any, slug: str) -> str | None:
     return _safe_relpath(c, field, raw.replace(_SLUG_PLACEHOLDER, slug), raw)
 
 
-def _safe_relpath(c: _Collector, field: str, path: str, shown: str) -> str | None:
+def _safe_relpath(
+    c: _Collector, field: str, path: str, shown: str, *, allow_parent: bool = False
+) -> str | None:
     if (
         path.startswith("/")
         or "\\" in path
         or "\0" in path
-        or ".." in PurePosixPath(path).parts
+        or (not allow_parent and ".." in PurePosixPath(path).parts)
         or posixpath.normpath(path) == "."
     ):
         c.add(field, f"path {_fmt(shown)} must be a relative file path that stays inside the repo root")
@@ -161,7 +164,7 @@ def _parse_on_fail(c: _Collector, raw: Any) -> OnFail | None:
     return OnFail(retry, raw["then"]) if ok else None
 
 
-def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | None:
+def _parse_node(raw: Any, index: int, slug: str, base: str, errors: list[str]) -> Node | None:
     node_id = raw.get("id") if isinstance(raw, dict) else None
     label = f"node '{node_id}'" if isinstance(node_id, str) and NODE_ID_RE.fullmatch(node_id) else f"node #{index}"
     c = _Collector(label, errors)
@@ -181,11 +184,15 @@ def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | No
 
     if "title" in raw and not _is_str(raw["title"]):
         c.add("title", f"must be a non-empty string, got {_fmt(raw['title'])}")
+    prompt = None
     if "prompt" in raw:
         if not _is_str(raw["prompt"]):
             c.add("prompt", f"must be a non-empty string, got {_fmt(raw['prompt'])}")
         else:
-            _safe_relpath(c, "prompt", raw["prompt"], raw["prompt"])
+            # `..` vale: o YAML fica em flows/ e os prompts em ../prompts/.
+            rel = _safe_relpath(c, "prompt", raw["prompt"], raw["prompt"], allow_parent=True)
+            if rel is not None:
+                prompt = os.path.normpath(os.path.join(base, rel))
 
     mode = raw.get("mode", OPTIONAL_NODE_FIELDS["mode"])
     _expect_enum(c, "mode", mode, MODES)
@@ -213,7 +220,7 @@ def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | No
         title=raw["title"],
         mode=mode,
         agent=agent,  # type: ignore[arg-type]
-        prompt=raw["prompt"],
+        prompt=prompt,  # type: ignore[arg-type]
         inputs=inputs,
         outputs=outputs,
         gate=raw["gate"],
@@ -223,8 +230,12 @@ def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | No
     )
 
 
-def parse_flow(data: Any, slug: str) -> Flow:
-    """Aplica o schema a um dict já lido do YAML e resolve `${slug}`. Não checa o grafo."""
+def parse_flow(data: Any, slug: str, source: Path) -> Flow:
+    """Aplica o schema a um dict já lido do YAML e resolve `${slug}`. Não checa o grafo.
+
+    `source` é o caminho do YAML; `prompt` vira caminho absoluto a partir do diretório dele.
+    """
+    source = Path(os.path.abspath(source))
     errors: list[str] = []
     if not isinstance(slug, str) or not SLUG_RE.fullmatch(slug):
         errors.append(f"flow: field 'slug': invalid slug {_fmt(slug)} (expected {SLUG_RE.pattern})")
@@ -245,12 +256,12 @@ def parse_flow(data: Any, slug: str) -> Flow:
         c.add("nodes", f"must be a non-empty list, got {_fmt(raw_nodes)}")
     else:
         for index, raw in enumerate(raw_nodes, start=1):
-            node = _parse_node(raw, index, slug, errors)
+            node = _parse_node(raw, index, slug, str(source.parent), errors)
             if node is not None:
                 nodes.append(node)
     if errors:
         raise FlowError(errors)
-    return Flow(name=data["name"], slug=slug, run_inputs=run_inputs, nodes=tuple(nodes))
+    return Flow(name=data["name"], slug=slug, source=source, run_inputs=run_inputs, nodes=tuple(nodes))
 
 
 def load_flow(path: str | Path, *, slug: str, validate: bool = True) -> Flow:
@@ -263,7 +274,7 @@ def load_flow(path: str | Path, *, slug: str, validate: bool = True) -> Flow:
         data = yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506 (SafeLoader subclass)
     except yaml.YAMLError as exc:
         raise FlowError(f"flow: invalid YAML in {path}: {exc}") from exc
-    flow = parse_flow(data, slug)
+    flow = parse_flow(data, slug, Path(path))
     if validate:
         validate_flow(flow)
     return flow

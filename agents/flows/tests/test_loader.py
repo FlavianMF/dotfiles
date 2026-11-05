@@ -1,4 +1,5 @@
 import copy
+import os
 
 import pytest
 
@@ -251,7 +252,7 @@ def test_node_id_rejects_trailing_newline(write_flow, flow_data):
     assert any("node #2" in e and "field 'id'" in e for e in errs), errs
 
 
-@pytest.mark.parametrize("bad", ["/etc/passwd", "../../x.md", "a\\b.md", "bad\x00.md", "."])
+@pytest.mark.parametrize("bad", ["/etc/passwd", "a\\b.md", "bad\x00.md", "."])
 def test_unsafe_prompt_path(write_flow, flow_data, bad):
     flow_data["nodes"][1]["prompt"] = bad
     errs = errors_of(write_flow, flow_data)
@@ -290,3 +291,30 @@ def test_deeply_nested_when_is_a_flow_error(write_flow, flow_data):
     flow_data["nodes"][1]["when"] = "(" * 400 + "sensitive" + ")" * 400
     errs = errors_of(write_flow, flow_data)
     assert any("node 'b'" in e and "field 'when'" in e for e in errs), errs
+
+
+def test_prompt_resolved_against_yaml_directory(write_flow, flow_data, tmp_path, monkeypatch):
+    path = write_flow(flow_data)
+    monkeypatch.chdir("/")
+    flow = load_flow(path, slug="s")
+    assert flow.source == path
+    assert flow.nodes[0].prompt == str(tmp_path / "prompts" / "a.md")
+    assert all(os.path.isabs(n.prompt) for n in flow.nodes)
+
+
+def test_relative_yaml_path_gives_absolute_source_and_prompt(write_flow, flow_data, tmp_path, monkeypatch):
+    write_flow(flow_data)
+    monkeypatch.chdir(tmp_path)
+    flow = load_flow("flow.yaml", slug="s")
+    assert flow.source == tmp_path / "flow.yaml"
+    assert flow.nodes[0].prompt == str(tmp_path / "prompts" / "a.md")
+
+
+def test_prompt_may_point_to_a_sibling_directory(write_flow, flow_data, tmp_path):
+    flow_data["nodes"][0]["prompt"] = "../prompts/a.md"
+    assert load(write_flow, flow_data).nodes[0].prompt == str(tmp_path.parent / "prompts" / "a.md")
+
+
+def test_prompt_is_normalized(write_flow, flow_data, tmp_path):
+    flow_data["nodes"][0]["prompt"] = "./prompts//a.md"
+    assert load(write_flow, flow_data).nodes[0].prompt == str(tmp_path / "prompts" / "a.md")

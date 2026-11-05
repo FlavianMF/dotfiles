@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from engine.loader import load_flow
 
-from conftest import ECC_DEV
+from conftest import ECC_DEV, FLOWS_DIR
 
 
 def test_ecc_dev_loads_with_six_phases():
@@ -20,7 +22,7 @@ def test_ecc_dev_loads_with_six_phases():
     assert by_id["commit"].agent.model == "haiku" and by_id["commit"].gate == "none"
     assert by_id["pr"].gate == "human"
     for n in flow.nodes:
-        assert n.prompt.startswith("prompts/prp-") and n.prompt.endswith(".md")
+        assert Path(n.prompt) == FLOWS_DIR / "prompts" / f"prp-{n.id}.md"
 
 
 def test_ecc_dev_passes_graph_validation():

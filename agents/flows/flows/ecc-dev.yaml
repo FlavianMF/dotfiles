@@ -1,5 +1,6 @@
 # Fluxo piloto ecc-dev (plano v1, seção 3).
 # Modelo, esforço e perfil são ponto de partida: troque aqui sem mexer no motor.
+# `prompt` é relativo a este arquivo (os prompts ficam em agents/flows/prompts/).
 # `${slug}` vem do parâmetro de entrada do run. As ligações saem de inputs e outputs.
 name: ecc-dev
 run_inputs: []
@@ -9,7 +10,7 @@ nodes:
     title: PRD do trabalho
     mode: manual # roda na sua sessão com /prp-prd; o motor espera o arquivo e a aprovação
     agent: {harness: claude, profile: ambient, model: sonnet, effort: high, skills: []}
-    prompt: prompts/prp-prd.md
+    prompt: ../prompts/prp-prd.md
     inputs: []
     outputs: [".claude/PRPs/prds/${slug}.prd.md"]
     gate: human
@@ -20,7 +21,7 @@ nodes:
   - id: plan
     title: Plano de implementação
     agent: {harness: claude, profile: ambient, model: sonnet, effort: medium, skills: []}
-    prompt: prompts/prp-plan.md
+    prompt: ../prompts/prp-plan.md
     inputs: [".claude/PRPs/prds/${slug}.prd.md"]
     outputs: [".claude/PRPs/plans/${slug}.plan.md"]
     gate: human
@@ -31,7 +32,7 @@ nodes:
   - id: implement
     title: Implementação com testes
     agent: {harness: claude, profile: ambient, model: sonnet, effort: high, skills: []}
-    prompt: prompts/prp-implement.md
+    prompt: ../prompts/prp-implement.md
     inputs: [".claude/PRPs/plans/${slug}.plan.md"]
     outputs: [".claude/PRPs/reports/${slug}-report.md"] # o código vai para o repo; o relatório prova o fim
     gate: none # os testes são o portão
@@ -42,7 +43,7 @@ nodes:
   - id: review
     title: Revisão a frio
     agent: {harness: antigravity, profile: ambient, model: claude-opus-5.5, effort: high, skills: []}
-    prompt: prompts/prp-review.md
+    prompt: ../prompts/prp-review.md
     inputs: [".claude/PRPs/reports/${slug}-report.md"]
     outputs: [".claude/PRPs/reviews/${slug}-review.md"] # lista de achados
     gate: none
@@ -53,7 +54,7 @@ nodes:
   - id: commit
     title: Commit local
     agent: {harness: claude, profile: ambient, model: haiku, effort: low, skills: []}
-    prompt: prompts/prp-commit.md
+    prompt: ../prompts/prp-commit.md
     inputs: [".claude/PRPs/reports/${slug}-report.md"]
     outputs: [".claude/PRPs/reports/${slug}-commit.md"] # recibo com o hash do commit
     gate: none
@@ -64,7 +65,7 @@ nodes:
   - id: pr
     title: Pull request
     agent: {harness: claude, profile: ambient, model: haiku, effort: low, skills: []}
-    prompt: prompts/prp-pr.md
+    prompt: ../prompts/prp-pr.md
     inputs: [".claude/PRPs/reports/${slug}-commit.md"]
     outputs: [".claude/PRPs/reports/${slug}-pr.md"] # URL do PR
     gate: human # você aprova antes de abrir
