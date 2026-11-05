@@ -17,7 +17,8 @@ def test_ecc_dev_loads_with_six_phases():
     assert by_id["plan"].outputs == (".claude/PRPs/plans/demo.plan.md",)
     assert by_id["plan"].inputs == (".claude/PRPs/prds/demo.prd.md",)
     assert by_id["implement"].gate == "none" and by_id["implement"].agent.effort == "high"
-    assert by_id["review"].agent.harness == "antigravity"
+    assert by_id["review"].agent.harness == "claude"
+    assert by_id["review"].agent.model == "opus" and by_id["review"].agent.effort == "high"
     assert by_id["review"].gate == "human"
     assert by_id["review"].when == "diff_lines > 150 or sensitive"
     assert by_id["commit"].agent.model == "haiku" and by_id["commit"].gate == "none"
@@ -42,3 +43,8 @@ def test_commit_runs_after_review():
     flow = load_flow(ECC_DEV, slug="demo")
     assert flow.node("commit").after == ("review",)
     assert all(n.after == () for n in flow.nodes if n.id != "commit")
+
+
+def test_every_node_uses_the_claude_profile():
+    flow = load_flow(ECC_DEV, slug="demo")
+    assert {n.agent.profile for n in flow.nodes} == {"6b0bf0d5-a512-4d98-9f8c-5387a980777a"}
