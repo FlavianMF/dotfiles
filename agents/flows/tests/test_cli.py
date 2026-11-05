@@ -260,6 +260,29 @@ def test_phase_reports_a_cli_failure_with_exit_1(cenv):
     assert code == 1 and "boom" in err
 
 
+def test_phase_archives_the_child_when_the_send_fails(cenv):
+    cenv.fake.update(fail={"send": "boom"})
+    code, _, err = cenv.main("phase", "plan", "--slug", "feat-x")
+    assert code == 1 and "boom" in err
+    (child,) = cenv.fake.agents.values()
+    assert child["archived"]
+
+
+def test_phase_archives_the_child_when_the_wait_fails(cenv):
+    cenv.fake.update(fail={"transcript": "boom"})
+    cenv.flow(cenv.node("a"))
+    code, _, err = cenv.main("phase", "a", "--flow", str(cenv.flow_path), "--slug", "feat-x", "--wait")
+    assert code == 1 and "boom" in err
+    (child,) = cenv.fake.agents.values()
+    assert child["archived"]
+
+
+def test_phase_keeps_the_original_error_when_the_archive_also_fails(cenv):
+    cenv.fake.update(fail={"send": "boom", "archive": "no-archive"})
+    code, _, err = cenv.main("phase", "plan", "--slug", "feat-x")
+    assert code == 1 and "boom" in err and "no-archive" not in err
+
+
 def test_without_the_traycer_environment_the_command_fails_with_exit_2(cenv, monkeypatch):
     for key in ("TRAYCER_EPIC_ID", "TRAYCER_AGENT_ID"):
         monkeypatch.delenv(key, raising=False)
