@@ -165,3 +165,41 @@ def test_run_input_also_produced_by_a_node(write_flow, node):
     data = {"name": "x", "run_inputs": ["o.md"], "nodes": [node("a", [], ["o.md"])]}
     errs = errors_of(write_flow, data)
     assert any("node 'a'" in e and "field 'outputs'" in e and "run_inputs" in e for e in errs), errs
+
+
+def test_input_only_from_conditional_producer_is_rejected(write_flow, node):
+    data = {
+        "name": "x",
+        "run_inputs": ["seed.md"],
+        "nodes": [
+            node("review", ["seed.md"], ["review.md"], when="diff_lines > 150"),
+            node("commit", ["review.md"], ["commit.md"]),
+        ],
+    }
+    errs = errors_of(write_flow, data)
+    assert any(
+        "node 'commit'" in e and "field 'inputs'" in e and "node 'review'" in e and "conditional" in e
+        for e in errs
+    ), errs
+
+
+def test_conditional_consumer_of_conditional_producer_is_also_rejected(write_flow, node):
+    data = {
+        "name": "x",
+        "run_inputs": ["seed.md"],
+        "nodes": [
+            node("a", ["seed.md"], ["a.md"], when="sensitive"),
+            node("b", ["a.md"], ["b.md"], when="sensitive"),
+        ],
+    }
+    errs = errors_of(write_flow, data)
+    assert any("node 'b'" in e and "node 'a'" in e and "conditional" in e for e in errs), errs
+
+
+def test_conditional_producer_nobody_consumes_is_fine(write_flow, node):
+    data = {
+        "name": "x",
+        "run_inputs": ["seed.md"],
+        "nodes": [node("a", ["seed.md"], ["a.md"], when="sensitive"), node("b", ["seed.md"], ["b.md"])],
+    }
+    validate_flow(flow_of(write_flow, data))

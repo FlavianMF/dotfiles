@@ -37,14 +37,14 @@ def node():
 
 @pytest.fixture
 def flow_data():
-    """Fluxo válido de 3 nós: a -> b -> c, com uma entrada do run."""
+    """Fluxo válido de 3 nós: a -> b e a -> c, com uma entrada do run. b é condicional."""
     return {
         "name": "demo",
         "run_inputs": ["notes/${slug}.idea.md"],
         "nodes": [
             make_node("a", ["notes/${slug}.idea.md"], ["out/${slug}.a.md"], mode="manual", gate="human"),
             make_node("b", ["out/${slug}.a.md"], ["out/${slug}.b.md"], when="diff_lines > 150 or sensitive"),
-            make_node("c", ["out/${slug}.b.md"], ["out/${slug}.c.md"]),
+            make_node("c", ["out/${slug}.a.md"], ["out/${slug}.c.md"]),  # b é condicional: ninguém consome a saída dele
         ],
     }
 

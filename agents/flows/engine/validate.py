@@ -1,7 +1,8 @@
 """Checagens de grafo do fluxo (já com `${slug}` resolvido) e o CLI `flow-validate`.
 
 Regras: ids únicos; toda entrada é saída de outro nó ou está em `run_inputs`;
-nenhuma saída aparece em dois nós; sem ciclo. Os erros citam o nó e o campo.
+nenhuma saída aparece em dois nós; nenhuma entrada depende só de nó condicional (`when`);
+sem ciclo. Os erros citam o nó e o campo.
 
     python3 -m engine.validate flows/ecc-dev.yaml [--slug SLUG]
 """
@@ -94,6 +95,12 @@ def check_flow(flow: Flow) -> list[str]:
                 errors.append(
                     f"node '{node.id}': field 'inputs': '{path}' is not an output of any node "
                     "nor declared in run_inputs"
+                )
+            elif path in producers and all(flow.nodes[i].when is not None for i in producers[path]):
+                skipped = ", ".join(f"node '{flow.nodes[i].id}'" for i in producers[path])
+                errors.append(
+                    f"node '{node.id}': field 'inputs': '{path}' is produced only by conditional "
+                    f"{skipped} (when), which may be skipped; node '{node.id}' would lose its input"
                 )
 
     errors.extend(_cycle_errors(flow, _edges(flow)))
