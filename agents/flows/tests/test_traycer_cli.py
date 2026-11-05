@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from engine.traycer_cli import Adapter, AgentNotFound, CliError, TurnTimeout
@@ -408,3 +410,48 @@ def test_prompt_count_counts_the_messages_the_child_received(adapter, fake):
     assert adapter.prompt_count(child.agent_id) == 1  # chegou, mesmo sem resposta ainda
     adapter.send(child.agent_id, "dois")
     assert adapter.prompt_count(child.agent_id) == 2
+
+
+_FLAKY = """import json, sys
+from pathlib import Path
+counter, fails, error = Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+n = int(counter.read_text()) if counter.exists() else 0
+counter.write_text(str(n + 1))
+if n < fails:
+    sys.stderr.write(error + "\\n")
+    sys.exit(1)
+print(json.dumps({"type": "result", "status": "ok", "data": {"rateLimits": {"fiveHour": {"usedPercent": 7}}}}))
+"""
+_X_ERROR = "[1:1105/1:ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:257] Missing X server or $DISPLAY"
+
+
+def _flaky_adapter(tmp_path, clock, fails, error=_X_ERROR):
+    script = tmp_path / "flaky.py"
+    script.write_text(_FLAKY)
+    counter = tmp_path / "count"
+    adapter = Adapter(
+        executable=[sys.executable, str(script), str(counter), str(fails), error], env=ENV, sleep=clock.sleep, clock=clock.time
+    )
+    return adapter, counter
+
+
+def test_call_retries_when_the_cli_dies_at_startup(tmp_path, clock):
+    adapter, counter = _flaky_adapter(tmp_path, clock, fails=2)
+    assert adapter.rate_limit_used_percent("claude", "p") == 7
+    assert counter.read_text() == "3"
+    assert clock.sleeps == [1.0, 2.0]
+
+
+def test_call_gives_up_after_three_startup_failures(tmp_path, clock):
+    adapter, counter = _flaky_adapter(tmp_path, clock, fails=99)
+    with pytest.raises(CliError, match="Missing X server"):
+        adapter.rate_limit_used_percent("claude", "p")
+    assert counter.read_text() == "3"
+
+
+def test_call_does_not_retry_other_failures(tmp_path, clock):
+    adapter, counter = _flaky_adapter(tmp_path, clock, fails=99, error="boom")
+    with pytest.raises(CliError):
+        adapter.rate_limit_used_percent("claude", "p")
+    assert counter.read_text() == "1"
+    assert clock.sleeps == []
