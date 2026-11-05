@@ -12,6 +12,10 @@ Execute o plano passo a passo e valide cada mudança na hora. Não acumule estad
 
 **Regra de ouro:** se uma validação falhar, corrija antes de seguir.
 
+## Escopo
+
+Implemente só o escopo do `{{input}}`: as tarefas do plano e os arquivos de "Files to Change". Se o PRD de origem tem mais fases, não implemente nenhuma delas. Se uma tarefa pedir um arquivo fora dessa lista, pare e registre o motivo no relatório em vez de criar o arquivo.
+
 ## 0. Detectar o projeto
 
 Ache o gerenciador de pacotes e os scripts de validação (type-check, lint, teste, build):

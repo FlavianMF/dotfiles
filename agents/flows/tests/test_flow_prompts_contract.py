@@ -66,3 +66,10 @@ def test_pr_child_creates_no_tag_release_or_extra_push_after_the_pr():
     after = _section(_prompt("pr"), "8. Depois do PR")
     for term in ("tag", "release", "push", "CI", "reporte", "pergunte"):
         assert term in after, f"a seção pós-PR não cita '{term}'"
+
+
+@pytest.mark.parametrize("node_id", ["plan", "implement"])
+def test_plan_and_implement_stay_inside_the_scope_of_the_input(node_id):
+    rules = _section(_prompt(node_id), "Escopo")
+    assert "{{input}}" in rules
+    assert "mais fases" in rules
