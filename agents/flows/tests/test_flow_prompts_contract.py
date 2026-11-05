@@ -43,3 +43,33 @@ def test_prompt_blocks_cite_node_paths(node_id, kind):
     block = _block(text, "Entrada" if kind == "inputs" else "Saída")
     for path in getattr(node, kind):
         assert _mentions(block, path), f"nó '{node_id}': {kind[:-1]} '{path}' ausente do bloco"
+
+
+def _prompt(node_id: str) -> str:
+    return Path(NODES[node_id].prompt).read_text(encoding="utf-8")
+
+
+def _section(text: str, heading: str) -> str:
+    match = re.search(rf"^## {re.escape(heading)}.*?(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    assert match, f"seção '{heading}' ausente"
+    return match.group(0)
+
+
+def test_pr_stop_shows_commits_files_and_lines_against_the_base_and_asks_when_large():
+    stop = _section(_prompt("pr"), "4. PARADA HUMANA")
+    for term in ("commits", "arquivos", "linhas", "150 linhas", "20 commits", "pergunte"):
+        assert term in stop, f"a parada do pr não cita '{term}'"
+    assert "git diff --shortstat origin/<base>..HEAD" in _prompt("pr")
+
+
+def test_pr_child_creates_no_tag_release_or_extra_push_after_the_pr():
+    after = _section(_prompt("pr"), "8. Depois do PR")
+    for term in ("tag", "release", "push", "CI", "reporte", "pergunte"):
+        assert term in after, f"a seção pós-PR não cita '{term}'"
+
+
+@pytest.mark.parametrize("node_id", ["plan", "implement"])
+def test_plan_and_implement_stay_inside_the_scope_of_the_input(node_id):
+    rules = _section(_prompt(node_id), "Escopo")
+    assert "{{input}}" in rules
+    assert "mais fases" in rules

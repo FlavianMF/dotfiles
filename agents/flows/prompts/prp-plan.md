@@ -12,6 +12,10 @@ Crie um plano detalhado e autocontido. Ele captura os padrões, as convenções 
 
 **Regra de ouro:** se você precisaria buscar no código durante a implementação, registre esse conhecimento agora, no plano.
 
+## Escopo
+
+Planeje só o que o `{{input}}` pede. Se o PRD tem mais fases, planeje só a fase escolhida na seção 0. Escreva as outras fases, e qualquer extra que ninguém pediu (CI, release, scripts de versão), em "NOT Building". Não planeje o que o PRD lista para depois.
+
 ## 0. Detectar a entrada
 
 | Entrada em `{{input}}` | Ação |

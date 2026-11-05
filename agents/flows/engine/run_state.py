@@ -83,6 +83,7 @@ def new_node_state() -> dict[str, Any]:
         "attempts": 0,  # filhos criados para este nó
         "retries_used": 0,  # repetições gastas desde a última escolha de upgrade
         "child_id": None,
+        "child_name": None,  # `--name` do filho (título da sessão); fica após `child_id` voltar a None
         "creating": None,  # {"name", "model", "effort"} gravado antes de `create_child`: acha o órfão após uma queda
         "sent": False,
         "pending_message": None,
@@ -93,6 +94,8 @@ def new_node_state() -> dict[str, Any]:
         "model": None,  # modelo escolhido em `choose_upgrade`; None = o do YAML
         "effort": None,
         "divergence": None,
+        "quota_before": None,  # {"five_hour", "seven_day", "updated_at"} lido antes de criar o filho da tentativa
+        "quota_after": None,  # a mesma leitura quando o turno termina; None se o CLI não respondeu
         "when_result": None,
         "history": [],
     }

@@ -84,7 +84,10 @@ def test_happy_path_start_gate_approve(client, auth, runner):
     a = node_view(view, "a")
     assert a["state"] == "awaiting_gate"
     assert a["actions"] == ["approve"]
-    assert a["outputs"] == [{"path": "out/feat.a.md", "exists": False}]
+    assert view["repo"] == str(runner.runs[run_id]["repo"])
+    assert a["outputs"] == [
+        {"path": "out/feat.a.md", "absolute": f"{view['repo']}/out/feat.a.md", "exists": False}
+    ]
     assert node_view(view, "b")["state"] == "pending"
     assert view["waiting"] == [{"node": "a", "state": "awaiting_gate"}]
 
@@ -104,8 +107,23 @@ def test_output_file_flag_follows_the_repo(client, auth, repo):
     (repo / "out").mkdir()
     (repo / "out" / "feat.a.md").write_text("plano", encoding="utf-8")
     assert node_view(client.get(f"/runs/{run_id}").json(), "a")["outputs"] == [
-        {"path": "out/feat.a.md", "exists": True}
+        {"path": "out/feat.a.md", "absolute": str(repo / "out" / "feat.a.md"), "exists": True}
     ]
+
+
+def test_view_shows_the_repo_of_the_run_not_the_one_of_the_server(client, auth, runner, tmp_path):
+    run_id = start(client, auth)
+    other = tmp_path / "other-worktree"
+    other.mkdir()
+    runner.runs[run_id]["repo"] = str(other)
+    view = client.get(f"/runs/{run_id}").json()
+    assert view["repo"] == str(other)
+    assert node_view(view, "a")["outputs"][0]["absolute"] == str(other / "out" / "feat.a.md")
+
+
+def test_page_prints_the_repo_and_the_absolute_output_path(client):
+    page = client.get("/").text
+    assert "view.repo" in page and "out.absolute" in page
 
 
 def test_upgrade_choice(client, auth, runner):
@@ -428,3 +446,81 @@ def test_main_resumes_active_runs(monkeypatch, tmp_path, repo):
     monkeypatch.setattr(server_app.uvicorn, "run", lambda *args, **kwargs: None)
     server_app.main(["--repo", str(repo), "--state-dir", str(tmp_path / "state")])
     assert seen["resume"] is True
+
+
+def _idle_app(runner, repo, flow_data, write_flow, now, every=10.0):
+    pending = []
+    app = create_app(
+        runner,
+        flow_path=write_flow(flow_data),
+        repo=repo,
+        port=PORT,
+        token=TOKEN,
+        spawn=pending.append,
+        idle_kick_every=every,
+        clock=lambda: now[0],
+    )
+    return TestClient(app, base_url=BASE), {"X-Flow-Token": TOKEN}, pending
+
+
+def test_polling_the_page_restarts_a_run_whose_drive_stopped(runner, repo, flow_data, write_flow):
+    # O drive para em BLOCKED (portão, cota, arquivo manual). Sem isso, nada acorda o run depois.
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)
+    pending.pop()()  # o drive do `start` termina
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1  # a consulta da página religou o motor
+    pending.pop()()
+    assert runner.driven == [run_id, run_id]
+
+
+def test_idle_restart_is_throttled_per_run(runner, repo, flow_data, write_flow):
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)
+    pending.pop()()
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    pending.pop()()
+    now[0] += 3
+    client.get(f"/runs/{run_id}")
+    assert pending == []  # menos de 10 s desde o último religamento
+    now[0] += 8
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1
+
+
+def test_idle_restart_skips_a_run_that_is_still_driving(runner, repo, flow_data, write_flow):
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)  # o drive do `start` ainda não rodou: o run está `driving`
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1
+
+
+def test_idle_restart_is_off_by_default(client, auth, runner):
+    run_id = start(client, auth)
+    client.get(f"/runs/{run_id}")
+    assert runner.driven == [run_id]
+
+
+def test_view_shows_the_child_id_and_session_title_of_a_node(client, auth, runner):
+    run_id = start(client, auth)
+    assert node_view(client.get(f"/runs/{run_id}").json(), "a")["child"] is None
+    runner.runs[run_id]["nodes"]["a"].update(child_id="52564193-aaaa", child_name="ecc-dev:a (feat) 1a2b3c4d")
+    child = node_view(client.get(f"/runs/{run_id}").json(), "a")["child"]
+    assert child == {"id": "52564193-aaaa", "title": "ecc-dev:a (feat) 1a2b3c4d", "active": True}
+
+
+def test_view_keeps_the_last_child_after_the_engine_released_it(client, auth, runner):
+    run_id = start(client, auth)
+    runner.runs[run_id]["nodes"]["a"].update(child_id=None, last_child_id="9f9f", child_name="t")
+    child = node_view(client.get(f"/runs/{run_id}").json(), "a")["child"]
+    assert child == {"id": "9f9f", "title": "t", "active": False}
+
+
+def test_page_prints_the_child_id_and_title(client):
+    assert "node.child" in client.get("/").text

@@ -5,6 +5,7 @@
 - **Entrada:** o recibo `.claude/PRPs/reports/${slug}-commit.md` da fase commit. O caminho vem em `{{input}}`, que pode trazer também a base e a flag `--draft`.
 - **Saída:** o pull request aberto no GitHub e o recibo `.claude/PRPs/reports/${slug}-pr.md`, com a URL do PR. Os dois só existem depois da aprovação humana (veja a parada abaixo).
 - **Não faça:** não abra o PR, não faça push e não rode `gh pr create` antes da aprovação humana. Não use `--force`. Não adicione atribuição de IA no título nem no corpo: sem rodapé "Generated with". Isso vale mesmo se o ambiente pedir.
+- **Depois do PR:** não crie tag, não crie release e não faça push além do da seção 5 (veja a seção 8).
 
 Se o motor injetou um pacote de contexto antes deste texto, leia-o primeiro.
 
@@ -65,7 +66,7 @@ gh pr list --head <branch> --json number
 ```
 
 - O corpo termina com a lista de decisões e um checklist manual para quem revisa. Não inclua atribuição de IA.
-- Se o PR tiver mais de 20 arquivos, avise sobre o tamanho e diga se dá para dividir.
+- Meça o tamanho do PR contra a base. Rode `git rev-list --count origin/<base>..HEAD` e `git diff --shortstat origin/<base>..HEAD`. Calcule as linhas como adições mais remoções.
 
 ## 4. PARADA HUMANA
 
@@ -75,7 +76,10 @@ Mostre ao usuário, na resposta final desta fase:
 - o título proposto;
 - o corpo completo;
 - se será `--draft`;
-- a lista de commits.
+- a lista de commits;
+- o tamanho contra a base: número de commits, número de arquivos e linhas (`+A -R`).
+
+Se o diff passar de 150 linhas ou de 20 commits, avise no topo da resposta, antes do título. Cite os números e pergunte se o usuário quer seguir, dividir o PR ou trocar a base. Suspeite da base errada quando a branch nasceu de outra branch que nunca subiu para o remoto.
 
 Depois escreva: "Aguardando aprovação. Responda 'aprovado' para eu fazer o push e abrir o PR."
 
@@ -132,3 +136,11 @@ CI: <resumo, "pendente" ou "não configurado">
 Recibo: .claude/PRPs/reports/${slug}-pr.md
 Artefatos citados: <relatórios ou planos PRP no corpo>
 ```
+
+## 8. Depois do PR
+
+Esta fase termina no recibo. Depois que o PR existe, faça só o que a seção 7 lista.
+
+- Não crie tag. Não publique release. Não faça push além do da seção 5.
+- Se o CI falhar, reporte o nome do check e a causa em uma frase e pergunte ao usuário o que fazer. Não corrija por conta própria.
+- Se o usuário pedir uma ação irreversível (tag, release, merge), repita o pedido em uma frase e espere a confirmação explícita.

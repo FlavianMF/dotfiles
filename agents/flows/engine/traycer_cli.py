@@ -39,6 +39,10 @@ from typing import Any
 
 ENV_KEYS = ("HOME", "PATH", "TRAYCER_EPIC_ID", "TRAYCER_AGENT_ID")
 
+# O CLI às vezes morre ao iniciar (Electron sem display) antes de executar o comando. Repetir é seguro.
+STARTUP_FAILURES = ("Missing X server", "The platform failed to initialize")
+STARTUP_ATTEMPTS = 3
+
 _ASSISTANT_RE = re.compile(r"<assistant_response>\n(.*?)\n?</assistant_response>", re.DOTALL)
 _USER_RE = re.compile(r"<user_message>")
 _ROW_HEADER_RE = re.compile(r"^\[assistant row \|[^\n]*\]\n?")
@@ -145,6 +149,16 @@ class Adapter:
     # --- chamada ao CLI -------------------------------------------------------------------
 
     def _call(self, *args: str) -> dict[str, Any]:
+        for attempt in range(1, STARTUP_ATTEMPTS + 1):
+            try:
+                return self._call_once(*args)
+            except CliError as exc:
+                if attempt == STARTUP_ATTEMPTS or not any(m in str(exc) for m in STARTUP_FAILURES):
+                    raise
+                self._sleep(float(attempt))
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _call_once(self, *args: str) -> dict[str, Any]:
         argv = [*self._executable, *args, "--json"]
         try:
             proc = subprocess.run(  # noqa: S603 (argv fixo, sem shell)

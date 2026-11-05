@@ -67,6 +67,6 @@ O transcript pode não trazer uso de tokens. Meça pela cota do perfil, antes e 
 1. Antes do run, anote a cota: `python -m engine.cli status --no-advance --json` e o limite do perfil no Traycer.
 2. Rode o fluxo até o fim.
 3. Leia a cota de novo e subtraia. A diferença em `usedPercent` é o custo do run.
-4. Para o custo por fase, repita a leitura em cada parada humana. O arquivo `<run_id>.json` guarda os eventos com horário de cada nó.
+4. Para o custo por fase, rode `make flow-report RUN=<run_id>`. O motor grava `quota_before` (antes de criar o filho) e `quota_after` (ao fim do turno) em cada nó, e o relatório mostra os dois na coluna de cota. Cada leitura traz `updated_at`: se for igual nas duas, o CLI devolveu cache e a diferença não vale.
 
 A cota vem de cache curto: espere alguns minutos entre leituras.

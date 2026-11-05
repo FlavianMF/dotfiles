@@ -104,34 +104,49 @@ def _git_env() -> dict[str, str]:
     return env
 
 
-def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
-    """`diff_lines`: linhas adicionadas + removidas do trabalho não commitado (`git diff HEAD`).
+_FLOW_ARTIFACTS = ":(exclude).claude/PRPs"
 
-    Ignora `.claude/PRPs/` (os artefatos do próprio fluxo). Arquivos novos ainda não adicionados
-    ao índice não entram na conta, limite conhecido da v1. O git roda com ambiente mínimo e sem o
-    fsmonitor, o diff externo e o textconv do repo: um repo hostil não executa código aqui."""
-    proc = subprocess.run(
-        [
-            "git",
-            "-c",
-            "core.fsmonitor=false",  # o repo pode apontar o fsmonitor para um script: não o execute
-            "-C",
-            str(repo),
-            "diff",
-            "HEAD",
-            "--numstat",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--",
-            ".",
-            ":(exclude).claude/PRPs",
-        ],
+
+def _git(repo: str | os.PathLike[str], *args: str) -> subprocess.CompletedProcess:
+    """Roda o git com ambiente mínimo e sem o fsmonitor do repo (um repo hostil não executa código)."""
+    return subprocess.run(
+        ["git", "-c", "core.fsmonitor=false", "-C", str(repo), *args],  # o repo pode apontar o fsmonitor para um script
         env=_git_env(),
         capture_output=True,
         text=True,
+        errors="surrogateescape",  # nome de arquivo fora do UTF-8 não derruba a conta
         check=False,
         timeout=60,
     )
+
+
+def _untracked_lines(repo: str | os.PathLike[str]) -> int:
+    """Linhas dos arquivos novos ainda fora do índice (respeita `.gitignore`). Binário conta 0."""
+    proc = _git(repo, "ls-files", "-z", "--others", "--exclude-standard", "--", ".", _FLOW_ARTIFACTS)
+    if proc.returncode != 0:
+        raise RunError(f"git ls-files failed: {proc.stderr.strip()[:200]}")
+    total = 0
+    for name in proc.stdout.split("\0"):
+        if not name:
+            continue
+        path = Path(repo) / name
+        if path.is_symlink() or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\0" in data[:8000]:  # o git trata como binário
+            continue
+        total += data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+    return total
+
+
+def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
+    """`diff_lines`: linhas adicionadas + removidas do trabalho não commitado.
+
+    Soma `git diff HEAD` (arquivos rastreados) e as linhas dos arquivos novos ainda não adicionados
+    ao índice. Ignora `.claude/PRPs/` (os artefatos do próprio fluxo). O git roda com ambiente
+    mínimo e sem o fsmonitor, o diff externo e o textconv do repo: um repo hostil não executa
+    código aqui."""
+    proc = _git(repo, "diff", "HEAD", "--numstat", "--no-ext-diff", "--no-textconv", "--", ".", _FLOW_ARTIFACTS)
     if proc.returncode != 0:
         raise RunError(f"git diff failed: {proc.stderr.strip()[:200]}")
     total = 0
@@ -139,7 +154,24 @@ def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
         added, removed, _ = (line.split("\t", 2) + ["", "", ""])[:3]
         total += int(added) if added.isdigit() else 0  # binário aparece como "-"
         total += int(removed) if removed.isdigit() else 0
-    return {"diff_lines": total}
+    return {"diff_lines": total + _untracked_lines(repo)}
+
+
+_BRACKET_PREFIX_RE = re.compile(r"\[\d+:\d+/[^\]]*\]\s*")  # `[48213:1105/...:ERROR:file.cc(9)]` do Chromium
+_PID_RE = re.compile(r"\(?\bpid[ =:]*\d+\)?", re.IGNORECASE)
+BRIEF_MAX = 140
+
+
+def _brief(exc: object) -> str:
+    """Primeira linha útil do erro do CLI, sem prefixo do Chromium nem PIDs, em até `BRIEF_MAX` caracteres."""
+    lines = (line.strip() for line in str(exc).splitlines())
+    first = next((line for line in lines if line), "unknown error")
+    first = " ".join(_PID_RE.sub("", _BRACKET_PREFIX_RE.sub("", first)).split())
+    return first if len(first) <= BRIEF_MAX else first[: BRIEF_MAX - 1] + "…"
+
+
+def _quota_reading(limits: Any) -> dict[str, Any]:
+    return {"five_hour": limits.five_hour, "seven_day": limits.seven_day, "updated_at": limits.updated_at}
 
 
 class Runner:
@@ -256,6 +288,8 @@ class Runner:
             if ns["state"] != "awaiting_gate":
                 raise RunError(f"node '{node_id}' is {ns['state']}, not awaiting_gate: nothing to approve")
             ns["gate_approved"] = True
+            if ns["child_id"]:  # o filho ainda trabalha depois da aprovação (push e PR no `pr`)
+                self._read_quota_after(node, ns)
             self._to(state, node, "done", "approved by a human")
             self._release(state, node, ns)
             self._save(state)
@@ -380,7 +414,7 @@ class Runner:
             variables = dict(fixed) if "diff_lines" in fixed else {**self._provider(Path(state["repo"])), **fixed}
             result = evaluate_when(node.when or "", variables)
         except Exception as exc:  # noqa: BLE001 (WhenError, git ou provedor injetado: o nó falha, o motor não cai)
-            self._to(state, node, "aborted", f"cannot evaluate when {node.when!r}: {exc}")
+            self._to(state, node, "aborted", f"cannot evaluate when {node.when!r}: {_brief(exc)}")
             return False
         ns["when_result"] = result
         if not result:
@@ -422,25 +456,30 @@ class Runner:
         try:
             message = self._message(state, flow, node, ns)
         except (CliError, OSError) as exc:
-            return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+            return self._fail(state, flow, node, ns, f"cannot create the child: {_brief(exc)}")
         child = None
+        name = None
         if ns.get("creating"):  # queda entre `create_child` e o `_save`: procure o filho pelo nome
+            name = ns["creating"]["name"]
             try:
                 child = self._recover_orphan(ns)
             except CliError as exc:
-                ns["reason"] = f"cannot look for an orphan child: {exc}"
+                ns["reason"] = f"cannot look for an orphan child: {_brief(exc)}"
                 return None
         if child is None:
             try:
-                percent = self.adapter.rate_limit_used_percent(agent.harness, agent.profile)
+                limits = self.adapter.rate_limits(agent.harness, agent.profile)
             except CliError as exc:
-                return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {exc}")
+                return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {_brief(exc)}")
+            percent = limits.used_percent
             if percent is not None and percent > self._threshold:
                 return self._wait_quota(
                     state, node, ns, f"quota at {percent:g}% (limit {self._threshold:g}%) for {agent.harness}/{agent.profile}"
                 )
             name = f"{flow.name}:{node.id} ({state['run_id'][:12]}) {uuid.uuid4().hex[:8]}"
             ns["creating"] = {"name": name, "model": model, "effort": effort}
+            ns["quota_before"] = _quota_reading(limits)
+            ns["quota_after"] = None
             self._save(state)  # a marca fica no disco antes do `create_child`: uma queda deixa rastro
             try:
                 child = self.adapter.create_child(
@@ -453,10 +492,11 @@ class Runner:
                 )
             except (CliError, OSError) as exc:
                 ns["creating"] = None
-                return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+                return self._fail(state, flow, node, ns, f"cannot create the child: {_brief(exc)}")
         ns["creating"] = None
         ns.update(
             child_id=child.agent_id,
+            child_name=name,  # o título da sessão no Traycer: a página o mostra
             attempts=ns["attempts"] + 1,
             sent=False,
             snapshot=None,
@@ -518,7 +558,7 @@ class Runner:
             self._save(state)
             self.adapter.send(ns["child_id"], ns["pending_message"])
         except CliError as exc:
-            self._fail(state, flow, node, ns, f"cannot send the prompt: {exc}")
+            self._fail(state, flow, node, ns, f"cannot send the prompt: {_brief(exc)}")
             return
         ns["sent"] = True
         ns["pending_message"] = None
@@ -550,7 +590,7 @@ class Runner:
         except AgentNotFound:
             return self._fail(state, flow, node, ns, "the child agent is gone from the Task")
         except CliError as exc:
-            ns["reason"] = f"polling failed: {exc}"  # falha passageira do CLI: o timeout encerra se persistir
+            ns["reason"] = f"polling failed: {_brief(exc)}"  # falha passageira do CLI: o timeout encerra se persistir
         else:
             changed = self._outputs_changed(state, node, ns)
             if not info.active or info.archived:
@@ -565,11 +605,20 @@ class Runner:
                 return self._fail(state, flow, node, ns, "the child ended its turn without writing the outputs: " + ", ".join(node.outputs))
         elapsed = self._now() - (ns["sent_at"] or self._now())
         if elapsed > self._turn_timeout:
+            self._read_quota_after(node, ns)
             self._release(state, node, ns, stop=True)
             return self._fail(state, flow, node, ns, f"timeout: no turn result after {self._turn_timeout:g}s")
         return Step.WAITING
 
+    def _read_quota_after(self, node: Node, ns: dict[str, Any]) -> None:
+        """Grava a cota ao fim do turno. A leitura é só medição: se o CLI falhar, fica `None`."""
+        try:
+            ns["quota_after"] = _quota_reading(self.adapter.rate_limits(node.agent.harness, node.agent.profile))
+        except CliError:
+            ns["quota_after"] = None
+
     def _succeed(self, state: dict[str, Any], node: Node, ns: dict[str, Any]) -> Step:
+        self._read_quota_after(node, ns)
         if node.gate == "human":
             self._to(state, node, "awaiting_gate", "outputs written; waiting for human approval")
         else:
@@ -578,6 +627,8 @@ class Runner:
         return Step.PROGRESS
 
     def _fail(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any], reason: str) -> Step:
+        if ns["child_id"]:
+            self._read_quota_after(node, ns)
         self._release(state, node, ns, stop=True)
         if ns["state"] in ("pending", "awaiting_quota", "failed"):  # falhou ao criar o filho: a tentativa começou mesmo assim
             ns["attempts"] += 1
@@ -604,7 +655,7 @@ class Runner:
             try:
                 action(child_id)
             except CliError as exc:
-                add_event(state, node_id, f"could not {label} child {child_id}: {exc}", self._now())
+                add_event(state, node_id, f"could not {label} child {child_id}: {_brief(exc)}", self._now())
         ns.update(child_id=None, sent=False, snapshot=None, pending_message=None, replies_before=0, prompts_before=0, sent_at=None)
         ns["last_child_id"] = child_id
 

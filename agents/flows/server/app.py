@@ -28,6 +28,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -53,6 +54,7 @@ PAGE = Path(__file__).resolve().parent / "static" / "index.html"
 
 REASON_MAX = 300
 EVENTS_SHOWN = 20
+IDLE_KICK_EVERY = 10.0  # segundos entre dois religamentos de um run parado
 QUOTA_RE = re.compile(r"quota at [\d.]+% \(limit ([\d.]+)%\)")
 RUN_ID_PATTERN = RUN_ID_RE.pattern
 NODE_ID_PATTERN = NODE_ID_RE.pattern
@@ -131,7 +133,8 @@ class RunView:
                     "title": title,
                     "state": ns["state"],
                     "reason": reason,
-                    "outputs": [{"path": p, "exists": _is_file(repo, p)} for p in outputs],
+                    "outputs": [{"path": p, "absolute": str(repo / p), "exists": _is_file(repo, p)} for p in outputs],
+                    "child": _child(ns),
                     "quota_warning": _quota_warning(ns["state"], reason),
                     "actions": _actions(ns["state"]) if active else [],
                 }
@@ -141,6 +144,7 @@ class RunView:
             "status": state["status"],
             "flow": state.get("flow"),
             "slug": state.get("slug"),
+            "repo": str(repo),
             "nodes": nodes,
             "waiting": state.get("waiting", []),
             "events": state.get("events", [])[-EVENTS_SHOWN:],
@@ -152,6 +156,15 @@ def _is_file(repo: Path, relative: str) -> bool:
         return (repo / relative).is_file()
     except OSError:
         return False
+
+
+def _child(ns: dict[str, Any]) -> dict[str, Any] | None:
+    """O filho vivo do nó, ou o último se o motor já o arquivou. `None` se o nó nunca teve filho."""
+    child_id = ns.get("child_id")
+    last = ns.get("last_child_id")
+    if not child_id and not last:
+        return None
+    return {"id": str(child_id or last), "title": ns.get("child_name"), "active": bool(child_id)}
 
 
 def _actions(node_state: str) -> list[str]:
@@ -178,6 +191,9 @@ def create_app(
     token: str | None = None,
     spawn: Callable[[Callable[[], None]], None] = _thread_spawn,
     resume: bool = False,
+    idle_kick_every: float = 0.0,
+    clock: Callable[[], float] = time.monotonic,
+    watch: bool = False,
 ) -> FastAPI:
     token = token or secrets.token_urlsafe(32)
     allowed_hosts = frozenset({f"{HOST}:{port}", f"localhost:{port}"})
@@ -186,6 +202,7 @@ def create_app(
     driving: set[str] = set()
     again: set[str] = set()  # kicks que chegaram com a thread do run ainda viva
     guard = threading.Lock()
+    last_idle_kick: dict[str, float] = {}
 
     def kick(run_id: str) -> None:
         """Põe o motor para andar em segundo plano, no máximo uma thread por run.
@@ -216,6 +233,31 @@ def create_app(
                 log.error("drive of run %s stopped: %s", run_id, type(exc).__name__)
 
         spawn(work)
+
+    def nudge(state: dict[str, Any]) -> None:
+        """Religa um run ativo cujo drive parou. O drive para em BLOCKED (portão, cota, arquivo manual)
+        e nada mais o acorda, então a consulta da página e o vigia chamam isto a cada poucos segundos."""
+        run_id = state.get("run_id")
+        if idle_kick_every <= 0 or not isinstance(run_id, str) or state.get("status") != "active":
+            return
+        now = clock()
+        with guard:
+            if now - last_idle_kick.get(run_id, float("-inf")) < idle_kick_every:
+                return
+            last_idle_kick[run_id] = now
+        kick(run_id)
+
+    def watch_runs() -> None:
+        mine = (os.path.realpath(repo), os.path.realpath(flow_path))
+        while True:
+            time.sleep(max(idle_kick_every, 1.0))
+            try:
+                for state in runner.store.list_runs():
+                    ours = (os.path.realpath(str(state.get("repo", ""))), os.path.realpath(str(state.get("flow_file", ""))))
+                    if ours == mine:
+                        nudge(state)
+            except Exception as exc:
+                log.error("watcher failed: %s", type(exc).__name__)
 
     def resume_active_runs() -> None:
         """Depois de um reinício, religa os runs ativos deste repo e deste fluxo (o motor rechecha os filhos)."""
@@ -260,7 +302,9 @@ def create_app(
 
     @app.get("/runs/{run_id}")
     def get_run(run_id: str = PathParam(pattern=RUN_ID_PATTERN)) -> dict[str, Any]:
-        return _engine(view.build, _engine(runner.status, run_id))
+        state = _engine(runner.status, run_id)
+        nudge(state)
+        return _engine(view.build, state)
 
     @app.post("/runs/{run_id}/gates/{node}/approve")
     def approve(
@@ -278,6 +322,8 @@ def create_app(
 
     if resume:
         resume_active_runs()
+    if watch and idle_kick_every > 0:
+        threading.Thread(target=watch_runs, name="flows-watch", daemon=True).start()
     return app
 
 
@@ -293,7 +339,15 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as exc:
         parser.error(str(exc))
     runner = Runner(adapter, state_dir=Path(args.state_dir).expanduser())
-    app = create_app(runner, flow_path=args.flow, repo=Path(args.repo).resolve(), port=args.port, resume=True)
+    app = create_app(
+        runner,
+        flow_path=args.flow,
+        repo=Path(args.repo).resolve(),
+        port=args.port,
+        resume=True,
+        idle_kick_every=IDLE_KICK_EVERY,
+        watch=True,
+    )
     print(f"flows: http://{HOST}:{args.port}/")
     uvicorn.run(app, host=HOST, port=args.port, log_level="info")
 
