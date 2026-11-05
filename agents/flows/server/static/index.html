@@ -28,6 +28,7 @@
 </form>
 <p id="error" role="alert"></p>
 <p id="summary"></p>
+<p id="repo" class="reason"></p>
 <table>
   <thead><tr><th>Fase</th><th>Estado</th><th>Arquivo de saída</th><th>Aviso</th><th>Ação</th></tr></thead>
   <tbody id="phases"></tbody>
@@ -90,6 +91,7 @@ function actionButtons(node) {
 
 function render(view) {
   $("summary").textContent = `Run ${view.run_id} (${view.status})`;
+  $("repo").textContent = `Repo do run: ${view.repo}`;
   const body = $("phases");
   body.replaceChildren();
   for (const node of view.nodes) {
@@ -99,7 +101,7 @@ function render(view) {
     const state = cell(row, text("div", node.state, "state"));
     if (node.reason) state.append(text("div", node.reason, "reason"));
     const outputs = cell(row);
-    for (const out of node.outputs) outputs.append(text("div", out.path + (out.exists ? "" : " (ainda não existe)"), out.exists ? "" : "missing"));
+    for (const out of node.outputs) outputs.append(text("div", out.absolute + (out.exists ? "" : " (ainda não existe)"), out.exists ? "" : "missing"));
     cell(row, node.quota_warning ? text("span", node.quota_warning, "warn") : "");
     cell(row, actionButtons(node));
     body.append(row);

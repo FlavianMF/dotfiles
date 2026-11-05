@@ -84,7 +84,10 @@ def test_happy_path_start_gate_approve(client, auth, runner):
     a = node_view(view, "a")
     assert a["state"] == "awaiting_gate"
     assert a["actions"] == ["approve"]
-    assert a["outputs"] == [{"path": "out/feat.a.md", "exists": False}]
+    assert view["repo"] == str(runner.runs[run_id]["repo"])
+    assert a["outputs"] == [
+        {"path": "out/feat.a.md", "absolute": f"{view['repo']}/out/feat.a.md", "exists": False}
+    ]
     assert node_view(view, "b")["state"] == "pending"
     assert view["waiting"] == [{"node": "a", "state": "awaiting_gate"}]
 
@@ -104,8 +107,23 @@ def test_output_file_flag_follows_the_repo(client, auth, repo):
     (repo / "out").mkdir()
     (repo / "out" / "feat.a.md").write_text("plano", encoding="utf-8")
     assert node_view(client.get(f"/runs/{run_id}").json(), "a")["outputs"] == [
-        {"path": "out/feat.a.md", "exists": True}
+        {"path": "out/feat.a.md", "absolute": str(repo / "out" / "feat.a.md"), "exists": True}
     ]
+
+
+def test_view_shows_the_repo_of_the_run_not_the_one_of_the_server(client, auth, runner, tmp_path):
+    run_id = start(client, auth)
+    other = tmp_path / "other-worktree"
+    other.mkdir()
+    runner.runs[run_id]["repo"] = str(other)
+    view = client.get(f"/runs/{run_id}").json()
+    assert view["repo"] == str(other)
+    assert node_view(view, "a")["outputs"][0]["absolute"] == str(other / "out" / "feat.a.md")
+
+
+def test_page_prints_the_repo_and_the_absolute_output_path(client):
+    page = client.get("/").text
+    assert "view.repo" in page and "out.absolute" in page
 
 
 def test_upgrade_choice(client, auth, runner):

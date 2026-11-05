@@ -133,7 +133,7 @@ class RunView:
                     "title": title,
                     "state": ns["state"],
                     "reason": reason,
-                    "outputs": [{"path": p, "exists": _is_file(repo, p)} for p in outputs],
+                    "outputs": [{"path": p, "absolute": str(repo / p), "exists": _is_file(repo, p)} for p in outputs],
                     "quota_warning": _quota_warning(ns["state"], reason),
                     "actions": _actions(ns["state"]) if active else [],
                 }
@@ -143,6 +143,7 @@ class RunView:
             "status": state["status"],
             "flow": state.get("flow"),
             "slug": state.get("slug"),
+            "repo": str(repo),
             "nodes": nodes,
             "waiting": state.get("waiting", []),
             "events": state.get("events", [])[-EVENTS_SHOWN:],
