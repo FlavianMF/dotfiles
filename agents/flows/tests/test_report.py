@@ -49,7 +49,44 @@ def test_report_lists_phase_model_duration_result_and_output(cenv):
     assert rows["a"]["outputs"] == ["out/a.md"]
     assert rows["a"]["duration_s"] is not None
     assert rows["a"]["interventions"] == 0
-    assert rows["a"]["quota"] is None  # o estado não guarda leituras de cota
+    assert rows["a"]["quota"] == {
+        "before": {"five_hour": 10, "seven_day": 20, "updated_at": 1234},
+        "after": {"five_hour": 10, "seven_day": 20, "updated_at": 1234},
+    }
+    assert rows["b"]["quota"] is None  # pulado: nunca leu a cota
+
+
+def test_report_table_shows_the_quota_before_and_after_each_phase(cenv):
+    run_id = run_two_phases(cenv)
+    _, out, _ = rep(cenv, run_id)
+    lines = {line.split()[0]: line for line in out.splitlines()[2:]}
+    assert "5h 10→10 7d 20→20" in lines["a"]
+    assert "n/d" in lines["b"]
+    assert "5h 10→10" not in lines["b"]
+
+
+def test_report_table_marks_a_missing_quota_reading_as_nd(cenv):
+    run_id = run_two_phases(cenv)
+    path = next(cenv.state_dir.glob("demo-*.json"))
+    state = json.loads(path.read_text())
+    state["nodes"]["a"]["quota_after"] = {"five_hour": None, "seven_day": None, "updated_at": None}
+    state["nodes"]["a"]["quota_before"] = {"five_hour": 36, "seven_day": 61, "updated_at": 1}
+    path.write_text(json.dumps(state))
+    _, out, _ = rep(cenv, run_id)
+    assert "5h 36→n/d 7d 61→n/d" in out
+
+
+def test_report_reads_a_state_saved_before_the_quota_fields_existed(cenv):
+    run_id = run_two_phases(cenv)
+    path = next(cenv.state_dir.glob("demo-*.json"))
+    state = json.loads(path.read_text())
+    for ns in state["nodes"].values():
+        ns.pop("quota_before", None)
+        ns.pop("quota_after", None)
+    path.write_text(json.dumps(state))
+    code, out, err = rep(cenv, run_id, "--json")
+    assert code == 0, err
+    assert all(r["quota"] is None for r in json.loads(out)["phases"])
 
 
 def test_report_flags_model_divergence(cenv):

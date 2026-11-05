@@ -157,6 +157,10 @@ def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
     return {"diff_lines": total + _untracked_lines(repo)}
 
 
+def _quota_reading(limits: Any) -> dict[str, Any]:
+    return {"five_hour": limits.five_hour, "seven_day": limits.seven_day, "updated_at": limits.updated_at}
+
+
 class Runner:
     """Motor de fluxo. Ver o docstring do módulo para a API e as regras.
 
@@ -447,15 +451,18 @@ class Runner:
                 return None
         if child is None:
             try:
-                percent = self.adapter.rate_limit_used_percent(agent.harness, agent.profile)
+                limits = self.adapter.rate_limits(agent.harness, agent.profile)
             except CliError as exc:
                 return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {exc}")
+            percent = limits.used_percent
             if percent is not None and percent > self._threshold:
                 return self._wait_quota(
                     state, node, ns, f"quota at {percent:g}% (limit {self._threshold:g}%) for {agent.harness}/{agent.profile}"
                 )
             name = f"{flow.name}:{node.id} ({state['run_id'][:12]}) {uuid.uuid4().hex[:8]}"
             ns["creating"] = {"name": name, "model": model, "effort": effort}
+            ns["quota_before"] = _quota_reading(limits)
+            ns["quota_after"] = None
             self._save(state)  # a marca fica no disco antes do `create_child`: uma queda deixa rastro
             try:
                 child = self.adapter.create_child(
@@ -580,11 +587,20 @@ class Runner:
                 return self._fail(state, flow, node, ns, "the child ended its turn without writing the outputs: " + ", ".join(node.outputs))
         elapsed = self._now() - (ns["sent_at"] or self._now())
         if elapsed > self._turn_timeout:
+            self._read_quota_after(node, ns)
             self._release(state, node, ns, stop=True)
             return self._fail(state, flow, node, ns, f"timeout: no turn result after {self._turn_timeout:g}s")
         return Step.WAITING
 
+    def _read_quota_after(self, node: Node, ns: dict[str, Any]) -> None:
+        """Grava a cota ao fim do turno. A leitura é só medição: se o CLI falhar, fica `None`."""
+        try:
+            ns["quota_after"] = _quota_reading(self.adapter.rate_limits(node.agent.harness, node.agent.profile))
+        except CliError:
+            ns["quota_after"] = None
+
     def _succeed(self, state: dict[str, Any], node: Node, ns: dict[str, Any]) -> Step:
+        self._read_quota_after(node, ns)
         if node.gate == "human":
             self._to(state, node, "awaiting_gate", "outputs written; waiting for human approval")
         else:
@@ -593,6 +609,8 @@ class Runner:
         return Step.PROGRESS
 
     def _fail(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any], reason: str) -> Step:
+        if ns["child_id"]:
+            self._read_quota_after(node, ns)
         self._release(state, node, ns, stop=True)
         if ns["state"] in ("pending", "awaiting_quota", "failed"):  # falhou ao criar o filho: a tentativa começou mesmo assim
             ns["attempts"] += 1

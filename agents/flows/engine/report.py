@@ -3,7 +3,9 @@
 Lê o JSON de estado e os transcripts dos filhos pelo `Adapter`. Não grava nada e não muda o motor.
 Dado que o estado não guarda aparece como `n/d` (campo `None` no JSON):
 
-- cota 5h/7d antes e depois da fase: o motor só compara a cota com o limite e não grava a leitura;
+- cota 5h/7d antes e depois da fase: vem de `quota_before` (antes de criar o filho) e `quota_after`
+  (ao fim do turno) no estado. A leitura pode vir de cache do CLI (`updated_at`); estado antigo e
+  nó pulado não têm leitura;
 - contexto: depende de o cabeçalho `[assistant row | ...]` do transcript trazer o uso. O cabeçalho é
   lido em busca de campos `chave=valor` cujo nome contém `input`, `cache_read` e `cache_creation`
   (ou `cache_write`); sem eles, `n/d`;
@@ -50,6 +52,22 @@ def _context(header: str) -> int | None:
     return total if found else None
 
 
+def _quota(ns: dict[str, Any]) -> dict[str, Any] | None:
+    before, after = ns.get("quota_before"), ns.get("quota_after")
+    return None if before is None and after is None else {"before": before, "after": after}
+
+
+def _fmt_quota(quota: dict[str, Any] | None) -> str:
+    if quota is None:
+        return ND
+
+    def pair(field: str) -> str:
+        values = [(quota[side] or {}).get(field) for side in ("before", "after")]
+        return "→".join(ND if v is None else f"{v:g}" for v in values)
+
+    return f"5h {pair('five_hour')} 7d {pair('seven_day')}"
+
+
 def _child_data(adapter: Any, child_id: str, infos: dict[str, AgentInfo]) -> dict[str, Any]:
     data: dict[str, Any] = {"applied_model": infos[child_id].model if child_id in infos else None}
     try:
@@ -84,7 +102,7 @@ def build_report(state: dict[str, Any], adapter: Any) -> dict[str, Any]:
             "duration_s": _duration(ns),
             "context_end": None,
             "context_peak": None,
-            "quota": None,
+            "quota": _quota(ns),
             "interventions": None,
             "result": ns["state"],
             "outputs": [] if ns["state"] == "skipped" else list(_rel_outputs(node.outputs, state["repo"])),
@@ -109,14 +127,14 @@ def _fmt(value: Any, unit: str = "") -> str:
 
 
 def format_table(report: dict[str, Any]) -> str:
-    head = ["fase", "modelo pedido/aplicado", "duração", "ctx fim/pico", "cota 5h/7d", "interv.", "resultado", "saída"]
+    head = ["fase", "modelo pedido/aplicado", "duração", "ctx fim/pico", "cota antes→depois", "interv.", "resultado", "saída"]
     rows = [head]
     for p in report["phases"]:
         if p["applied_model"] is None:
             model = f"{p['requested_model']}/{ND}"
         else:
             model = f"{p['requested_model']}/{p['applied_model']}" + (" DIVERGE" if p["diverged"] else "")
-        quota = ND if p["quota"] is None else f"{p['quota']['5h']}/{p['quota']['7d']}"
+        quota = _fmt_quota(p["quota"])
         rows.append(
             [
                 p["node"],

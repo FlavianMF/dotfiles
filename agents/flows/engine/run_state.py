@@ -93,6 +93,8 @@ def new_node_state() -> dict[str, Any]:
         "model": None,  # modelo escolhido em `choose_upgrade`; None = o do YAML
         "effort": None,
         "divergence": None,
+        "quota_before": None,  # {"five_hour", "seven_day", "updated_at"} lido antes de criar o filho da tentativa
+        "quota_after": None,  # a mesma leitura quando o turno termina; None se o CLI não respondeu
         "when_result": None,
         "history": [],
     }

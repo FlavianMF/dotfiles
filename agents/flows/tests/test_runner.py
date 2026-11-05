@@ -461,8 +461,8 @@ def test_quota_is_read_from_the_nodes_own_harness_and_profile(env):
     env.flow(env.node("a", agent={"harness": "antigravity", "profile": "ambient", "model": "m"}))
     env.fake.queue(env.done("a"))
     env.drive(env.start())
-    (argv,) = env.fake.commands("profile-rate-limits")
-    assert "antigravity" in argv and "--profile=ambient" in argv
+    argvs = env.fake.commands("profile-rate-limits")
+    assert argvs and all("antigravity" in argv and "--profile=ambient" in argv for argv in argvs)
 
 
 def test_run_resumes_from_awaiting_quota_when_the_quota_drops(env):
@@ -480,8 +480,36 @@ def test_run_resumes_from_awaiting_quota_when_the_quota_drops(env):
 def test_quota_is_read_before_every_child_including_retries(env):
     env.flow(env.node("a", on_fail={"retry": 1, "then": "abort"}))
     env.fake.queue({"write": {}}, env.done("a"))
-    env.drive(env.start())
-    assert len(env.fake.commands("profile-rate-limits")) == 2
+    run_id = env.start()
+    env.drive(run_id)
+    assert len(env.fake.commands("create")) == 2
+    assert len(env.fake.commands("profile-rate-limits")) == 2 + 2  # antes de cada filho e depois de cada fim de turno
+
+
+def test_node_state_records_the_quota_before_and_after_the_child(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    env.fake.update(rate={"fiveHour": 36, "sevenDay": 61})
+    env.drive(run_id, limit=1)  # cria o filho e envia: lê a cota antes
+    env.fake.update(rate={"fiveHour": 47, "sevenDay": 63})
+    env.drive(run_id)
+    ns = env.runner.status(run_id)["nodes"]["a"]
+    assert ns["quota_before"] == {"five_hour": 36, "seven_day": 61, "updated_at": 1234}
+    assert ns["quota_after"] == {"five_hour": 47, "seven_day": 63, "updated_at": 1234}
+
+
+def test_quota_after_that_cannot_be_read_stays_empty_and_does_not_fail_the_node(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    env.drive(run_id, limit=1)
+    env.fake.update(fail={"profile-rate-limits": "sem rede"})
+    env.drive(run_id)
+    assert env.states(run_id) == {"a": "done"}
+    ns = env.runner.status(run_id)["nodes"]["a"]
+    assert ns["quota_before"]["five_hour"] == 10
+    assert ns["quota_after"] is None
 
 
 def test_quota_that_cannot_be_read_stops_the_run_instead_of_spending(env):
