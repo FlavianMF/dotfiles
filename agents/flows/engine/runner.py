@@ -207,7 +207,7 @@ class Runner:
     def approve_gate(self, run_id: str, node_id: str) -> None:
         with self.store.lock(run_id):
             state, flow, node, ns = self._load_node(run_id, node_id)
-            self._refresh_manual(state, node, ns)
+            self._refresh_manual(state, flow, node, ns)
             if ns["state"] != "awaiting_gate":
                 raise RunError(f"node '{node_id}' is {ns['state']}, not awaiting_gate: nothing to approve")
             ns["gate_approved"] = True
@@ -352,10 +352,19 @@ class Runner:
             self._to(state, node, "done", "output exists")
         return Step.PROGRESS
 
-    def _refresh_manual(self, state: dict[str, Any], node: Node, ns: dict[str, Any]) -> None:
-        if node.mode == "manual" and ns["state"] == "pending" and node.gate == "human":
-            if self._outputs_exist(state, node):
-                self._to(state, node, "awaiting_gate", "output exists; waiting for human approval")
+    def _refresh_manual(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any]) -> None:
+        """Vê o arquivo de um nó manual entre dois steps. Só vale se o nó já pode rodar: predecessores
+        done/skipped, `when` avaliado e verdadeiro, entradas presentes. Senão um arquivo velho passaria."""
+        if node.mode != "manual" or ns["state"] != "pending" or node.gate != "human":
+            return
+        if any(state["nodes"][dep]["state"] not in ("done", "skipped") for dep in self._deps(flow, node)):
+            return
+        if node.when and ns["when_result"] is not True:
+            return
+        if any(not (Path(state["repo"]) / p).is_file() for p in node.inputs):
+            return
+        if self._outputs_exist(state, node):
+            self._to(state, node, "awaiting_gate", "output exists; waiting for human approval")
 
     # --- filho ----------------------------------------------------------------------------
 

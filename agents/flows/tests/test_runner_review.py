@@ -69,3 +69,49 @@ def test_abort_run_works_when_the_flow_file_is_gone_or_changed(env, damage):
     assert agent["archived"] and len(env.fake.commands("stop")) == 1
     env.flow(env.node("a"))
     env.start()  # o repo ficou livre
+
+
+# 3. `_refresh_manual` ignorava predecessores e `when` -------------------------------------------
+
+
+def test_approve_gate_refuses_a_manual_node_whose_predecessor_is_still_running(env):
+    env.flow(env.node("a", gate="human"), env.node("prd", ["out/a.md"], mode="manual", gate="human"))
+    env.fake.queue({"active_polls": 100})  # `a` fica rodando
+    run_id = env.start()
+    env.runner.step(run_id)
+    (env.repo / "out").mkdir()
+    (env.repo / "out" / "prd.md").write_text("arquivo velho\n")  # saída de um run anterior
+    with pytest.raises(RunError):
+        env.runner.approve_gate(run_id, "prd")
+    assert env.states(run_id) == {"a": "running", "prd": "pending"}
+
+
+def test_approve_gate_refuses_a_manual_node_whose_when_was_not_evaluated(env):
+    env.flow(env.node("prd", mode="manual", gate="human", when="sensitive"))
+    run_id = env.start()  # nenhum step: o `when` ainda não foi avaliado
+    (env.repo / "out").mkdir()
+    (env.repo / "out" / "prd.md").write_text("arquivo velho\n")
+    with pytest.raises(RunError):
+        env.runner.approve_gate(run_id, "prd")
+    assert env.states(run_id) == {"prd": "pending"}
+
+
+def test_approve_gate_refuses_a_manual_node_that_the_when_skips(env):
+    env.flow(env.node("prd", mode="manual", gate="human", when="sensitive"))
+    run_id = env.start(sensitive=False)
+    (env.repo / "out").mkdir()
+    (env.repo / "out" / "prd.md").write_text("arquivo velho\n")
+    env.drive(run_id)
+    assert env.states(run_id) == {"prd": "skipped"}
+    with pytest.raises(RunError):
+        env.runner.approve_gate(run_id, "prd")
+
+
+def test_approve_gate_still_refreshes_a_ready_manual_node(env):
+    env.flow(env.node("prd", mode="manual", gate="human", when="sensitive"))
+    run_id = env.start(sensitive=True)
+    env.drive(run_id)  # `when` avaliado, arquivo ainda não existe
+    (env.repo / "out").mkdir()
+    (env.repo / "out" / "prd.md").write_text("prd\n")
+    env.runner.approve_gate(run_id, "prd")  # o arquivo apareceu entre dois steps
+    assert env.states(run_id) == {"prd": "done"}
