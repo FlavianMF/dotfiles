@@ -825,10 +825,18 @@ link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync
 link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
-# flow and phase: explicit-only (disable-model-invocation) front ends of agents/flows (engine.cli).
+# flow and phase: explicit-only (disable-model-invocation) front ends of the flows-editor engine,
+# which lives in the vendor/flows-editor submodule (private repo: needs gh/git credentials).
 # Claude Code only: Codex/OpenCode read ~/.agents/skills and may ignore that key (see agents/skills/README.md).
-link_claude_skill flow "$REPO_DIR/agents/skills/flow"
-link_claude_skill phase "$REPO_DIR/agents/skills/phase"
+FLOWS_EDITOR_DIR="$REPO_DIR/vendor/flows-editor"
+if [[ ! -f "$FLOWS_EDITOR_DIR/skills/flow/SKILL.md" && $DRY_RUN -eq 0 ]]; then
+    log_info "Fetching the flows-editor submodule..."
+    as_user git -C "$REPO_DIR" submodule update --init vendor/flows-editor || log_warn "Could not fetch the flows-editor submodule; /flow and /phase stay unlinked"
+fi
+if [[ -f "$FLOWS_EDITOR_DIR/skills/flow/SKILL.md" || $DRY_RUN -eq 1 ]]; then
+    link_claude_skill flow "$FLOWS_EDITOR_DIR/skills/flow"
+    link_claude_skill phase "$FLOWS_EDITOR_DIR/skills/phase"
+fi
 remove_stale_shared_link flow
 remove_stale_shared_link phase
 
