@@ -104,34 +104,49 @@ def _git_env() -> dict[str, str]:
     return env
 
 
-def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
-    """`diff_lines`: linhas adicionadas + removidas do trabalho não commitado (`git diff HEAD`).
+_FLOW_ARTIFACTS = ":(exclude).claude/PRPs"
 
-    Ignora `.claude/PRPs/` (os artefatos do próprio fluxo). Arquivos novos ainda não adicionados
-    ao índice não entram na conta, limite conhecido da v1. O git roda com ambiente mínimo e sem o
-    fsmonitor, o diff externo e o textconv do repo: um repo hostil não executa código aqui."""
-    proc = subprocess.run(
-        [
-            "git",
-            "-c",
-            "core.fsmonitor=false",  # o repo pode apontar o fsmonitor para um script: não o execute
-            "-C",
-            str(repo),
-            "diff",
-            "HEAD",
-            "--numstat",
-            "--no-ext-diff",
-            "--no-textconv",
-            "--",
-            ".",
-            ":(exclude).claude/PRPs",
-        ],
+
+def _git(repo: str | os.PathLike[str], *args: str) -> subprocess.CompletedProcess:
+    """Roda o git com ambiente mínimo e sem o fsmonitor do repo (um repo hostil não executa código)."""
+    return subprocess.run(
+        ["git", "-c", "core.fsmonitor=false", "-C", str(repo), *args],  # o repo pode apontar o fsmonitor para um script
         env=_git_env(),
         capture_output=True,
         text=True,
+        errors="surrogateescape",  # nome de arquivo fora do UTF-8 não derruba a conta
         check=False,
         timeout=60,
     )
+
+
+def _untracked_lines(repo: str | os.PathLike[str]) -> int:
+    """Linhas dos arquivos novos ainda fora do índice (respeita `.gitignore`). Binário conta 0."""
+    proc = _git(repo, "ls-files", "-z", "--others", "--exclude-standard", "--", ".", _FLOW_ARTIFACTS)
+    if proc.returncode != 0:
+        raise RunError(f"git ls-files failed: {proc.stderr.strip()[:200]}")
+    total = 0
+    for name in proc.stdout.split("\0"):
+        if not name:
+            continue
+        path = Path(repo) / name
+        if path.is_symlink() or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\0" in data[:8000]:  # o git trata como binário
+            continue
+        total += data.count(b"\n") + (1 if data and not data.endswith(b"\n") else 0)
+    return total
+
+
+def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
+    """`diff_lines`: linhas adicionadas + removidas do trabalho não commitado.
+
+    Soma `git diff HEAD` (arquivos rastreados) e as linhas dos arquivos novos ainda não adicionados
+    ao índice. Ignora `.claude/PRPs/` (os artefatos do próprio fluxo). O git roda com ambiente
+    mínimo e sem o fsmonitor, o diff externo e o textconv do repo: um repo hostil não executa
+    código aqui."""
+    proc = _git(repo, "diff", "HEAD", "--numstat", "--no-ext-diff", "--no-textconv", "--", ".", _FLOW_ARTIFACTS)
     if proc.returncode != 0:
         raise RunError(f"git diff failed: {proc.stderr.strip()[:200]}")
     total = 0
@@ -139,7 +154,7 @@ def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
         added, removed, _ = (line.split("\t", 2) + ["", "", ""])[:3]
         total += int(added) if added.isdigit() else 0  # binário aparece como "-"
         total += int(removed) if removed.isdigit() else 0
-    return {"diff_lines": total}
+    return {"diff_lines": total + _untracked_lines(repo)}
 
 
 class Runner:

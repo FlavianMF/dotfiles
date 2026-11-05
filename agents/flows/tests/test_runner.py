@@ -8,7 +8,7 @@ import sys
 import pytest
 
 from engine.run_state import RunStore, StateError
-from engine.runner import RepoBusy, RunError, Runner, Step
+from engine.runner import RepoBusy, RunError, Runner, Step, git_variables
 from engine.schema import FlowError
 from engine.traycer_cli import Adapter
 from tests.conftest import make_node
@@ -584,8 +584,6 @@ def test_when_that_cannot_be_evaluated_aborts_the_node_cleanly(env):
 
 
 def test_default_provider_counts_changed_lines_with_git_and_ignores_prp_files(tmp_path):
-    from engine.runner import git_variables
-
     repo = tmp_path / "r"
     repo.mkdir()
     git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)  # noqa: E731
@@ -600,6 +598,39 @@ def test_default_provider_counts_changed_lines_with_git_and_ignores_prp_files(tm
     (repo / "code.py").write_text("a\nB\nc\nd\n")  # +2 -1
     (repo / ".claude" / "PRPs" / "x.md").write_text("1\n2\n3\n4\n5\n")
     assert git_variables(repo) == {"diff_lines": 3}
+
+
+def _repo_with_commit(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], check=True, capture_output=True)  # noqa: E731
+    git("init", "-q")
+    git("config", "user.email", "t@t")
+    git("config", "user.name", "t")
+    (repo / "code.py").write_text("a\nb\nc\n")
+    git("add", "-A")
+    git("commit", "-qm", "init")
+    return repo
+
+
+def test_git_variables_counts_new_untracked_files(tmp_path):
+    repo = _repo_with_commit(tmp_path)
+    (repo / "code.py").write_text("a\nB\nc\n")  # +1 -1
+    (repo / "new.py").write_text("1\n2\n3\n4\n")  # arquivo novo, 4 linhas
+    (repo / "pkg").mkdir()
+    (repo / "pkg" / "deep.sh").write_text("x\ny")  # sem newline final conta como 2 linhas
+    assert git_variables(repo) == {"diff_lines": 2 + 4 + 2}
+
+
+def test_git_variables_ignores_untracked_flow_artifacts_binaries_and_ignored_files(tmp_path):
+    repo = _repo_with_commit(tmp_path)
+    (repo / ".gitignore").write_text("build/\n")
+    (repo / "build").mkdir()
+    (repo / "build" / "out.txt").write_text("1\n2\n3\n")
+    (repo / ".claude" / "PRPs").mkdir(parents=True)
+    (repo / ".claude" / "PRPs" / "plan.md").write_text("1\n2\n3\n4\n5\n")
+    (repo / "blob.bin").write_bytes(b"\x00\x01\x02\n\x00")
+    assert git_variables(repo) == {"diff_lines": 1}  # só o `.gitignore` novo
 
 
 # --- retomada --------------------------------------------------------------------------------
