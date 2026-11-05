@@ -183,6 +183,17 @@ def render_phase_prompt(node_prompt: str, slug: str, text: str) -> str:
     return Path(node_prompt).read_text(encoding="utf-8").replace("${slug}", slug).replace("{{input}}", text).rstrip() + "\n"
 
 
+def _release_child(adapter: Adapter, agent_id: str, *, stop: bool) -> None:
+    """Para (só em erro: o turno pode estar em curso) e arquiva o filho. Falha vira aviso, não esconde o erro original."""
+    for label, action in (("stop", adapter.stop if stop else None), ("archive", adapter.archive)):
+        if action is None:
+            continue
+        try:
+            action(agent_id)
+        except CliError as exc:
+            print(f"warning: could not {label} child {agent_id}: {exc}", file=sys.stderr)
+
+
 def cmd_phase(args: argparse.Namespace, ctx: Context) -> int:
     flow_path = resolve_flow(args.flow)
     found = active_run(ctx.store, args.repo)
@@ -211,15 +222,21 @@ def cmd_phase(args: argparse.Namespace, ctx: Context) -> int:
         cwd=os.path.realpath(args.repo),
         name=f"phase:{node.id} ({slug})",
     )
-    replies = adapter.reply_count(child.agent_id)
-    adapter.send(child.agent_id, message)
-    print(f"phase {node.id}: child {child.agent_id} · {agent.harness}/{child.applied_model or agent.model}/{child.applied_effort or agent.effort}")
-    print("outputs: " + ", ".join(node.outputs))
-    if args.wait:
-        adapter.wait_turn_end(child.agent_id, timeout=PHASE_TIMEOUT, interval=PHASE_INTERVAL, replies_before=replies)
-        for out in node.outputs:
-            print(f"  {'ok     ' if (Path(args.repo) / out).is_file() else 'missing'} {out}")
-        adapter.archive(child.agent_id)
+    done = False
+    try:
+        replies = adapter.reply_count(child.agent_id)
+        adapter.send(child.agent_id, message)
+        print(f"phase {node.id}: child {child.agent_id} · {agent.harness}/{child.applied_model or agent.model}/{child.applied_effort or agent.effort}")
+        print("outputs: " + ", ".join(node.outputs))
+        if args.wait:
+            adapter.wait_turn_end(child.agent_id, timeout=PHASE_TIMEOUT, interval=PHASE_INTERVAL, replies_before=replies)
+            for out in node.outputs:
+                print(f"  {'ok     ' if (Path(args.repo) / out).is_file() else 'missing'} {out}")
+        done = True
+    finally:
+        # Sem `--wait` o filho segue vivo para o usuário abrir. Em erro, ou com `--wait`, ninguém mais o usa.
+        if args.wait or not done:
+            _release_child(adapter, child.agent_id, stop=not done)
     return 0
 
 

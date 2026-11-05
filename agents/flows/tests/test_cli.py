@@ -260,6 +260,52 @@ def test_phase_reports_a_cli_failure_with_exit_1(cenv):
     assert code == 1 and "boom" in err
 
 
+def test_phase_archives_the_child_when_the_send_fails(cenv):
+    cenv.fake.update(fail={"send": "boom"})
+    code, _, err = cenv.main("phase", "plan", "--slug", "feat-x")
+    assert code == 1 and "boom" in err
+    (child,) = cenv.fake.agents.values()
+    assert child["archived"]
+
+
+def test_phase_stops_then_archives_the_child_when_the_wait_fails_mid_turn(cenv):
+    cenv.fake.queue({"active_polls": 50})
+    cenv.fake.update(fail_after_send={"list": "boom"})  # o poll do `--wait` falha com o turno em curso
+    cenv.flow(cenv.node("a"))
+    code, _, err = cenv.main("phase", "a", "--flow", str(cenv.flow_path), "--slug", "feat-x", "--wait")
+    assert code == 1 and "boom" in err
+    assert [c[:2] for c in cenv.fake.commands() if c[1] in ("stop", "archive")] == [["agent", "stop"], ["agent", "archive"]]
+    (child,) = cenv.fake.agents.values()
+    assert child["archived"]
+
+
+def test_phase_archives_the_child_when_the_wait_times_out(cenv, monkeypatch):
+    monkeypatch.setattr(cli, "PHASE_TIMEOUT", 20.0)
+    cenv.fake.queue({"active_polls": 1000})
+    cenv.flow(cenv.node("a"))
+    code, _, err = cenv.main("phase", "a", "--flow", str(cenv.flow_path), "--slug", "feat-x", "--wait")
+    assert code == 1 and "still active" in err
+    (child,) = cenv.fake.agents.values()
+    assert child["archived"]
+
+
+def test_phase_warns_and_keeps_the_original_error_when_stop_and_archive_fail(cenv):
+    cenv.fake.update(fail={"send": "boom", "archive": "no-archive", "stop": "no-stop"})
+    code, _, err = cenv.main("phase", "plan", "--slug", "feat-x")
+    assert code == 1 and "error: boom" in err
+    assert "warning: could not stop child" in err and "no-stop" in err
+    assert "warning: could not archive child" in err and "no-archive" in err
+
+
+def test_phase_wait_warns_when_the_archive_fails_after_success(cenv):
+    cenv.fake.queue(cenv.done("a"))
+    cenv.fake.update(fail={"archive": "no-archive"})
+    cenv.flow(cenv.node("a"))
+    code, out, err = cenv.main("phase", "a", "--flow", str(cenv.flow_path), "--slug", "feat-x", "--wait")
+    assert code == 0 and "ok      out/a.md" in out
+    assert "warning: could not archive child" in err and "no-archive" in err
+
+
 def test_without_the_traycer_environment_the_command_fails_with_exit_2(cenv, monkeypatch):
     for key in ("TRAYCER_EPIC_ID", "TRAYCER_AGENT_ID"):
         monkeypatch.delenv(key, raising=False)

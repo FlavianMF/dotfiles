@@ -771,6 +771,22 @@ link_shared_skill() {
     create_config_link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 }
 
+# Claude-only skill: no ~/.agents/skills entry, so Codex and OpenCode never see it.
+link_claude_skill() {
+    local name="$1" source="$2"
+    create_config_link "$source" "$HOME/.claude/skills/$name"
+}
+
+# Drop the ~/.agents/skills link an older install made for a skill that is now Claude-only.
+# Any symlink to .../agents/skills/<name> goes (this checkout or another one); a real dir
+# or a link to somewhere else stays.
+remove_stale_shared_link() {
+    local link="$HOME/.agents/skills/$1"
+    if [[ -L "$link" && "$(readlink "$link")" == */agents/skills/"$1" ]]; then
+        as_user rm -f "$link"
+    fi
+}
+
 create_config_link "$REPO_DIR/zsh/.zshrc" "$HOME/.zshrc"
 create_config_link "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
 as_user mkdir -p "$HOME/.tmux"
@@ -810,8 +826,11 @@ link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-eng
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
 # flow and phase: explicit-only (disable-model-invocation) front ends of agents/flows (engine.cli).
-link_shared_skill flow "$REPO_DIR/agents/skills/flow"
-link_shared_skill phase "$REPO_DIR/agents/skills/phase"
+# Claude Code only: Codex/OpenCode read ~/.agents/skills and may ignore that key (see agents/skills/README.md).
+link_claude_skill flow "$REPO_DIR/agents/skills/flow"
+link_claude_skill phase "$REPO_DIR/agents/skills/phase"
+remove_stale_shared_link flow
+remove_stale_shared_link phase
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode, Antigravity CLI =====
 # Declarative, not symlinked where the tool keeps machine state:
@@ -1030,8 +1049,8 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
         log_warn "Node >=20 required by the skills CLI (found $(node -v 2>/dev/null || echo none)); skipping npx skills add. Install a newer Node (e.g. nvm) and rerun."
     fi
 
-    # ~/.claude/skills should only hold links into ~/.agents/skills (synced/ is
-    # managed by Claude itself).
+    # ~/.claude/skills should only hold links (into ~/.agents/skills, or straight into
+    # this repo for the Claude-only skills flow/phase); synced/ is managed by Claude itself.
     for entry in "$HOME"/.claude/skills/*; do
         [[ -e "$entry" || -L "$entry" ]] || continue
         [[ "$(basename "$entry")" == synced ]] && continue
