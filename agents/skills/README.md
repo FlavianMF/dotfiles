@@ -22,5 +22,6 @@ por `link_shared_skill` no `install.sh` e ajuste o teste `test_install_links_the
 
 ## Onde a skill acha o motor
 
-`flow` e `phase` resolvem `agents/flows` a partir do próprio local (seguindo o link com `readlink -f`).
+`flow` e `phase` resolvem `agents/flows` com `$SKILL_DIR/../../flows`. O kernel segue o link da skill, então o caminho
+chega ao repo mesmo com a skill instalada como symlink. `SKILL_DIR` vazio aborta o comando.
 A variável `FLOWS_DIR` sobrepõe o caminho.

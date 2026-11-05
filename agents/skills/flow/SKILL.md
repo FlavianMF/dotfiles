@@ -13,8 +13,8 @@ estão no YAML do fluxo (`$FLOWS_DIR/flows/<fluxo>.yaml`): leia-o só se o usuá
 Cada comando começa com estas duas linhas (o shell não guarda variáveis). `FLOWS_DIR` já definida vence:
 
 ```bash
-SKILL_DIR=<diretório base desta skill, que o harness informa>
-FLOWS_DIR="${FLOWS_DIR:-$(dirname "$(dirname "$(readlink -f "$SKILL_DIR")")")/flows}"
+SKILL_DIR="<diretório base desta skill, que o harness informa>"
+FLOWS_DIR="${FLOWS_DIR:-${SKILL_DIR:?defina SKILL_DIR}/../../flows}"
 ```
 
 `<motor>` é `PYTHONPATH="$FLOWS_DIR" python3 -m engine.cli`:
