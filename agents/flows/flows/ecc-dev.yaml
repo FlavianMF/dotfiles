@@ -8,7 +8,7 @@ run_inputs: []
 nodes:
   - id: prd
     title: PRD do trabalho
-    mode: manual # roda na sua sessão com /prp-prd; o motor espera o arquivo e a aprovação
+    mode: manual # fase manual: você roda o prompt prompts/prp-prd.md na sua sessão, sem slash command; o motor espera o arquivo e a aprovação
     agent: {harness: claude, profile: ambient, model: sonnet, effort: high, skills: []}
     prompt: ../prompts/prp-prd.md
     inputs: []
