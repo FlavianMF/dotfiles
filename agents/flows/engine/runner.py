@@ -157,6 +157,19 @@ def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
     return {"diff_lines": total + _untracked_lines(repo)}
 
 
+_BRACKET_PREFIX_RE = re.compile(r"\[\d+:\d+/[^\]]*\]\s*")  # `[48213:1105/...:ERROR:file.cc(9)]` do Chromium
+_PID_RE = re.compile(r"\(?\bpid[ =:]*\d+\)?", re.IGNORECASE)
+BRIEF_MAX = 140
+
+
+def _brief(exc: object) -> str:
+    """Primeira linha útil do erro do CLI, sem prefixo do Chromium nem PIDs, em até `BRIEF_MAX` caracteres."""
+    lines = (line.strip() for line in str(exc).splitlines())
+    first = next((line for line in lines if line), "unknown error")
+    first = " ".join(_PID_RE.sub("", _BRACKET_PREFIX_RE.sub("", first)).split())
+    return first if len(first) <= BRIEF_MAX else first[: BRIEF_MAX - 1] + "…"
+
+
 def _quota_reading(limits: Any) -> dict[str, Any]:
     return {"five_hour": limits.five_hour, "seven_day": limits.seven_day, "updated_at": limits.updated_at}
 
@@ -399,7 +412,7 @@ class Runner:
             variables = dict(fixed) if "diff_lines" in fixed else {**self._provider(Path(state["repo"])), **fixed}
             result = evaluate_when(node.when or "", variables)
         except Exception as exc:  # noqa: BLE001 (WhenError, git ou provedor injetado: o nó falha, o motor não cai)
-            self._to(state, node, "aborted", f"cannot evaluate when {node.when!r}: {exc}")
+            self._to(state, node, "aborted", f"cannot evaluate when {node.when!r}: {_brief(exc)}")
             return False
         ns["when_result"] = result
         if not result:
@@ -441,7 +454,7 @@ class Runner:
         try:
             message = self._message(state, flow, node, ns)
         except (CliError, OSError) as exc:
-            return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+            return self._fail(state, flow, node, ns, f"cannot create the child: {_brief(exc)}")
         child = None
         name = None
         if ns.get("creating"):  # queda entre `create_child` e o `_save`: procure o filho pelo nome
@@ -449,13 +462,13 @@ class Runner:
             try:
                 child = self._recover_orphan(ns)
             except CliError as exc:
-                ns["reason"] = f"cannot look for an orphan child: {exc}"
+                ns["reason"] = f"cannot look for an orphan child: {_brief(exc)}"
                 return None
         if child is None:
             try:
                 limits = self.adapter.rate_limits(agent.harness, agent.profile)
             except CliError as exc:
-                return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {exc}")
+                return self._wait_quota(state, node, ns, f"cannot read the quota of {agent.harness}/{agent.profile}: {_brief(exc)}")
             percent = limits.used_percent
             if percent is not None and percent > self._threshold:
                 return self._wait_quota(
@@ -477,7 +490,7 @@ class Runner:
                 )
             except (CliError, OSError) as exc:
                 ns["creating"] = None
-                return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
+                return self._fail(state, flow, node, ns, f"cannot create the child: {_brief(exc)}")
         ns["creating"] = None
         ns.update(
             child_id=child.agent_id,
@@ -543,7 +556,7 @@ class Runner:
             self._save(state)
             self.adapter.send(ns["child_id"], ns["pending_message"])
         except CliError as exc:
-            self._fail(state, flow, node, ns, f"cannot send the prompt: {exc}")
+            self._fail(state, flow, node, ns, f"cannot send the prompt: {_brief(exc)}")
             return
         ns["sent"] = True
         ns["pending_message"] = None
@@ -575,7 +588,7 @@ class Runner:
         except AgentNotFound:
             return self._fail(state, flow, node, ns, "the child agent is gone from the Task")
         except CliError as exc:
-            ns["reason"] = f"polling failed: {exc}"  # falha passageira do CLI: o timeout encerra se persistir
+            ns["reason"] = f"polling failed: {_brief(exc)}"  # falha passageira do CLI: o timeout encerra se persistir
         else:
             changed = self._outputs_changed(state, node, ns)
             if not info.active or info.archived:
@@ -640,7 +653,7 @@ class Runner:
             try:
                 action(child_id)
             except CliError as exc:
-                add_event(state, node_id, f"could not {label} child {child_id}: {exc}", self._now())
+                add_event(state, node_id, f"could not {label} child {child_id}: {_brief(exc)}", self._now())
         ns.update(child_id=None, sent=False, snapshot=None, pending_message=None, replies_before=0, prompts_before=0, sent_at=None)
         ns["last_child_id"] = child_id
 

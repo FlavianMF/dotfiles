@@ -534,6 +534,25 @@ def test_quota_that_cannot_be_read_stops_the_run_instead_of_spending(env):
     assert "sem rede" in env.runner.status(run_id)["nodes"]["a"]["reason"]
 
 
+RAW_CLI_ERROR = (
+    "[48213:1105/174523.123:ERROR:gpu_process_host.cc(991)] GPU process (pid 48213) exited unexpectedly\n"
+    "[48213:1105/174523.124:ERROR:ozone_platform_x11.cc(257)] second line " + "x" * 400
+)
+
+
+def test_node_reason_has_one_short_line_without_pids_when_the_cli_fails(env):
+    env.fake.update(fail={"profile-rate-limits": RAW_CLI_ERROR})
+    env.flow(env.node("a"))
+    run_id = env.start()
+    env.drive(run_id)
+    reason = env.runner.status(run_id)["nodes"]["a"]["reason"]
+    assert env.states(run_id) == {"a": "awaiting_quota"}
+    assert "\n" not in reason
+    assert "48213" not in reason and "pid" not in reason.lower()
+    assert len(reason) <= 200
+    assert "GPU process" in reason  # a causa continua legível
+
+
 def test_provider_without_quota_information_does_not_block(env):
     env.fake.update(rate_available=False)
     env.flow(env.node("a"))
