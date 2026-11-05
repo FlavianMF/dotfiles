@@ -1,4 +1,4 @@
-.PHONY: flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint version
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -28,6 +28,7 @@ help:
 	@echo "  make plugins-status DIR=. - Mostra o que o plugins-auto gerencia no projeto"
 	@echo "  make ecc-observer-config - Liga o observer do continuous-learning-v2 (link para claude/ecc-clv2-config.json)"
 	@echo "  make test             - Roda os testes bash de tests/"
+	@echo "  make version          - Mostra a versão (tag semver) do dotfiles e avisa se estiver atrás da master"
 	@echo "  make ecc-status DIR=. - Mostra se o ECC está ligado no projeto"
 	@echo "  make ecc-rules        - Reespelha vendor/ecc/upstream/rules no pin do SOURCE.md"
 	@echo "  make ccr-install      - Instala o Claude Code Router na versão de ccr/VERSION"
@@ -131,9 +132,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; zsh -n zsh/harness2.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -178,6 +179,9 @@ harness2-check:
 test:
 	@for t in tests/*_test.sh; do echo "== $$t"; bash "$$t" </dev/null || exit 1; done
 
+
+version:
+	@./bin/dotfiles-version
 
 pc-ctl-install:
 	@mkdir -p $(HOME)/.local/bin
