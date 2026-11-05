@@ -1,4 +1,4 @@
-.PHONY: flow-validate flow-test install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -18,6 +18,9 @@ help:
 	@echo "  make harness-dry-run  - Mostra o que o install faria nos harnesses, sem mudar nada"
 	@echo "  make plugins-freeze   - Grava claude/plugins.lock.json (versões instaladas)"
 	@echo "  make plugins-update   - Atualiza marketplaces e plugins declarados, depois freeze"
+	@echo "  make flow-serve       - Servidor local dos fluxos em 127.0.0.1 (PORT, REPO, FLOW)"
+	@echo "  make flow-run INPUT=.. - Inicia um run do fluxo pelo motor, sem servidor (NAME, REPO)"
+	@echo "  make flow-validate    - Valida flows/ecc-dev.yaml; flow-test roda os testes"
 	@echo "  make ecc-on DIR=..    - Liga o plugin ECC num projeto (NO_COMMON=1 sem rules/common, PACKS=a,b só esses packs, NO_RULES=1 só o plugin)"
 	@echo "  make ecc-off DIR=..   - Desliga o plugin ECC no projeto e cria .claude/ecc.off (o auto não religa)"
 	@echo "  make ecc-auto DIR=..  - Liga o ECC só se o projeto for web, C ou backend Node (claude/ecc-auto.conf)"
@@ -234,3 +237,6 @@ ha-mcp-config:
 
 flow-validate flow-test:
 	@$(MAKE) --no-print-directory -C agents/flows $@
+
+flow-serve flow-run:
+	@$(MAKE) --no-print-directory -C agents/flows $@ REPO="$(if $(REPO),$(REPO),$(CURDIR))"
