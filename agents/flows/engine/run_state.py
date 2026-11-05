@@ -88,6 +88,7 @@ def new_node_state() -> dict[str, Any]:
         "pending_message": None,
         "snapshot": None,  # assinatura das saídas antes do send: sucesso = mudou
         "replies_before": 0,
+        "prompts_before": 0,
         "sent_at": None,
         "model": None,  # modelo escolhido em `choose_upgrade`; None = o do YAML
         "effort": None,

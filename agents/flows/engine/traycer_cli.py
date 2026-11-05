@@ -40,6 +40,7 @@ from typing import Any
 ENV_KEYS = ("HOME", "PATH", "TRAYCER_EPIC_ID", "TRAYCER_AGENT_ID")
 
 _ASSISTANT_RE = re.compile(r"<assistant_response>\n(.*?)\n?</assistant_response>", re.DOTALL)
+_USER_RE = re.compile(r"<user_message>")
 _ROW_HEADER_RE = re.compile(r"^\[assistant row \|[^\n]*\]\n?")
 
 
@@ -313,6 +314,13 @@ class Adapter:
         if not isinstance(transcript, str):
             raise CliError("agent transcript: the answer has no transcript")
         return _ASSISTANT_RE.findall(transcript)
+
+    def prompt_count(self, agent_id: str) -> int:
+        """Quantas mensagens o agente recebeu (blocos `<user_message>`): cresce assim que o `send` chega."""
+        transcript = self._call("agent", "transcript", f"--agent-id={agent_id}").get("transcript")
+        if not isinstance(transcript, str):
+            raise CliError("agent transcript: the answer has no transcript")
+        return len(_USER_RE.findall(transcript))
 
     def reply_count(self, agent_id: str) -> int:
         """Quantas respostas do assistente o transcript tem: cresce a cada turno concluído."""

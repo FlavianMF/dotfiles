@@ -485,3 +485,102 @@ def test_orphan_search_ignores_archived_agents_and_other_names(env):
 
 
 PROFILE_FOR_TEST = "p-fit"
+
+
+# 13. queda entre `send` e `sent=True`: não reenvie um prompt que o filho já recebeu ----------------
+
+
+def _crash_around_send(env, *, deliver):
+    real = env.runner.adapter.send
+
+    def send(agent_id, message):
+        if deliver:
+            real(agent_id, message)
+        raise Crash
+
+    env.runner.adapter.send = send
+
+
+def _messages(env):
+    return [m for agent in env.fake.agents.values() for m in agent["messages"]]
+
+
+def test_prompt_delivered_before_the_crash_is_not_sent_twice(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    _crash_around_send(env, deliver=True)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    state = env.runner.status(run_id)["nodes"]["a"]
+    assert state["sent"] is False and state["sent_at"] is not None
+    env.restart()
+    assert env.drive(run_id) is Step.FINISHED
+    assert len(_messages(env)) == 1  # o motor novo viu o prompt no filho e não reenviou
+    assert env.states(run_id) == {"a": "done"}
+    assert any("already delivered" in e["msg"] for e in env.runner.status(run_id)["events"])
+
+
+def test_prompt_delivered_but_without_any_output_or_reply_is_still_not_resent(env):
+    """Só o transcript prova a entrega: a mensagem chegou, o filho ainda não respondeu nem escreveu."""
+    env.flow(env.node("a", on_fail={"retry": 0, "then": "ask_before_upgrade"}))
+    env.fake.queue({"write": {}, "reply": None, "active_polls": 0})
+    run_id = env.start()
+    _crash_around_send(env, deliver=True)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    env.restart()
+    env.runner.step(run_id)
+    assert len(_messages(env)) == 1
+    assert env.runner.status(run_id)["nodes"]["a"]["sent"] is True
+
+
+def test_prompt_never_delivered_is_sent_after_the_restart(env):
+    env.flow(env.node("a"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    _crash_around_send(env, deliver=False)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    assert _messages(env) == []
+    env.restart()
+    assert env.drive(run_id) is Step.FINISHED
+    assert len(_messages(env)) == 1
+    assert env.states(run_id) == {"a": "done"}
+    assert len(env.fake.commands("create")) == 1
+
+
+def test_adjustment_delivered_before_the_crash_is_not_sent_twice(env):
+    env.flow(env.node("a", gate="human"))
+    env.fake.queue(env.done("a"), {"write": env.out("a", "versão 2\n")})
+    run_id = env.start()
+    env.drive(run_id)
+    env.runner.request_adjustment(run_id, "a", "troque o título")
+    _crash_around_send(env, deliver=True)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    env.restart()
+    env.drive(run_id)
+    assert len(_messages(env)) == 2  # o prompt e o ajuste, cada um uma vez
+    assert env.states(run_id) == {"a": "awaiting_gate"}
+
+
+def test_adjustment_never_delivered_is_sent_after_the_restart(env):
+    env.flow(env.node("a", gate="human"))
+    env.fake.queue(env.done("a"), {"write": env.out("a", "versão 2\n")})
+    run_id = env.start()
+    env.drive(run_id)
+    env.runner.request_adjustment(run_id, "a", "troque o título")
+    _crash_around_send(env, deliver=False)
+    with pytest.raises(Crash):
+        env.runner.step(run_id)
+    env.restart()
+    env.drive(run_id)
+    assert len(_messages(env)) == 2
+    assert env.states(run_id) == {"a": "awaiting_gate"}
+
+
+def test_runner_docstring_explains_the_send_recovery_rule():
+    import engine.runner as module
+
+    assert "já entregue" in module.__doc__ or "already delivered" in module.__doc__

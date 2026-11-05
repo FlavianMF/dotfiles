@@ -383,3 +383,13 @@ def test_poll_status_exposes_the_agent_name(adapter):
     assert adapter.poll_status(child.agent_id).name == "fase plan"
     assert adapter.find_by_name("fase plan").agent_id == child.agent_id
     assert adapter.find_by_name("outro") is None
+
+
+def test_prompt_count_counts_the_messages_the_child_received(adapter, fake):
+    child = create(adapter)
+    assert adapter.prompt_count(child.agent_id) == 0
+    fake.queue({"reply": None}, {"reply": "ok"})
+    adapter.send(child.agent_id, "um")
+    assert adapter.prompt_count(child.agent_id) == 1  # chegou, mesmo sem resposta ainda
+    adapter.send(child.agent_id, "dois")
+    assert adapter.prompt_count(child.agent_id) == 2

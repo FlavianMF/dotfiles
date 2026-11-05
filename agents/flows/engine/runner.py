@@ -36,6 +36,11 @@ Regras:
 - Todo filho nasce frio, com o pacote de contexto do motor (até 30 linhas). `context: fork` ainda
   não existe na v1: o motor usa o pacote e registra um evento. Assim a revisão é sempre a frio.
 - Um run ativo por repositório (caminho real).
+- Recuperação de queda: o nó grava `creating` (nome do filho) antes de `create_child` e `sent_at` antes
+  do `send`. Ao retomar, o motor acha o filho órfão pelo nome e o reusa. Se o envio deixou rastro, ele
+  só reenvia o prompt quando o filho não mostra mensagem nova, resposta nova, atividade nem saída
+  alterada: um prompt já entregue (already delivered) não é enviado de novo. A heurística falha para o
+  lado seguro: se o CLI não responde, reenvia (o pior caso é um prompt repetido, não um nó travado).
 """
 
 from __future__ import annotations
@@ -277,7 +282,9 @@ class Runner:
             ns.update(
                 sent=False,
                 snapshot=None,
-                replies_before=None,  # lido do transcript no envio
+                replies_before=None,  # lidos do transcript no envio
+                prompts_before=None,
+                sent_at=None,
                 retries_used=0,
                 pending_message=f"Ajuste pedido por um humano na fase '{node.id}':\n{note.strip()}\n\n"
                 f"Reescreva as saídas: {outputs}. O motor só aceita a fase se esses arquivos mudarem.",
@@ -454,6 +461,7 @@ class Runner:
             sent=False,
             snapshot=None,
             replies_before=0,
+            prompts_before=0,
             sent_at=None,
             pending_message=message,
         )
@@ -496,8 +504,16 @@ class Runner:
         try:
             if ns["replies_before"] is None:
                 ns["replies_before"] = self.adapter.reply_count(ns["child_id"])
+            if ns["prompts_before"] is None:
+                ns["prompts_before"] = self.adapter.prompt_count(ns["child_id"])
             if ns["snapshot"] is None:
                 ns["snapshot"] = self._signature(state, node)
+            if ns["sent_at"] is not None and self._already_delivered(state, node, ns):
+                # Um envio anterior deixou rastro (queda entre o `send` e `sent=True`) e o filho mostra o prompt.
+                add_event(state, node.id, "the prompt was already delivered before the restart: not sent again", self._now())
+                ns["sent"] = True
+                ns["pending_message"] = None
+                return
             ns["sent_at"] = self._now()
             self._save(state)
             self.adapter.send(ns["child_id"], ns["pending_message"])
@@ -506,6 +522,20 @@ class Runner:
             return
         ns["sent"] = True
         ns["pending_message"] = None
+
+    def _already_delivered(self, state: dict[str, Any], node: Node, ns: dict[str, Any]) -> bool:
+        """O filho já recebeu o prompt? Sim se há mensagem nova no transcript, resposta nova, atividade ou
+        saída alterada desde antes do envio. Qualquer erro do CLI conta como "não sei": reenvia."""
+        child_id = ns["child_id"]
+        try:
+            return (
+                self.adapter.poll_status(child_id).active
+                or self.adapter.prompt_count(child_id) > ns["prompts_before"]
+                or self.adapter.reply_count(child_id) > ns["replies_before"]
+                or self._outputs_changed(state, node, ns)
+            )
+        except CliError:
+            return False
 
     def _poll(self, state: dict[str, Any], flow: Flow, node: Node, ns: dict[str, Any]) -> Step | None:
         if not ns["child_id"]:  # após `choose_upgrade`
@@ -575,7 +605,7 @@ class Runner:
                 action(child_id)
             except CliError as exc:
                 add_event(state, node_id, f"could not {label} child {child_id}: {exc}", self._now())
-        ns.update(child_id=None, sent=False, snapshot=None, pending_message=None, replies_before=0)
+        ns.update(child_id=None, sent=False, snapshot=None, pending_message=None, replies_before=0, prompts_before=0, sent_at=None)
         ns["last_child_id"] = child_id
 
     # --- mensagem e pacote de contexto -----------------------------------------------------
