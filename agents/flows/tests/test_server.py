@@ -428,3 +428,62 @@ def test_main_resumes_active_runs(monkeypatch, tmp_path, repo):
     monkeypatch.setattr(server_app.uvicorn, "run", lambda *args, **kwargs: None)
     server_app.main(["--repo", str(repo), "--state-dir", str(tmp_path / "state")])
     assert seen["resume"] is True
+
+
+def _idle_app(runner, repo, flow_data, write_flow, now, every=10.0):
+    pending = []
+    app = create_app(
+        runner,
+        flow_path=write_flow(flow_data),
+        repo=repo,
+        port=PORT,
+        token=TOKEN,
+        spawn=pending.append,
+        idle_kick_every=every,
+        clock=lambda: now[0],
+    )
+    return TestClient(app, base_url=BASE), {"X-Flow-Token": TOKEN}, pending
+
+
+def test_polling_the_page_restarts_a_run_whose_drive_stopped(runner, repo, flow_data, write_flow):
+    # O drive para em BLOCKED (portão, cota, arquivo manual). Sem isso, nada acorda o run depois.
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)
+    pending.pop()()  # o drive do `start` termina
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1  # a consulta da página religou o motor
+    pending.pop()()
+    assert runner.driven == [run_id, run_id]
+
+
+def test_idle_restart_is_throttled_per_run(runner, repo, flow_data, write_flow):
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)
+    pending.pop()()
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    pending.pop()()
+    now[0] += 3
+    client.get(f"/runs/{run_id}")
+    assert pending == []  # menos de 10 s desde o último religamento
+    now[0] += 8
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1
+
+
+def test_idle_restart_skips_a_run_that_is_still_driving(runner, repo, flow_data, write_flow):
+    now = [100.0]
+    client, auth, pending = _idle_app(runner, repo, flow_data, write_flow, now)
+    run_id = start(client, auth)  # o drive do `start` ainda não rodou: o run está `driving`
+    now[0] += 11
+    client.get(f"/runs/{run_id}")
+    assert len(pending) == 1
+
+
+def test_idle_restart_is_off_by_default(client, auth, runner):
+    run_id = start(client, auth)
+    client.get(f"/runs/{run_id}")
+    assert runner.driven == [run_id]
