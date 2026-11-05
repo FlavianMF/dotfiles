@@ -1,4 +1,4 @@
-.PHONY: install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
+.PHONY: flow-validate flow-test install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config codex-drift audit lint
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -231,3 +231,6 @@ ha-mcp-check:
 
 ha-mcp-config:
 	@./homeassistant/setup-mcp.sh config $(if $(DRY_RUN),--dry-run)
+
+flow-validate flow-test:
+	@$(MAKE) --no-print-directory -C agents/flows $@
