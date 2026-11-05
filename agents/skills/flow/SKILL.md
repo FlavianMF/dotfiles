@@ -8,14 +8,20 @@ argument-hint: '<fluxo> "<ideia>" | status | approve <nó>'
 # /flow
 
 Chama o motor local (`engine.cli`), sem servidor. As fases, os modelos e os portões
-estão no YAML do fluxo (`~/dotfiles/agents/flows/flows/<fluxo>.yaml`): leia-o só se
-o usuário perguntar. O comando roda no repo do trabalho (diretório atual).
+estão no YAML do fluxo (`$FLOWS_DIR/flows/<fluxo>.yaml`): leia-o só se o usuário perguntar. Roda no repo atual.
 
-Defina `FLOW="env PYTHONPATH=$HOME/dotfiles/agents/flows python3 -m engine.cli"` e use:
+Cada comando começa com estas duas linhas (o shell não guarda variáveis). `FLOWS_DIR` já definida vence:
 
-- `/flow <fluxo> "<ideia>"`: `$FLOW run <fluxo> --input "<ideia>"`. O texto vira o slug do run.
-- `/flow status`: `$FLOW status`. Avança o que dá e mostra o estado de cada fase.
-- `/flow approve <nó>`: `$FLOW approve <nó>`. Aprova o portão humano da fase.
+```bash
+SKILL_DIR=<diretório base desta skill, que o harness informa>
+FLOWS_DIR="${FLOWS_DIR:-$(dirname "$(dirname "$(readlink -f "$SKILL_DIR")")")/flows}"
+```
+
+`<motor>` é `PYTHONPATH="$FLOWS_DIR" python3 -m engine.cli`:
+
+- `/flow <fluxo> "<ideia>"`: `<motor> run <fluxo> --input "<ideia>"`. O texto vira o slug do run.
+- `/flow status`: `<motor> status`. Avança o que dá e mostra o estado de cada fase.
+- `/flow approve <nó>`: `<motor> approve <nó>`. Aprova o portão humano da fase.
 
 ## Depois do comando
 

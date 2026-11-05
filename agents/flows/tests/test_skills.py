@@ -57,3 +57,42 @@ def test_the_command_in_the_skills_runs_from_any_directory(tmp_path):
         check=False,
     )
     assert proc.returncode == 0 and "run,status,approve,phase" in proc.stdout
+
+
+def _resolve_snippet(name):
+    """As linhas `FLOWS_DIR=...` da skill, que o agente roda antes de chamar o motor."""
+    text = (REPO / "agents" / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line.startswith(("SKILL_DIR=", "FLOWS_DIR="))]
+    assert [l.split("=")[0] for l in lines] == ["SKILL_DIR", "FLOWS_DIR"], f"{name}: snippet missing"
+    return "\n".join(lines)
+
+
+def _run_snippet(name, skill_dir, extra_env=None):
+    script = _resolve_snippet(name).replace("SKILL_DIR=<", f"SKILL_DIR={skill_dir} #<", 1)
+    script += '\nPYTHONPATH="$FLOWS_DIR" python3 -m engine.cli --help >/dev/null && echo "$FLOWS_DIR"'
+    env = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", **(extra_env or {})}
+    return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, check=False)
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_skill_finds_the_engine_from_its_own_location_through_a_symlink(name, tmp_path):
+    """Instalada como link em ~/.agents/skills, a skill acha `agents/flows` sem depender de $HOME/dotfiles."""
+    link = tmp_path / ".agents" / "skills" / name
+    link.parent.mkdir(parents=True)
+    link.symlink_to(REPO / "agents" / "skills" / name)
+    proc = _run_snippet(name, link)
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(FLOWS_DIR)
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_flows_dir_env_overrides_the_resolved_path(name, tmp_path):
+    proc = _run_snippet(name, tmp_path / "nowhere", {"FLOWS_DIR": str(FLOWS_DIR)})
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(FLOWS_DIR)
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_skill_does_not_pin_the_dotfiles_path(name):
+    _, text = _frontmatter(name)
+    assert "$HOME/dotfiles" not in text and "~/dotfiles" not in text

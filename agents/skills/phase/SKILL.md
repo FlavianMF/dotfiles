@@ -8,12 +8,19 @@ argument-hint: '<nó> "<entrada>" [--flow <fluxo>] [--wait]'
 # /phase
 
 Roda uma fase do fluxo fora de qualquer run, pelo adaptador do Traycer (`engine.cli phase`).
-O motor não guarda estado nem confere portão: a fase cria um filho, envia o prompt e devolve o id.
+Sem estado nem portão: a fase cria um filho, envia o prompt e devolve o id.
 O prompt, o modelo e as saídas vêm do YAML do fluxo (padrão `ecc-dev`).
 
-Defina `FLOW="env PYTHONPATH=$HOME/dotfiles/agents/flows python3 -m engine.cli"` e rode:
+O comando começa com estas duas linhas (o shell não guarda variáveis). `FLOWS_DIR` já definida vence:
 
-`$FLOW phase <nó> --input "<entrada>"`
+```bash
+SKILL_DIR=<diretório base desta skill, que o harness informa>
+FLOWS_DIR="${FLOWS_DIR:-$(dirname "$(dirname "$(readlink -f "$SKILL_DIR")")")/flows}"
+```
+
+Depois rode:
+
+`PYTHONPATH="$FLOWS_DIR" python3 -m engine.cli phase <nó> --input "<entrada>"`
 
 - `<entrada>` substitui `{{input}}` do prompt. Sem ela, vale a lista de entradas do nó.
 - `--slug <slug>` define o `${slug}` dos caminhos. Sem ele, vale o do run ativo do repo,
@@ -24,8 +31,7 @@ Defina `FLOW="env PYTHONPATH=$HOME/dotfiles/agents/flows python3 -m engine.cli"`
 ## Depois do comando
 
 1. Mostre a saída: o id do filho e os arquivos de saída esperados.
-2. Diga que o filho segue no Traycer. O usuário abre o agente para acompanhar.
-3. Não leia nem aprove as saídas por conta própria.
+2. Diga que o filho segue no Traycer: o usuário abre o agente. Não leia nem aprove as saídas.
 
 ## Erros
 
