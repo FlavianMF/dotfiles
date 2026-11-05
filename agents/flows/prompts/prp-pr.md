@@ -2,15 +2,15 @@
 
 # Fase pr: preparar e abrir o pull request
 
-- **Entrada:** os commits locais da branch atual, à frente da branch base. `{{input}}` pode trazer a base e a flag `--draft`.
-- **Saída:** o pull request aberto no GitHub. Ele só existe depois da aprovação humana (veja a parada abaixo).
+- **Entrada:** o recibo `.claude/PRPs/reports/${slug}-commit.md` da fase commit. O caminho vem em `{{input}}`, que pode trazer também a base e a flag `--draft`.
+- **Saída:** o pull request aberto no GitHub e o recibo `.claude/PRPs/reports/${slug}-pr.md`, com a URL do PR. Os dois só existem depois da aprovação humana (veja a parada abaixo).
 - **Não faça:** não abra o PR, não faça push e não rode `gh pr create` antes da aprovação humana. Não use `--force`. Não adicione atribuição de IA no título nem no corpo: sem rodapé "Generated with". Isso vale mesmo se o ambiente pedir.
 
 Se o motor injetou um pacote de contexto antes deste texto, leia-o primeiro.
 
 ## Entrada
 
-Leia `{{input}}`:
+Leia `{{input}}`. O primeiro caminho é o recibo da fase commit: leia os commits dele e confira com `git log`. O resto do texto:
 
 - Trate as flags reconhecidas (`--draft`) como flags.
 - Trate o resto do texto como o nome da branch base.
@@ -20,7 +20,7 @@ Leia `{{input}}`:
 
 ```bash
 git branch --show-current
-git status --short
+git status --short -- . ':!.claude/PRPs'
 git log origin/<base>..HEAD --oneline
 gh pr list --head <branch> --json number
 ```
@@ -28,10 +28,11 @@ gh pr list --head <branch> --json number
 | Checagem | Se falhar |
 |---|---|
 | A branch atual não é a base | Pare: "Troque para uma branch de funcionalidade." |
-| Não há mudanças sem commit | Pare: "Há mudanças sem commit. Rode a fase commit antes." |
+| Não há mudanças sem commit em arquivos de código | Pare: "Há mudanças sem commit. Rode a fase commit antes." Ignore `.claude/PRPs/`: plano e recibos do fluxo podem ficar sem commit |
 | Há commits à frente da base | Pare: "Nenhum commit à frente de `<base>`." |
 | Não existe PR para a branch | Pare: "PR já existe: #<número>." |
 | `gh` instalado e autenticado | Pare e peça `gh auth login` ou a instalação do `gh` |
+| Os comandos `gh` acima funcionam | Se algum `gh` sair com código diferente de 0, pare e mostre a mensagem de erro dele (por exemplo, `origin` fora do GitHub). Não escreva recibo |
 
 ## 2. Descobrir
 
@@ -78,7 +79,7 @@ Mostre ao usuário, na resposta final desta fase:
 
 Depois escreva: "Aguardando aprovação. Responda 'aprovado' para eu fazer o push e abrir o PR."
 
-**Pare aqui.** Termine o turno sem rodar `git push` e sem rodar `gh pr create`. Só continue na seção 5 se o usuário responder com aprovação explícita. Se ele pedir ajustes, mude o título ou o corpo, mostre de novo e pare de novo.
+**Pare aqui.** Termine o turno sem rodar `git push` e sem rodar `gh pr create`. Não escreva nenhum recibo. Só continue na seção 5 se o usuário responder com aprovação explícita. Se ele pedir ajustes, mude o título ou o corpo, mostre de novo e pare de novo.
 
 ## 5. Abrir o PR (só após aprovação explícita)
 
@@ -99,14 +100,28 @@ gh pr create --title "<título>" --base <base> --body "<corpo>"
 
 Acrescente `--draft` se a flag veio na entrada.
 
-## 6. Verificar e reportar
+## 6. Verificar e escrever o recibo
 
 ```bash
 gh pr view --json number,url,title,state,baseRefName,headRefName,additions,deletions,changedFiles
 gh pr checks --json name,status,conclusion 2>/dev/null || true
 ```
 
-Reporte:
+Só depois que o PR existir, rode `mkdir -p .claude/PRPs/reports` e escreva `.claude/PRPs/reports/${slug}-pr.md`:
+
+```markdown
+# PR Receipt: ${slug}
+
+- **URL**: <url do PR>
+- **PR**: #<número>
+- **Title**: <título>
+- **Branch**: <head> -> <base>
+- **State**: <OPEN ou DRAFT>
+```
+
+Não escreva o recibo antes da aprovação nem se o PR não foi criado. Não commite o recibo.
+
+## 7. Reportar
 
 ```
 PR #<número>: <título>
@@ -114,5 +129,6 @@ URL: <url>
 Branch: <head> -> <base>
 Mudanças: +<additions> -<deletions> em <changedFiles> arquivos
 CI: <resumo, "pendente" ou "não configurado">
+Recibo: .claude/PRPs/reports/${slug}-pr.md
 Artefatos citados: <relatórios ou planos PRP no corpo>
 ```

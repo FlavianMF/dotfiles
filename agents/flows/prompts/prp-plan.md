@@ -74,6 +74,10 @@ Compile tudo em uma tabela:
 | Categoria | Arquivo:linhas | Padrão | Trecho |
 |---|---|---|---|
 
+Se o projeto não tem type-check ou lint, escreva "N/A" nos comandos de validação e use o validador mais próximo. Se não existe código real para um padrão (por exemplo logs), escreva "N/A: sem exemplo no repositório". Não invente trechos.
+
+Se o PRD deixa um "TBD" que nenhuma pesquisa resolve (decisão de produto), liste-o em "Notes" e adote a suposição conservadora, marcada como suposição.
+
 ## 3. Pesquisar
 
 Se a funcionalidade usa bibliotecas, APIs ou tecnologia desconhecidas, consulte a documentação oficial. Registre cada achado assim:

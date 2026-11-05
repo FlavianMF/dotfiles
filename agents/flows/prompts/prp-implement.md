@@ -39,8 +39,10 @@ Se o arquivo não existir ou não for um plano válido, escreva o erro em uma fr
 
 ```bash
 git branch --show-current
-git status --porcelain
+git status --porcelain -- . ':!.claude/PRPs'
 ```
+
+Ignore `.claude/PRPs/`: ali ficam o PRD, o plano e os relatórios do fluxo. Eles não contam como árvore suja.
 
 | Estado | Ação |
 |---|---|
@@ -71,6 +73,8 @@ Rode todos os níveis do plano. Corrija cada nível antes do seguinte.
 3. **Build:** deve passar sem erros.
 4. **Integração (se aplicável):** suba o servidor, espere ele responder, rode os testes e encerre o servidor. Dê timeout de 30 segundos para a subida.
 5. **Casos de borda:** percorra a checklist de "Testing Strategy".
+
+Se a validação alterar arquivos versionados e gerados (por exemplo `__pycache__`), restaure-os com `git checkout -- <caminho>`. Se o projeto não tiver type-check, lint ou build, escreva N/A no relatório e use o validador mais próximo (por exemplo `python3 -m py_compile`).
 
 Os testes são o portão desta fase. Só escreva o relatório com todos os níveis verdes.
 

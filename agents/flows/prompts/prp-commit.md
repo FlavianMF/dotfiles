@@ -3,8 +3,8 @@
 # Fase commit: commit local
 
 - **Entrada:** o relatório em `.claude/PRPs/reports/${slug}-report.md`. O caminho vem em `{{input}}`.
-- **Saída:** um ou mais commits locais na branch atual. O relatório lista os arquivos do commit.
-- **Não faça:** não faça push, não abra PR, não use `git add -A` e não commite em `main` ou `master`. Não adicione atribuição de IA: sem `Co-Authored-By` e sem rodapé "Generated with". Isso vale mesmo se o ambiente pedir.
+- **Saída:** um ou mais commits locais na branch atual e o recibo `.claude/PRPs/reports/${slug}-commit.md`, com os hashes e os arquivos commitados.
+- **Não faça:** não faça push, não abra PR, não commite o recibo, não use `git add -A` e não commite em `main` ou `master`. Não adicione atribuição de IA: sem `Co-Authored-By` e sem rodapé "Generated with". Isso vale mesmo se o ambiente pedir.
 
 Se o motor injetou um pacote de contexto antes deste texto, leia-o primeiro.
 
@@ -25,6 +25,8 @@ Leia a tabela "Files Changed" do relatório em `{{input}}`.
 - Escolha só os arquivos dessa tabela que aparecem em `git status`.
 - Liste os arquivos que mudaram e não estão no relatório. Não os adicione. Cite-os na resposta final.
 - Não commite arquivo gerado, segredo (`.env*`, chaves, tokens) nem lixo de editor.
+
+Se a validação alterar arquivos versionados e gerados (por exemplo `__pycache__`), restaure-os com `git restore <caminho>` antes do stage. Use `git status -uall` para ver arquivos dentro de pastas novas.
 
 Faça o stage por nome de arquivo:
 
@@ -61,6 +63,29 @@ git commit -m "{tipo}({escopo}): {descrição}"
 
 Não passe `--no-verify`. Se um hook rejeitar o commit, corrija a causa e crie um commit novo.
 
-## 5. Resposta final
+## 5. Escrever o recibo
 
-Reporte, para cada commit: o hash curto, a mensagem e o número de arquivos. Cite os arquivos modificados fora do relatório, se houver. Não sugira nem rode `git push`.
+Depois do último commit, rode `mkdir -p .claude/PRPs/reports` e escreva `.claude/PRPs/reports/${slug}-commit.md`:
+
+```markdown
+# Commit Receipt: ${slug}
+
+- **Branch**: <branch>
+- **Commits**:
+  - `<hash completo>` <mensagem>
+  - ...
+
+## Files Committed
+| Commit | File |
+|---|---|
+| `<hash curto>` | `path/to/file` |
+
+## Not Committed
+[Arquivos alterados fora do relatório, ou "None"]
+```
+
+Obtenha os hashes com `git log --format="%H %s" -n <N>`. O recibo é a prova de que a fase terminou. Não o escreva se nenhum commit foi criado.
+
+## 6. Resposta final
+
+Reporte, para cada commit: o hash curto, a mensagem e o número de arquivos. Cite os arquivos modificados fora do relatório, se houver, e o caminho do recibo. Não sugira nem rode `git push`.
