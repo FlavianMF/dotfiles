@@ -115,3 +115,40 @@ def test_approve_gate_still_refreshes_a_ready_manual_node(env):
     (env.repo / "out" / "prd.md").write_text("prd\n")
     env.runner.approve_gate(run_id, "prd")  # o arquivo apareceu entre dois steps
     assert env.states(run_id) == {"prd": "done"}
+
+
+# 4. `lock(name)` sem validar o nome ------------------------------------------------------------
+
+BAD_IDS = ["./../../x", "../x", "a/b", "", ".hidden", "x" * 200]
+
+
+@pytest.mark.parametrize("bad", BAD_IDS)
+def test_every_public_method_rejects_a_bad_run_id_without_touching_the_disk(env, bad):
+    calls = [
+        lambda: env.runner.step(bad),
+        lambda: env.runner.drive(bad),
+        lambda: env.runner.status(bad),
+        lambda: env.runner.approve_gate(bad, "a"),
+        lambda: env.runner.reject_gate(bad, "a"),
+        lambda: env.runner.request_adjustment(bad, "a", "x"),
+        lambda: env.runner.choose_upgrade(bad, "a", model="opus"),
+        lambda: env.runner.abort_run(bad),
+    ]
+    for call in calls:
+        with pytest.raises(StateError):
+            call()
+    assert not list(env.tmp_path.rglob("*.lock"))
+    assert env.runner.store._threads == {}
+
+
+def test_unknown_but_valid_run_id_does_not_create_lock_files(env):
+    with pytest.raises(StateError):
+        env.runner.step("run-does-not-exist")
+    assert not list(env.tmp_path.rglob("*.lock"))
+    assert env.runner.store._threads == {}
+
+
+def test_the_internal_start_lock_still_works(env):
+    env.flow(env.node("a", gate="human"))
+    env.start()
+    assert (env.tmp_path / "state" / ".start.lock").exists()

@@ -59,6 +59,7 @@ TRANSITIONS: dict[str, frozenset[str]] = {
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 MAX_EVENTS = 300
+START_LOCK = "start"  # trava interna da criação de run; nenhum run_id é só "start" (tem sufixo)
 
 
 class StateError(Exception):
@@ -161,7 +162,12 @@ class RunStore:
 
     @contextlib.contextmanager
     def lock(self, name: str) -> Iterator[None]:
-        """Trava exclusiva por nome: `threading.RLock` (mesmo processo) e `flock` (outro processo)."""
+        """Trava exclusiva por nome: `threading.RLock` (mesmo processo) e `flock` (outro processo).
+
+        `name` é `START_LOCK` ou o id de um run que existe: nome inválido ou run inexistente levanta
+        `StateError` antes de tocar o disco (nada de `.lock` fora de `state_dir`, nada de `_threads` inflado)."""
+        if name != START_LOCK and not self.path(name).is_file():
+            raise StateError(f"run {name} not found")
         self.dir.mkdir(parents=True, exist_ok=True)
         with self._guard:
             thread_lock = self._threads.setdefault(name, threading.RLock())

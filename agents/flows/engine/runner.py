@@ -53,6 +53,7 @@ from typing import Any
 
 from engine.loader import load_flow
 from engine.run_state import (
+    START_LOCK,
     TERMINAL_NODE_STATES,
     VERSION,
     RunStore,
@@ -163,7 +164,7 @@ class Runner:
             "events": [],
         }
         add_event(state, None, f"run created for {real_repo}", now)
-        with self.store.lock("start"):
+        with self.store.lock(START_LOCK):
             for other in self.store.list_runs():
                 if other["repo"] == real_repo and other["status"] == "active":
                     raise RepoBusy(f"repo {real_repo} already has an active run: {other['run_id']}")
