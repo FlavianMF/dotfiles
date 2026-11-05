@@ -9,6 +9,17 @@ Contrato com T3/T4:
 
 Cada `Node` traz `inputs`/`outputs` relativos à raiz do repo, sem `${slug}`. `Node.prompt` é
 absoluto (resolvido a partir do diretório do YAML), então não depende do cwd.
+
+Semântica de `after` (ordem explícita entre nós, além das ligações de inputs/outputs). O nó
+dependente só roda quando cada predecessor em `after` está satisfeito:
+
+    - satisfeito: o predecessor terminou com sucesso OU foi pulado por `when`;
+    - bloqueia o dependente: o predecessor falhou (esgotou `on_fail.retry`), foi abortado
+      (`on_fail.then: abort`) ou teve o portão humano (`gate: human`) recusado.
+
+Equivale ao `trigger_rule: all_success` do Airflow e ao `needs:` do GitHub Actions, com o pulo
+por `when` tratado como sucesso. `after` só ordena e bloqueia por falha: quem segura um nó
+que terminou bem é o `gate: human` desse nó, não o `after`.
 """
 
 from __future__ import annotations
