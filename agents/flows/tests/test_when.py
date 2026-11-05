@@ -95,3 +95,23 @@ def test_never_uses_eval_or_exec(monkeypatch):
     assert evaluate_when("diff_lines > 1 or sensitive", {"diff_lines": 2, "sensitive": False})
     with pytest.raises(WhenError):
         parse_when("__import__('os')")
+
+
+def test_deep_nesting_raises_when_error_not_recursion_error():
+    with pytest.raises(WhenError):
+        parse_when("(" * 400 + "sensitive" + ")" * 400)
+
+
+def test_missing_variable_fails_even_when_branch_short_circuits():
+    with pytest.raises(WhenError, match="diff_lines"):
+        evaluate_when("sensitive or diff_lines > 1", {"sensitive": True})
+
+
+def test_source_has_no_eval_exec_compile_or_ast():
+    import re
+    from pathlib import Path
+
+    import engine.when as when_module
+
+    source = Path(when_module.__file__).read_text(encoding="utf-8")
+    assert not re.search(r"\b(eval|exec|compile)\s*\(|\bimport ast\b|\bfrom ast\b", source)

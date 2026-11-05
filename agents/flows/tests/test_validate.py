@@ -159,3 +159,9 @@ def test_cli_rejects_cycle_naming_the_node(write_flow, node, capsys):
     assert main([str(write_flow(data))]) == 1
     err = capsys.readouterr().err
     assert "node 'a'" in err and "cycle" in err
+
+
+def test_run_input_also_produced_by_a_node(write_flow, node):
+    data = {"name": "x", "run_inputs": ["o.md"], "nodes": [node("a", [], ["o.md"])]}
+    errs = errors_of(write_flow, data)
+    assert any("node 'a'" in e and "field 'outputs'" in e and "run_inputs" in e for e in errs), errs

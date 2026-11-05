@@ -46,6 +46,21 @@ def _is_str(value: Any) -> bool:
     return isinstance(value, str) and value.strip() != ""
 
 
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader que recusa chave duplicada (o PyYAML deixaria a última vencer em silêncio)."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(
+                    None, None, f"duplicate key {key!r}", key_node.start_mark
+                )
+            seen.add(key)
+        return super().construct_mapping(node, deep=deep)
+
+
 class _Collector:
     """Junta erros de um nó (ou do fluxo) com o prefixo `node 'id': field 'x': ...`."""
 
@@ -71,9 +86,18 @@ def _resolve_path(c: _Collector, field: str, raw: Any, slug: str) -> str | None:
     if "${" in raw.replace(_SLUG_PLACEHOLDER, ""):
         c.add(field, f"invalid placeholder in {_fmt(raw)} (only ${{slug}} is allowed)")
         return None
-    path = raw.replace(_SLUG_PLACEHOLDER, slug)
-    if path.startswith("/") or ".." in PurePosixPath(path).parts:
-        c.add(field, f"path {_fmt(raw)} must be relative to the repo root and stay inside it")
+    return _safe_relpath(c, field, raw.replace(_SLUG_PLACEHOLDER, slug), raw)
+
+
+def _safe_relpath(c: _Collector, field: str, path: str, shown: str) -> str | None:
+    if (
+        path.startswith("/")
+        or "\\" in path
+        or "\0" in path
+        or ".." in PurePosixPath(path).parts
+        or posixpath.normpath(path) == "."
+    ):
+        c.add(field, f"path {_fmt(shown)} must be a relative file path that stays inside the repo root")
         return None
     return posixpath.normpath(path)
 
@@ -139,7 +163,7 @@ def _parse_on_fail(c: _Collector, raw: Any) -> OnFail | None:
 
 def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | None:
     node_id = raw.get("id") if isinstance(raw, dict) else None
-    label = f"node '{node_id}'" if isinstance(node_id, str) and NODE_ID_RE.match(node_id) else f"node #{index}"
+    label = f"node '{node_id}'" if isinstance(node_id, str) and NODE_ID_RE.fullmatch(node_id) else f"node #{index}"
     c = _Collector(label, errors)
     if not isinstance(raw, dict):
         errors.append(f"{label}: must be a mapping, got {_fmt(raw)}")
@@ -155,9 +179,13 @@ def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | No
     if "id" in raw and label.startswith("node #"):
         c.add("id", f"must match {NODE_ID_RE.pattern}, got {_fmt(node_id)}")
 
-    for key in ("title", "prompt"):
-        if key in raw and not _is_str(raw[key]):
-            c.add(key, f"must be a non-empty string, got {_fmt(raw[key])}")
+    if "title" in raw and not _is_str(raw["title"]):
+        c.add("title", f"must be a non-empty string, got {_fmt(raw['title'])}")
+    if "prompt" in raw:
+        if not _is_str(raw["prompt"]):
+            c.add("prompt", f"must be a non-empty string, got {_fmt(raw['prompt'])}")
+        else:
+            _safe_relpath(c, "prompt", raw["prompt"], raw["prompt"])
 
     mode = raw.get("mode", OPTIONAL_NODE_FIELDS["mode"])
     _expect_enum(c, "mode", mode, MODES)
@@ -198,7 +226,7 @@ def _parse_node(raw: Any, index: int, slug: str, errors: list[str]) -> Node | No
 def parse_flow(data: Any, slug: str) -> Flow:
     """Aplica o schema a um dict já lido do YAML e resolve `${slug}`. Não checa o grafo."""
     errors: list[str] = []
-    if not isinstance(slug, str) or not SLUG_RE.match(slug):
+    if not isinstance(slug, str) or not SLUG_RE.fullmatch(slug):
         errors.append(f"flow: field 'slug': invalid slug {_fmt(slug)} (expected {SLUG_RE.pattern})")
         slug = "invalid"
     if not isinstance(data, dict):
@@ -209,7 +237,7 @@ def parse_flow(data: Any, slug: str) -> Flow:
             c.add(key, "unknown field")
     if not _is_str(data.get("name")):
         c.add("name", "required field is missing or not a non-empty string")
-    run_inputs = _resolve_paths(c, "run_inputs", data.get("run_inputs") or [], slug)
+    run_inputs = _resolve_paths(c, "run_inputs", data.get("run_inputs", []), slug)
 
     raw_nodes = data.get("nodes")
     nodes: list[Node] = []
@@ -228,10 +256,11 @@ def parse_flow(data: Any, slug: str) -> Flow:
 def load_flow(path: str | Path, *, slug: str, validate: bool = True) -> Flow:
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError as exc:
-        raise FlowError(f"flow: cannot read {path}: {exc.strerror or exc}") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        reason = getattr(exc, "strerror", None) or exc
+        raise FlowError(f"flow: cannot read {path}: {reason}") from exc
     try:
-        data = yaml.safe_load(text)
+        data = yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506 (SafeLoader subclass)
     except yaml.YAMLError as exc:
         raise FlowError(f"flow: invalid YAML in {path}: {exc}") from exc
     flow = parse_flow(data, slug)

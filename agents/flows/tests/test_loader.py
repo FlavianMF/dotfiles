@@ -237,3 +237,56 @@ def test_flow_and_nodes_are_immutable(write_flow, flow_data):
     flow = load(write_flow, copy.deepcopy(flow_data))
     with pytest.raises(AttributeError):
         flow.nodes[0].id = "z"  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("slug", ["abc\n", "abc\x00"])
+def test_slug_rejects_trailing_newline_and_nul(write_flow, flow_data, slug):
+    with pytest.raises(FlowError):
+        load(write_flow, flow_data, slug=slug)
+
+
+def test_node_id_rejects_trailing_newline(write_flow, flow_data):
+    flow_data["nodes"][1]["id"] = "b\n"
+    errs = errors_of(write_flow, flow_data)
+    assert any("node #2" in e and "field 'id'" in e for e in errs), errs
+
+
+@pytest.mark.parametrize("bad", ["/etc/passwd", "../../x.md", "a\\b.md", "bad\x00.md", "."])
+def test_unsafe_prompt_path(write_flow, flow_data, bad):
+    flow_data["nodes"][1]["prompt"] = bad
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'b'" in e and "field 'prompt'" in e for e in errs), errs
+
+
+@pytest.mark.parametrize("bad", [".", "a\\b.md", "bad\x00.md"])
+def test_unsafe_io_path(write_flow, flow_data, bad):
+    flow_data["nodes"][1]["outputs"] = [bad]
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'b'" in e and "field 'outputs'" in e for e in errs), errs
+
+
+@pytest.mark.parametrize("bad", ["", 0, False, "x"])
+def test_run_inputs_must_be_list(write_flow, flow_data, bad):
+    flow_data["run_inputs"] = bad
+    errs = errors_of(write_flow, flow_data)
+    assert any("field 'run_inputs'" in e for e in errs), errs
+
+
+def test_duplicate_yaml_key_rejected(tmp_path):
+    p = tmp_path / "f.yaml"
+    p.write_text("name: a\nname: b\nnodes: []\n")
+    with pytest.raises(FlowError, match="duplicate key 'name'"):
+        load_flow(p, slug="s")
+
+
+def test_non_utf8_file(tmp_path):
+    p = tmp_path / "f.yaml"
+    p.write_bytes(b"\xff\xfe\x00bad")
+    with pytest.raises(FlowError, match="cannot read"):
+        load_flow(p, slug="s")
+
+
+def test_deeply_nested_when_is_a_flow_error(write_flow, flow_data):
+    flow_data["nodes"][1]["when"] = "(" * 400 + "sensitive" + ")" * 400
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'b'" in e and "field 'when'" in e for e in errs), errs

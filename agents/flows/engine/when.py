@@ -23,6 +23,7 @@ WHEN_VARIABLES: dict[str, type] = {"diff_lines": int, "sensitive": bool}
 _COMPARATORS = ("==", "!=", "<=", ">=", "<", ">")
 _ORDERING = ("<", "<=", ">", ">=")
 _MAX_LEN = 500
+_MAX_DEPTH = 16
 
 
 class WhenError(ValueError):
@@ -75,9 +76,9 @@ class _Logic:
     terms: tuple[_Node, ...]
 
     def evaluate(self, variables: Mapping[str, object]) -> bool:
-        if self.op == "and":
-            return all(t.evaluate(variables) for t in self.terms)
-        return any(t.evaluate(variables) for t in self.terms)
+        # Sem curto-circuito: uma variável ausente falha sempre, não só no ramo avaliado.
+        results = [t.evaluate(variables) for t in self.terms]
+        return all(results) if self.op == "and" else any(results)
 
 
 _Node = _Cmp | _Logic
@@ -129,6 +130,7 @@ class _Parser:
     def __init__(self, tokens: list[tuple[str, str, int]]) -> None:
         self.tokens = tokens
         self.pos = 0
+        self.depth = 0
 
     def peek(self) -> tuple[str, str, int] | None:
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
@@ -171,7 +173,11 @@ class _Parser:
         tok = self.peek()
         if tok is not None and tok[0] == "(":
             self.next()
+            self.depth += 1
+            if self.depth > _MAX_DEPTH:
+                raise WhenError(f"parentheses nested deeper than {_MAX_DEPTH}")
             node = self.or_expr()
+            self.depth -= 1
             closing = self.next()
             if closing[0] != ")":
                 raise WhenError(f"expected ')' at position {closing[2]}")

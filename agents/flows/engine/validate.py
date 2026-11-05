@@ -85,6 +85,9 @@ def check_flow(flow: Flow) -> list[str]:
             errors.append(f"node '{first}': field 'outputs': '{path}' is produced more than once ({owners})")
 
     declared = set(flow.run_inputs)
+    for path in sorted(declared & producers.keys()):
+        owner = flow.nodes[producers[path][0]].id
+        errors.append(f"node '{owner}': field 'outputs': '{path}' is also declared in run_inputs")
     for node in flow.nodes:
         for path in node.inputs:
             if path not in producers and path not in declared:
