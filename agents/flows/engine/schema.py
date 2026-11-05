@@ -22,6 +22,8 @@ MODES = ("auto", "manual")
 GATES = ("none", "human")
 CONTEXTS = ("pack", "fork")
 ON_FAIL_THEN = ("ask_before_upgrade", "abort")
+HARNESSES = ("claude", "antigravity", "opencode", "codex")
+EFFORTS = ("low", "medium", "high")
 
 NODE_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")

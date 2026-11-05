@@ -17,7 +17,9 @@ import yaml
 from engine.schema import (
     CONTEXTS,
     FLOW_FIELDS,
+    EFFORTS,
     GATES,
+    HARNESSES,
     MODES,
     NODE_ID_RE,
     ON_FAIL_THEN,
@@ -128,6 +130,9 @@ def _parse_agent(c: _Collector, raw: Any) -> AgentSpec | None:
             ok = False
         elif not _is_str(raw[key]):
             c.add(f"agent.{key}", f"must be a non-empty string, got {_fmt(raw[key])}")
+            ok = False
+    for key, allowed in (("harness", HARNESSES), ("effort", EFFORTS)):
+        if _is_str(raw.get(key)) and not _expect_enum(c, f"agent.{key}", raw[key], allowed):
             ok = False
     skills = raw.get("skills", [])
     if skills is None:

@@ -110,6 +110,26 @@ def test_agent_requires_key(write_flow, flow_data, key):
     assert any("node 'b'" in e and f"field 'agent.{key}'" in e for e in errs), errs
 
 
+@pytest.mark.parametrize(
+    ("key", "bad"),
+    [("harness", "claud"), ("harness", "Claude"), ("effort", "banana"), ("effort", "xhigh")],
+)
+def test_invalid_agent_enum(write_flow, flow_data, key, bad):
+    flow_data["nodes"][1]["agent"][key] = bad
+    errs = errors_of(write_flow, flow_data)
+    assert any("node 'b'" in e and f"field 'agent.{key}'" in e and repr(bad) in e for e in errs), errs
+
+
+@pytest.mark.parametrize(
+    ("key", "good"),
+    [("harness", h) for h in ("claude", "antigravity", "opencode", "codex")]
+    + [("effort", e) for e in ("low", "medium", "high")],
+)
+def test_valid_agent_enum(write_flow, flow_data, key, good):
+    flow_data["nodes"][1]["agent"][key] = good
+    assert getattr(load(write_flow, flow_data).nodes[1].agent, key) == good
+
+
 def test_agent_skills_must_be_string_list(write_flow, flow_data):
     flow_data["nodes"][1]["agent"]["skills"] = "tdd"
     errs = errors_of(write_flow, flow_data)
