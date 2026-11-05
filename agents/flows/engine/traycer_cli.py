@@ -323,6 +323,14 @@ class Adapter:
             raise CliError("agent transcript: the answer has no transcript")
         return _ASSISTANT_RE.findall(transcript)
 
+    def assistant_headers(self, agent_id: str) -> list[str]:
+        """Cabeçalho `[assistant row | ...]` de cada resposta do assistente, em ordem (sem os colchetes)."""
+        headers = []
+        for block in self._assistant_blocks(agent_id):
+            match = re.match(r"^\[assistant row \|([^\n]*)\]", block)
+            headers.append(match.group(1).strip() if match else "")
+        return headers
+
     def prompt_count(self, agent_id: str) -> int:
         """Quantas mensagens o agente recebeu (blocos `<user_message>`): cresce assim que o `send` chega."""
         transcript = self._call("agent", "transcript", f"--agent-id={agent_id}").get("transcript")

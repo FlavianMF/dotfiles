@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from engine.loader import load_flow
+from engine.report import cmd_report
 from engine.run_state import RunStore, StateError
 from engine.runner import RunError, Runner, Step
 from engine.schema import SLUG_RE, FlowError
@@ -275,6 +276,10 @@ def build_parser() -> argparse.ArgumentParser:
     phase.add_argument("--slug", help="slug (padrão: o do run ativo do repo, ou derivado de --input)")
     phase.add_argument("--wait", action="store_true", help="espera o fim do turno e confere as saídas")
     phase.set_defaults(func=cmd_phase)
+
+    rep = sub.add_parser("report", parents=[common], help="relatório por fase de um run (modelo, duração, contexto, cota)")
+    rep.add_argument("run", help="id do run")
+    rep.set_defaults(func=cmd_report)
     return parser
 
 

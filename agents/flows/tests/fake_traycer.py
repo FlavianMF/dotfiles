@@ -185,7 +185,9 @@ def _dispatch(state: dict, args: list[str]) -> int:
             parts.append(f"<user_message>\n{message}\n</user_message>")
             if reply is None:
                 continue
-            parts.append(f"<assistant_response>\n[assistant row | provider=claude | model={agent['model']} | turn=t]\n{reply}\n</assistant_response>")
+            extra = agent.get("headers", [])
+            extra_header = f" | {extra[len(parts) // 2]}" if len(parts) // 2 < len(extra) else ""
+            parts.append(f"<assistant_response>\n[assistant row | provider=claude | model={agent['model']} | turn=t{extra_header}]\n{reply}\n</assistant_response>")
         _out({"transcript": "\n\n".join(parts)})
         return 0
     if key == "agent archive":

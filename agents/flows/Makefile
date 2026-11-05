@@ -5,7 +5,7 @@ SLUG ?= example
 REPO ?= $(CURDIR)
 PORT ?= 8765
 
-.PHONY: flow-validate flow-test flow-serve flow-run
+.PHONY: flow-validate flow-test flow-serve flow-run flow-report
 
 flow-validate:
 	@$(PYTHON) -m engine.validate $(FLOW) --slug $(SLUG)
@@ -19,3 +19,7 @@ flow-serve:
 flow-run:
 	@test -n "$(INPUT)" || { echo "uso: make flow-run INPUT=\"ideia\" [NAME=ecc-dev] [REPO=..]"; exit 2; }
 	@$(PYTHON) -m engine.cli run $(or $(NAME),ecc-dev) --input "$(INPUT)" --repo "$(REPO)"
+
+flow-report:
+	@test -n "$(RUN)" || { echo "uso: make flow-report RUN=<id> [JSON=1]"; exit 2; }
+	@$(PYTHON) -m engine.cli report "$(RUN)" $(if $(JSON),--json)
