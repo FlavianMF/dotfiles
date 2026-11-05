@@ -236,7 +236,15 @@ class Adapter:
         if not isinstance(agent_id, str) or not agent_id:
             raise CliError("agent create: the answer has no agentId")
         warnings = tuple(str(w) for w in data.get("warnings") or ())
-        info = self.poll_status(agent_id)  # runConfig aplicado: pode diferir do pedido
+        try:
+            info = self.poll_status(agent_id)  # runConfig aplicado: pode diferir do pedido
+        except CliError:
+            for release in (self.stop, self.archive):  # o filho já existe: sem o id devolvido, ninguém o arquiva
+                try:
+                    release(agent_id)
+                except CliError:
+                    pass  # o erro do poll é o que importa
+            raise
         return Child(agent_id, model, effort, info.model, info.effort, warnings)
 
     def send(self, agent_id: str, message: str) -> None:

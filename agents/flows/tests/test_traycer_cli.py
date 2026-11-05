@@ -67,6 +67,21 @@ def test_create_child_reports_applied_run_config(adapter):
     assert child.diverged is False
 
 
+def test_create_child_stops_and_archives_the_child_when_the_status_poll_fails(adapter, fake):
+    fake.update(fail={"list": "boom"})
+    with pytest.raises(CliError, match="boom"):
+        create(adapter)
+    assert [c[:2] for c in fake.commands() if c[1] in ("stop", "archive")] == [["agent", "stop"], ["agent", "archive"]]
+    (child,) = fake.agents.values()
+    assert child["archived"]
+
+
+def test_create_child_keeps_the_poll_error_when_the_cleanup_also_fails(adapter, fake):
+    fake.update(fail={"list": "boom", "stop": "no-stop", "archive": "no-archive"})
+    with pytest.raises(CliError, match="boom"):
+        create(adapter)
+
+
 def test_create_child_flags_a_model_the_traycer_did_not_apply(adapter, fake):
     fake.update(apply_model={"gemini-4-argon": "gemini-3.8-flash"})
     child = create(adapter, harness="antigravity", model="gemini-4-argon")
