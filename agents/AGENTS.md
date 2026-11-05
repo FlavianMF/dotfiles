@@ -99,6 +99,9 @@ trap|pattern|decision|concept --title "..." --summary "..."`. A fila é estado l
 usuário, na revisão. Não rode `/promote`, `/evolve`, `/instinct-import` nem `/prune` por conta
 própria.
 
+**Projetos.** Ao terminar uma tarefa de dev de projeto ou ao encontrar bloqueio, atualize o status:
+`~/.local/bin/sb projects update <slug> --proximo-passo "..."` (e se houver `--bloqueio "..."`).
+
 ## Traycer: handoff entre chats
 
 Vale se `TRAYCER_EPIC_ID` existe ou se as ferramentas `traycer_*` estão disponíveis.

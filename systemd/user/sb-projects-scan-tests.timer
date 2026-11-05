@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Second Brain Projects Scan with tests daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target

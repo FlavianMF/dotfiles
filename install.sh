@@ -147,6 +147,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [yazi]="yazi (terminal file manager)"
     [usbip]="usbip client (attach USB devices shared by usbipd-win from Windows)"
     [tailscale]="Tailscale VPN Mesh (WireGuard client para acesso remoto seguro)"
+    [harness2]="Harness² framework (recursive agent harnessing, CLI em ~/projetos_harness/harness2)"
 )
 
 # Packages for each optional component
@@ -183,6 +184,7 @@ declare -A SELECTED_COMPONENTS=(
     [yazi]=0
     [usbip]=0
     [tailscale]=0
+    [harness2]=0
 )
 
 # System-wide vs current-user-only install scope for non-apt tools (Neovim, lazygit, fd)
@@ -203,7 +205,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer harness2 ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip tailscale)
     local current=0
     local done=0
     local old_stty
@@ -698,6 +700,10 @@ CONFIG_ITEMS=(
     "$HOME/.agents/skills/reverse-engineer-anything"
     "$HOME/.claude/skills/figjam-pm-canvas"
     "$HOME/.agents/skills/figjam-pm-canvas"
+    "$HOME/.claude/skills/flow"
+    "$HOME/.agents/skills/flow"
+    "$HOME/.claude/skills/phase"
+    "$HOME/.agents/skills/phase"
     "$HOME/.codex/config.toml"
     "$HOME/.codex/yolo.config.toml"
     "$HOME/.codex/AGENTS.md"
@@ -765,6 +771,22 @@ link_shared_skill() {
     create_config_link "$HOME/.agents/skills/$name" "$HOME/.claude/skills/$name"
 }
 
+# Claude-only skill: no ~/.agents/skills entry, so Codex and OpenCode never see it.
+link_claude_skill() {
+    local name="$1" source="$2"
+    create_config_link "$source" "$HOME/.claude/skills/$name"
+}
+
+# Drop the ~/.agents/skills link an older install made for a skill that is now Claude-only.
+# Any symlink to .../agents/skills/<name> goes (this checkout or another one); a real dir
+# or a link to somewhere else stays.
+remove_stale_shared_link() {
+    local link="$HOME/.agents/skills/$1"
+    if [[ -L "$link" && "$(readlink "$link")" == */agents/skills/"$1" ]]; then
+        as_user rm -f "$link"
+    fi
+}
+
 create_config_link "$REPO_DIR/zsh/.zshrc" "$HOME/.zshrc"
 create_config_link "$REPO_DIR/tmux/.tmux.conf" "$HOME/.tmux.conf"
 as_user mkdir -p "$HOME/.tmux"
@@ -803,6 +825,12 @@ link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync
 link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
+# flow and phase: explicit-only (disable-model-invocation) front ends of agents/flows (engine.cli).
+# Claude Code only: Codex/OpenCode read ~/.agents/skills and may ignore that key (see agents/skills/README.md).
+link_claude_skill flow "$REPO_DIR/agents/skills/flow"
+link_claude_skill phase "$REPO_DIR/agents/skills/phase"
+remove_stale_shared_link flow
+remove_stale_shared_link phase
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode, Antigravity CLI =====
 # Declarative, not symlinked where the tool keeps machine state:
@@ -879,6 +907,14 @@ fi
 if [[ ${SELECTED_COMPONENTS[tailscale]} -eq 1 ]]; then
     log_info "Installing Tailscale..."
     bash "$REPO_DIR/tailscale/install.sh" "${sub_dry[@]}" || log_warn "tailscale install failed"
+fi
+
+if [[ ${SELECTED_COMPONENTS[harness2]} -eq 1 ]]; then
+    log_info "Installing Harness² framework (harness2/install.sh)..."
+    as_user bash "$REPO_DIR/harness2/install.sh" "${sub_dry[@]}" || log_warn "harness2 install failed"
+    HARNESS_CHECKLIST+=(
+        "Harness²: configure ~/dotfiles/secrets/harness2.env (ver .env.example) e valide com 'harness2-check'"
+    )
 fi
 
 CODEX_ACTIVE=0
@@ -1013,8 +1049,8 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
         log_warn "Node >=20 required by the skills CLI (found $(node -v 2>/dev/null || echo none)); skipping npx skills add. Install a newer Node (e.g. nvm) and rerun."
     fi
 
-    # ~/.claude/skills should only hold links into ~/.agents/skills (synced/ is
-    # managed by Claude itself).
+    # ~/.claude/skills should only hold links (into ~/.agents/skills, or straight into
+    # this repo for the Claude-only skills flow/phase); synced/ is managed by Claude itself.
     for entry in "$HOME"/.claude/skills/*; do
         [[ -e "$entry" || -L "$entry" ]] || continue
         [[ "$(basename "$entry")" == synced ]] && continue
@@ -1240,6 +1276,7 @@ echo "✓ rea MCP registered for Claude Code (user scope)"
 [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]] && echo "✓ ECC skills/agents/rules linked (vendor/ecc @ c70874f)"
 [[ $OPENCODE_ACTIVE -eq 1 ]] && echo "✓ OpenCode configured (~/.config/opencode/opencode.json + AGENTS.md linked)"
 [[ $ANTIGRAVITY_ACTIVE -eq 1 ]] && echo "✓ Antigravity CLI configured (~/.gemini/config AGENTS.md linked; skills.json, MCPs and permissions rendered)"
+[[ ${SELECTED_COMPONENTS[harness2]} -eq 1 ]] && echo "✓ Harness² framework installed (~/projetos_harness/harness2)"
 if [[ $HARNESS_ONLY -eq 0 ]]; then
 echo "✓ Git identity configured"
 echo "✓ Tmux plugins installed"

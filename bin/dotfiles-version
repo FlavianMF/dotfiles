@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+show_help() {
+    cat <<'EOT'
+Uso: dotfiles-version [-h|--help]
+
+Imprime a versão do dotfiles: <tag>[-<branch>][-dirty][ (offline)].
+Busca as tags de origin a cada chamada e avisa se o HEAD estiver atrás de origin/master.
+
+Variáveis:
+  DOTFILES_DIR              Repo a consultar (padrão: o repo deste script)
+  DOTFILES_VERSION_TIMEOUT  Segundos de espera do fetch (padrão: 10)
+EOT
+}
+
+case "${1:-}" in
+    -h|--help) show_help; exit 0 ;;
+    "") ;;
+    *) echo "erro: argumento desconhecido '$1'" >&2; show_help >&2; exit 2 ;;
+esac
+
+if [[ -n "${DOTFILES_DIR:-}" ]]; then
+    repo="$DOTFILES_DIR"
+else
+    repo="$(git -C "$(dirname "$(readlink -f "$0")")/.." rev-parse --show-toplevel)"
+fi
+cd "$repo"
+
+offline=0
+if git remote get-url origin >/dev/null 2>&1; then
+    GIT_TERMINAL_PROMPT=0 timeout "${DOTFILES_VERSION_TIMEOUT:-10}" \
+        git fetch --quiet --tags origin >/dev/null 2>&1 || offline=1
+else
+    offline=1
+fi
+
+tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null || true)"
+[[ -n "$tag" ]] || tag="sem-tag"
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+[[ -n "$branch" ]] || branch="HEAD"
+
+version="$tag"
+[[ "$branch" == "master" ]] || version+="-$branch"
+[[ -z "$(git status --porcelain --untracked-files=no)" ]] || version+="-dirty"
+[[ $offline -eq 0 ]] || version+=" (offline)"
+echo "$version"
+
+if git rev-parse --verify --quiet refs/remotes/origin/master >/dev/null; then
+    behind="$(git rev-list --count HEAD..origin/master 2>/dev/null || true)"
+    if [[ "${behind:-0}" -gt 0 ]]; then
+        echo "aviso: HEAD está $behind commits atrás de origin/master. Rode \`git pull --ff-only\`."
+    fi
+fi

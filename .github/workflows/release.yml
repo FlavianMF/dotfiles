@@ -1,0 +1,31 @@
+name: release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: next
+        run: |
+          tag="$(bash .github/scripts/next-version.sh --notes "$RUNNER_TEMP/notes.md")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - if: steps.next.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.next.outputs.tag }}
+        run: |
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" \
+            --generate-notes --notes-file "$RUNNER_TEMP/notes.md"

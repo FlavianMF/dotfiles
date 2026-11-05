@@ -92,6 +92,36 @@
       "command_type": "PowerShell",
       "executable": "powershell.exe",
       "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"if (Get-Process -Name 'traycer-desktop','traycer' -ErrorAction SilentlyContinue) { 'Running' } else { 'Stopped' }\""
+    },
+    {
+      "id": "pc_wsl_terminal",
+      "name": "pc_wsl_terminal",
+      "friendly_name": "Abrir Terminal WSL2",
+      "description": "Abre um terminal da distribuicao Ubuntu do WSL2 no Windows Terminal",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "wt.exe",
+      "arguments": "wsl.exe -d Ubuntu"
+    },
+    {
+      "id": "pc_wsl_claude",
+      "name": "pc_wsl_claude",
+      "friendly_name": "Abrir Claude Code no WSL2",
+      "description": "Abre o Claude Code no WSL2, no diretorio ~/dotfiles",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "wt.exe",
+      "arguments": "wsl.exe -d Ubuntu --cd ~/dotfiles -- bash -lc claude"
+    },
+    {
+      "id": "pc_wsl_obsidian",
+      "name": "pc_wsl_obsidian",
+      "friendly_name": "Abrir Obsidian do WSL2",
+      "description": "Inicia o Obsidian instalado no WSL2 (via WSLg)",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -WindowStyle Hidden -Command \"Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d','Ubuntu','--','bash','-lc','obsidian'\""
     }
   ]
 }
