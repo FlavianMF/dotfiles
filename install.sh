@@ -700,6 +700,10 @@ CONFIG_ITEMS=(
     "$HOME/.agents/skills/reverse-engineer-anything"
     "$HOME/.claude/skills/figjam-pm-canvas"
     "$HOME/.agents/skills/figjam-pm-canvas"
+    "$HOME/.claude/skills/flow"
+    "$HOME/.agents/skills/flow"
+    "$HOME/.claude/skills/phase"
+    "$HOME/.agents/skills/phase"
     "$HOME/.codex/config.toml"
     "$HOME/.codex/yolo.config.toml"
     "$HOME/.codex/AGENTS.md"
@@ -805,6 +809,9 @@ link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync
 link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
 # figjam-pm-canvas: SKILL.md + tools/ (CDP/build scripts, entradas), versioned here.
 link_shared_skill figjam-pm-canvas "$REPO_DIR/agents/skills/figjam-pm-canvas"
+# flow and phase: explicit-only (disable-model-invocation) front ends of agents/flows (engine.cli).
+link_shared_skill flow "$REPO_DIR/agents/skills/flow"
+link_shared_skill phase "$REPO_DIR/agents/skills/phase"
 
 # ===== AI harnesses: Claude Code plugins + skills, Codex, OpenCode, Antigravity CLI =====
 # Declarative, not symlinked where the tool keeps machine state:
