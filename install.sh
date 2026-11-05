@@ -778,10 +778,11 @@ link_claude_skill() {
 }
 
 # Drop the ~/.agents/skills link an older install made for a skill that is now Claude-only.
-# Only a symlink into this repo goes; a real dir or a foreign link stays.
+# Any symlink to .../agents/skills/<name> goes (this checkout or another one); a real dir
+# or a link to somewhere else stays.
 remove_stale_shared_link() {
     local link="$HOME/.agents/skills/$1"
-    if [[ -L "$link" && "$(readlink "$link")" == "$REPO_DIR/"* ]]; then
+    if [[ -L "$link" && "$(readlink "$link")" == */agents/skills/"$1" ]]; then
         as_user rm -f "$link"
     fi
 }
@@ -1048,8 +1049,8 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
         log_warn "Node >=20 required by the skills CLI (found $(node -v 2>/dev/null || echo none)); skipping npx skills add. Install a newer Node (e.g. nvm) and rerun."
     fi
 
-    # ~/.claude/skills should only hold links into ~/.agents/skills (synced/ is
-    # managed by Claude itself).
+    # ~/.claude/skills should only hold links (into ~/.agents/skills, or straight into
+    # this repo for the Claude-only skills flow/phase); synced/ is managed by Claude itself.
     for entry in "$HOME"/.claude/skills/*; do
         [[ -e "$entry" || -L "$entry" ]] || continue
         [[ "$(basename "$entry")" == synced ]] && continue

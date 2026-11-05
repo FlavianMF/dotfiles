@@ -1,6 +1,8 @@
 """Contrato das skills `/flow` e `/phase` (T7): invocação só explícita, tamanho e link no install.sh."""
 
+import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -43,9 +45,34 @@ def test_install_links_the_skill_for_claude_code_only(name):
     """Codex e OpenCode leem ~/.agents/skills e podem ignorar `disable-model-invocation`: não entram lá."""
     install = (REPO / "install.sh").read_text(encoding="utf-8")
     assert f'link_claude_skill {name} "$REPO_DIR/agents/skills/{name}"' in install
-    assert f'link_shared_skill {name}' not in install
+    assert f"link_shared_skill {name}" not in install
     assert f'"$HOME/.claude/skills/{name}"' in install  # backup list
-    assert f'remove_stale_shared_link {name}' in install  # install anterior deixou o link em ~/.agents/skills
+    assert f"remove_stale_shared_link {name}" in install  # um install anterior deixou o link em ~/.agents/skills
+
+
+def _install_function(name):
+    text = (REPO / "install.sh").read_text(encoding="utf-8")
+    match = re.search(rf"^{name}\(\) \{{\n.*?^\}}\n", text, re.S | re.M)
+    assert match, f"{name} not found in install.sh"
+    return match.group(0)
+
+
+def test_remove_stale_shared_link_removes_only_links_into_a_dotfiles_skill_dir(tmp_path):
+    home = tmp_path / "home"
+    skills = home / ".agents" / "skills"
+    skills.mkdir(parents=True)
+    (skills / "flow").symlink_to(REPO / "agents" / "skills" / "flow")  # deste checkout
+    (skills / "phase").symlink_to("/outro/checkout/dotfiles/agents/skills/phase")  # de outro checkout (nem existe)
+    (skills / "foreign").symlink_to("/elsewhere/foreign")  # link alheio
+    (skills / "other").symlink_to("/outro/checkout/dotfiles/agents/skills/another")  # outra skill: alvo não termina em /agents/skills/other
+    (skills / "realdir").mkdir()
+    (skills / "realdir" / "keep.txt").write_text("x", encoding="utf-8")
+    script = "as_user() { \"$@\"; }\n" + _install_function("remove_stale_shared_link")
+    script += "\nfor n in flow phase foreign other realdir; do remove_stale_shared_link \"$n\"; done"
+    proc = subprocess.run(["bash", "-c", script], env={"HOME": str(home), "PATH": "/usr/bin:/bin"}, capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    assert sorted(p.name for p in skills.iterdir()) == ["foreign", "other", "realdir"]
+    assert (skills / "realdir" / "keep.txt").exists()
 
 
 def test_skills_readme_documents_the_claude_only_install():
@@ -75,7 +102,7 @@ def _resolve_snippet(name):
 
 
 def _run_snippet(name, skill_dir, extra_env=None):
-    script = _resolve_snippet(name).replace("SKILL_DIR=<", f"SKILL_DIR={skill_dir} #<", 1)
+    script = re.sub(r"^SKILL_DIR=.*$", lambda _: f"SKILL_DIR={shlex.quote(str(skill_dir))}", _resolve_snippet(name), count=1, flags=re.M)
     script += '\nPYTHONPATH="$FLOWS_DIR" python3 -m engine.cli --help >/dev/null && echo "$FLOWS_DIR"'
     env = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", **(extra_env or {})}
     return subprocess.run(["bash", "-c", script], env=env, capture_output=True, text=True, check=False)
@@ -83,13 +110,31 @@ def _run_snippet(name, skill_dir, extra_env=None):
 
 @pytest.mark.parametrize("name", SKILLS)
 def test_skill_finds_the_engine_from_its_own_location_through_a_symlink(name, tmp_path):
-    """Instalada como link em ~/.agents/skills, a skill acha `agents/flows` sem depender de $HOME/dotfiles."""
-    link = tmp_path / ".agents" / "skills" / name
+    """Instalada como link em ~/.claude/skills, a skill acha `agents/flows` sem depender de $HOME/dotfiles."""
+    link = tmp_path / ".claude" / "skills" / name
     link.parent.mkdir(parents=True)
     link.symlink_to(REPO / "agents" / "skills" / name)
     proc = _run_snippet(name, link)
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout.strip() == str(FLOWS_DIR)
+    assert os.path.realpath(proc.stdout.strip()) == str(FLOWS_DIR)
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_skill_dir_with_a_space_in_the_path_still_resolves(name, tmp_path):
+    link = tmp_path / "my skills" / name
+    link.parent.mkdir(parents=True)
+    link.symlink_to(REPO / "agents" / "skills" / name)
+    proc = _run_snippet(name, link)
+    assert proc.returncode == 0, proc.stderr
+    assert os.path.realpath(proc.stdout.strip()) == str(FLOWS_DIR)
+
+
+@pytest.mark.parametrize("name", SKILLS)
+def test_empty_skill_dir_fails_instead_of_guessing_a_path(name):
+    proc = _run_snippet(name, "")
+    assert proc.returncode != 0
+    assert "defina SKILL_DIR" in proc.stderr
+    assert proc.stdout.strip() == ""  # não segue com um caminho chutado
 
 
 @pytest.mark.parametrize("name", SKILLS)
