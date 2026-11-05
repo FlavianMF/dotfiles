@@ -288,6 +288,8 @@ class Runner:
             if ns["state"] != "awaiting_gate":
                 raise RunError(f"node '{node_id}' is {ns['state']}, not awaiting_gate: nothing to approve")
             ns["gate_approved"] = True
+            if ns["child_id"]:  # o filho ainda trabalha depois da aprovação (push e PR no `pr`)
+                self._read_quota_after(node, ns)
             self._to(state, node, "done", "approved by a human")
             self._release(state, node, ns)
             self._save(state)

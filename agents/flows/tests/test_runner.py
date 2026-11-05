@@ -499,6 +499,19 @@ def test_node_state_records_the_quota_before_and_after_the_child(env):
     assert ns["quota_after"] == {"five_hour": 47, "seven_day": 63, "updated_at": 1234}
 
 
+def test_approving_a_gate_reads_the_quota_again_so_post_approval_work_is_counted(env):
+    env.flow(env.node("a", gate="human"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    env.fake.update(rate={"fiveHour": 30, "sevenDay": 50})
+    env.drive(run_id)  # chega à parada
+    assert env.runner.status(run_id)["nodes"]["a"]["quota_after"]["five_hour"] == 30
+    env.fake.update(rate={"fiveHour": 44, "sevenDay": 52})  # o filho trabalhou depois da aprovação
+    env.runner.approve_gate(run_id, "a")
+    ns = env.runner.status(run_id)["nodes"]["a"]
+    assert ns["quota_after"] == {"five_hour": 44, "seven_day": 52, "updated_at": 1234}
+
+
 def test_quota_after_that_cannot_be_read_stays_empty_and_does_not_fail_the_node(env):
     env.flow(env.node("a"))
     env.fake.queue(env.done("a"))
