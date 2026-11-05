@@ -46,7 +46,7 @@ nodes:
     prompt: ../prompts/prp-review.md
     inputs: [".claude/PRPs/reports/${slug}-report.md"]
     outputs: [".claude/PRPs/reviews/${slug}-review.md"] # lista de achados
-    gate: none
+    gate: human # você lê os achados antes do commit; pulada por `when`, não há portão
     when: "diff_lines > 150 or sensitive"
     context: pack # revisão sempre a frio: nunca fork
     on_fail: {retry: 1, then: ask_before_upgrade}
@@ -56,7 +56,7 @@ nodes:
     agent: {harness: claude, profile: ambient, model: haiku, effort: low, skills: []}
     prompt: ../prompts/prp-commit.md
     inputs: [".claude/PRPs/reports/${slug}-report.md"]
-    after: [review] # a revisão (se rodar) bloqueia o commit; pulada, conta como satisfeita
+    after: [review] # só ordena: o portão humano do review é que segura o commit; review pulado conta como satisfeito
     outputs: [".claude/PRPs/reports/${slug}-commit.md"] # recibo com o hash do commit
     gate: none
     when: null

@@ -18,6 +18,7 @@ def test_ecc_dev_loads_with_six_phases():
     assert by_id["plan"].inputs == (".claude/PRPs/prds/demo.prd.md",)
     assert by_id["implement"].gate == "none" and by_id["implement"].agent.effort == "high"
     assert by_id["review"].agent.harness == "antigravity"
+    assert by_id["review"].gate == "human"
     assert by_id["review"].when == "diff_lines > 150 or sensitive"
     assert by_id["commit"].agent.model == "haiku" and by_id["commit"].gate == "none"
     assert by_id["pr"].gate == "human"
