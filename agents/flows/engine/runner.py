@@ -87,13 +87,40 @@ class Step(str, enum.Enum):
     FINISHED = "finished"  # run concluído ou abortado
 
 
+def _git_env() -> dict[str, str]:
+    """Ambiente mínimo do git: nada do ambiente do servidor (tokens, GIT_DIR) chega ao processo."""
+    env = {
+        "HOME": os.environ.get("HOME", "/"),
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "LANG": os.environ.get("LANG", "C"),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    return env
+
+
 def git_variables(repo: str | os.PathLike[str]) -> dict[str, int]:
     """`diff_lines`: linhas adicionadas + removidas do trabalho não commitado (`git diff HEAD`).
 
     Ignora `.claude/PRPs/` (os artefatos do próprio fluxo). Arquivos novos ainda não adicionados
-    ao índice não entram na conta, limite conhecido da v1."""
+    ao índice não entram na conta, limite conhecido da v1. O git roda com ambiente mínimo e sem o
+    fsmonitor, o diff externo e o textconv do repo: um repo hostil não executa código aqui."""
     proc = subprocess.run(
-        ["git", "-C", str(repo), "diff", "HEAD", "--numstat", "--", ".", ":(exclude).claude/PRPs"],
+        [
+            "git",
+            "-c",
+            "core.fsmonitor=false",  # o repo pode apontar o fsmonitor para um script: não o execute
+            "-C",
+            str(repo),
+            "diff",
+            "HEAD",
+            "--numstat",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--",
+            ".",
+            ":(exclude).claude/PRPs",
+        ],
+        env=_git_env(),
         capture_output=True,
         text=True,
         check=False,

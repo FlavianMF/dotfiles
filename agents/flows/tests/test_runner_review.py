@@ -152,3 +152,61 @@ def test_the_internal_start_lock_still_works(env):
     env.flow(env.node("a", gate="human"))
     env.start()
     assert (env.tmp_path / "state" / ".start.lock").exists()
+
+
+# 5. git_variables roda git com ambiente mínimo e sem o fsmonitor do repo -------------------------
+
+
+def _git(repo, *args):
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
+def test_git_variables_does_not_run_the_repo_fsmonitor_hook(tmp_path):
+    from engine.runner import git_variables
+
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "code.py").write_text("a\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    sentinel = tmp_path / "sentinel"
+    hook = tmp_path / "hook.sh"
+    hook.write_text(f"#!/bin/sh\ntouch {sentinel}\nprintf '\\0'\n")
+    hook.chmod(0o755)
+    _git(repo, "config", "core.fsmonitor", str(hook))
+    # controle: o git puro roda o hook, então o teste prova alguma coisa
+    subprocess.run(["git", "-C", str(repo), "status", "-s"], check=True, capture_output=True)
+    assert sentinel.exists(), "controle: este git não rodou o fsmonitor"
+    sentinel.unlink()
+    (repo / "code.py").write_text("a\nb\n")
+    assert git_variables(repo) == {"diff_lines": 1}
+    assert not sentinel.exists()
+
+
+def test_git_variables_passes_a_minimal_environment_to_git(tmp_path, monkeypatch):
+    from engine import runner
+
+    monkeypatch.setenv("SECRET_TOKEN", "hunter2")
+    monkeypatch.setenv("GIT_DIR", "/elsewhere")
+    seen = {}
+
+    def fake_run(argv, **kwargs):
+        seen.update(argv=argv, **kwargs)
+
+        class Proc:
+            returncode = 0
+            stdout = "3\t1\tf.py\n"
+            stderr = ""
+
+        return Proc()
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    assert runner.git_variables(tmp_path) == {"diff_lines": 4}
+    assert set(seen["env"]) <= {"HOME", "PATH", "LANG", "GIT_CONFIG_NOSYSTEM"}
+    assert {"HOME", "PATH", "LANG"} <= set(seen["env"])
+    assert seen["env"]["GIT_CONFIG_NOSYSTEM"] == "1"
+    assert "SECRET_TOKEN" not in seen["env"] and "GIT_DIR" not in seen["env"]
+    assert ["-c", "core.fsmonitor=false"] == seen["argv"][1:3]
