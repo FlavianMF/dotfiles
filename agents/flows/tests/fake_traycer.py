@@ -155,7 +155,7 @@ def _dispatch(state: dict, args: list[str]) -> int:
         behavior = state["script"].pop(0) if state["script"] else state["default_behavior"]
         state["sends"] += 1
         agent["messages"].append(_arg(args, "--message"))
-        agent["replies"].append(behavior.get("reply", "feito"))
+        agent["replies"].append(behavior.get("reply", "feito"))  # None: o transcript ainda não tem resposta
         agent["active_polls"] = behavior.get("active_polls", 0)
         agent["archived"] = False
         for path, content in behavior.get("write", {}).items():
@@ -179,6 +179,8 @@ def _dispatch(state: dict, args: list[str]) -> int:
         parts = []
         for message, reply in zip(agent["messages"], agent["replies"]):
             parts.append(f"<user_message>\n{message}\n</user_message>")
+            if reply is None:
+                continue
             parts.append(f"<assistant_response>\n[assistant row | provider=claude | model={agent['model']} | turn=t]\n{reply}\n</assistant_response>")
         _out({"transcript": "\n\n".join(parts)})
         return 0
