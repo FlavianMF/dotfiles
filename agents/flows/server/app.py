@@ -134,6 +134,7 @@ class RunView:
                     "state": ns["state"],
                     "reason": reason,
                     "outputs": [{"path": p, "absolute": str(repo / p), "exists": _is_file(repo, p)} for p in outputs],
+                    "child": _child(ns),
                     "quota_warning": _quota_warning(ns["state"], reason),
                     "actions": _actions(ns["state"]) if active else [],
                 }
@@ -155,6 +156,15 @@ def _is_file(repo: Path, relative: str) -> bool:
         return (repo / relative).is_file()
     except OSError:
         return False
+
+
+def _child(ns: dict[str, Any]) -> dict[str, Any] | None:
+    """O filho vivo do nó, ou o último se o motor já o arquivou. `None` se o nó nunca teve filho."""
+    child_id = ns.get("child_id")
+    last = ns.get("last_child_id")
+    if not child_id and not last:
+        return None
+    return {"id": str(child_id or last), "title": ns.get("child_name"), "active": bool(child_id)}
 
 
 def _actions(node_state: str) -> list[str]:

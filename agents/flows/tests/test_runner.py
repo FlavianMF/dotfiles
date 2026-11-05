@@ -512,6 +512,18 @@ def test_quota_after_that_cannot_be_read_stays_empty_and_does_not_fail_the_node(
     assert ns["quota_after"] is None
 
 
+def test_node_state_keeps_the_title_of_the_child_session(env):
+    env.flow(env.node("a", gate="human"))
+    env.fake.queue(env.done("a"))
+    run_id = env.start()
+    env.drive(run_id)
+    ns = env.runner.status(run_id)["nodes"]["a"]
+    (argv,) = env.fake.commands("create")
+    title = next(a.split("=", 1)[1] for a in argv if a.startswith("--name="))
+    assert ns["child_name"] == title
+    assert title.startswith("demo:a (")
+
+
 def test_quota_that_cannot_be_read_stops_the_run_instead_of_spending(env):
     env.fake.update(fail={"profile-rate-limits": "sem rede"})
     env.flow(env.node("a"))

@@ -100,6 +100,10 @@ function render(view) {
     phase.append(text("div", node.id, "reason"));
     const state = cell(row, text("div", node.state, "state"));
     if (node.reason) state.append(text("div", node.reason, "reason"));
+    if (node.child) {
+      state.append(text("div", "Sessão: " + (node.child.title || "sem título"), "reason"));
+      state.append(text("div", "Filho: " + node.child.id + (node.child.active ? "" : " (encerrado)"), "reason"));
+    }
     const outputs = cell(row);
     for (const out of node.outputs) outputs.append(text("div", out.absolute + (out.exists ? "" : " (ainda não existe)"), out.exists ? "" : "missing"));
     cell(row, node.quota_warning ? text("span", node.quota_warning, "warn") : "");

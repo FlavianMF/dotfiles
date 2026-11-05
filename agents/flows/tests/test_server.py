@@ -505,3 +505,22 @@ def test_idle_restart_is_off_by_default(client, auth, runner):
     run_id = start(client, auth)
     client.get(f"/runs/{run_id}")
     assert runner.driven == [run_id]
+
+
+def test_view_shows_the_child_id_and_session_title_of_a_node(client, auth, runner):
+    run_id = start(client, auth)
+    assert node_view(client.get(f"/runs/{run_id}").json(), "a")["child"] is None
+    runner.runs[run_id]["nodes"]["a"].update(child_id="52564193-aaaa", child_name="ecc-dev:a (feat) 1a2b3c4d")
+    child = node_view(client.get(f"/runs/{run_id}").json(), "a")["child"]
+    assert child == {"id": "52564193-aaaa", "title": "ecc-dev:a (feat) 1a2b3c4d", "active": True}
+
+
+def test_view_keeps_the_last_child_after_the_engine_released_it(client, auth, runner):
+    run_id = start(client, auth)
+    runner.runs[run_id]["nodes"]["a"].update(child_id=None, last_child_id="9f9f", child_name="t")
+    child = node_view(client.get(f"/runs/{run_id}").json(), "a")["child"]
+    assert child == {"id": "9f9f", "title": "t", "active": False}
+
+
+def test_page_prints_the_child_id_and_title(client):
+    assert "node.child" in client.get("/").text

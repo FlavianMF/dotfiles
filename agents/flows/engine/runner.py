@@ -443,7 +443,9 @@ class Runner:
         except (CliError, OSError) as exc:
             return self._fail(state, flow, node, ns, f"cannot create the child: {exc}")
         child = None
+        name = None
         if ns.get("creating"):  # queda entre `create_child` e o `_save`: procure o filho pelo nome
+            name = ns["creating"]["name"]
             try:
                 child = self._recover_orphan(ns)
             except CliError as exc:
@@ -479,6 +481,7 @@ class Runner:
         ns["creating"] = None
         ns.update(
             child_id=child.agent_id,
+            child_name=name,  # o título da sessão no Traycer: a página o mostra
             attempts=ns["attempts"] + 1,
             sent=False,
             snapshot=None,
