@@ -5,7 +5,7 @@
 | Skill | Claude Code (`~/.claude/skills`) | Codex e OpenCode (`~/.agents/skills`) |
 | --- | --- | --- |
 | `figjam-pm-canvas`, `reverse-engineer-anything` | sim | sim |
-| `flow`, `phase` | sim | **não** |
+| `flow`, `phase` (no submódulo `vendor/flows-editor`) | sim | **não** |
 
 ## Por que `flow` e `phase` só no Claude Code
 
@@ -18,10 +18,10 @@ antigo em `~/.agents/skills` (`remove_stale_shared_link`). O custo: `/flow` e `/
 no Codex nem no OpenCode.
 
 Para reverter depois de verificar que o harness respeita a chave, troque `link_claude_skill`
-por `link_shared_skill` no `install.sh` e ajuste o teste `test_install_links_the_skill_for_claude_code_only`.
+por `link_shared_skill` no `install.sh` e ajuste o teste `tests/flows_skills_test.sh`.
 
 ## Onde a skill acha o motor
 
-`flow` e `phase` resolvem `agents/flows` com `$SKILL_DIR/../../flows`. O kernel segue o link da skill, então o caminho
+`flow` e `phase` vivem em `vendor/flows-editor/skills/` e resolvem o motor com `$SKILL_DIR/../..` (a raiz do repo `flows-editor`). O kernel segue o link da skill, então o caminho
 chega ao repo mesmo com a skill instalada como symlink. `SKILL_DIR` vazio aborta o comando.
 A variável `FLOWS_DIR` sobrepõe o caminho.

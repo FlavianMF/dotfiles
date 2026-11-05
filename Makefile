@@ -240,7 +240,7 @@ ha-mcp-config:
 	@./homeassistant/setup-mcp.sh config $(if $(DRY_RUN),--dry-run)
 
 flow-validate flow-test:
-	@$(MAKE) --no-print-directory -C agents/flows $@
+	@$(MAKE) --no-print-directory -C vendor/flows-editor $@
 
 flow-serve flow-run:
-	@$(MAKE) --no-print-directory -C agents/flows $@ REPO="$(if $(REPO),$(REPO),$(CURDIR))"
+	@$(MAKE) --no-print-directory -C vendor/flows-editor $@ REPO="$(if $(REPO),$(REPO),$(CURDIR))"
