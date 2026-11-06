@@ -87,9 +87,20 @@ Contexto e decisões por trás destas regras:
 
 ## Second brain
 
-O vault Obsidian em `~/obsidian_vault` é a memória de longo prazo entre projetos. Use a
-skill `second-brain-sync` para consultar os manifests antes de decisões de arquitetura e
-para destilar padrões, decisões e armadilhas ao fim de uma tarefa de dev.
+O vault Obsidian em `~/obsidian_vault` é a memória de longo prazo entre projetos.
+
+Consulte o vault, sem carregar a skill, em três casos:
+
+- Antes de escolher arquitetura, lib, ferramenta ou workflow, ou de editar hook ou config de harness.
+- Quando um erro persistir após a primeira correção.
+- Quando um título do hint do SessionStart nomear o assunto da tarefa.
+
+Rode `sb search --json "<termos>"` com termos em português e inglês. Leia com Read até 3 notas
+antes de usá-las, pois o título do hint não basta. Cite o caminho de cada nota usada. Se nenhuma
+nota servir, diga "o vault não cobre X" e siga.
+
+Carregue a skill `second-brain-sync` só para destilar padrões, decisões e armadilhas ao fim de
+uma tarefa de dev, ou para o bootstrap de projeto.
 
 **Fila de candidatos.** Quando o usuário o corrigir ou você descobrir uma armadilha ou padrão
 reutilizável, acrescente uma linha à fila em vez de escrever no vault:
