@@ -33,4 +33,32 @@ fire 'não é json'; expect "entrada inválida é silenciosa" "$?" 0
 expect "permissão do arquivo" "$(stat -c %a "$state/s1.opened")" 600
 expect "permissão do diretório" "$(stat -c %a "$state")" 700
 
+# --- uso via Bash e Grep (.used); .opened continua só com Read ---
+used() { [[ -f "$state/$1.used" ]] && wc -l <"$state/$1.used" | tr -d ' ' || echo 0; }
+bash_json() { jq -cn --arg s "$1" --arg c "$2" '{session_id:$s,tool_name:"Bash",tool_input:{command:$c}}'; }
+home_rel=""; [[ "$vault" == "$HOME"/* ]] && home_rel="${vault#"$HOME"/}"
+
+fire "$(bash_json b1 "cat \"$vault/20_Permanent_Notes/A B — x.md\"")"; expect "cat de nota com espaço" "$(used b1)" 1
+fire "$(bash_json b1 "cat \"$vault/20_Permanent_Notes/A B — x.md\"")"; expect "cat repetido não duplica" "$(used b1)" 1
+expect "Bash não grava .opened" "$(count b1)" 0
+fire "$(bash_json b2 "head -20 $vault/20_Permanent_Notes/a.md | wc -l")"; expect "head com pipe" "$(used b2)" 1
+fire "$(bash_json b3 "cat $vault/00_META/manifests/index.md")"; expect "ignora manifest no Bash" "$(used b3)" 0
+fire "$(bash_json b3 "rm $vault/20_Permanent_Notes/a.md")"; expect "ignora comando sem verbo de leitura" "$(used b3)" 0
+fire "$(bash_json b3 "cat $tmp/outro/nota.md")"; expect "ignora nota fora do vault" "$(used b3)" 0
+fire "$(bash_json b3 "cat ${vault}2/nota.md")"; expect "irmão com mesmo prefixo no Bash" "$(used b3)" 0
+fire "$(bash_json b4 "python3 scripts/sb.py search -k 3 hook")"; expect "sb.py search" "$(used b4)" 1
+fire "$(bash_json b4 "sb search outro")"; expect "sb search repete a mesma linha" "$(used b4)" 1
+fire "$(bash_json b5 "rg -l pattern $vault/20_Permanent_Notes")"; expect "rg sobre o vault" "$(used b5)" 1
+fire "$(bash_json b6 "rg -l pattern /etc")"; expect "rg fora do vault" "$(used b6)" 0
+fire "$(bash_json b7 "ls $vault")"; expect "ls não é busca" "$(used b7)" 0
+if [[ -n "$home_rel" ]]; then
+    fire "$(bash_json b8 'cat ~/'"$home_rel"'/20_Permanent_Notes/a.md')"; expect "cat com ~/" "$(used b8)" 1
+    fire "$(bash_json b9 'cat $HOME/'"$home_rel"'/20_Permanent_Notes/a.md')"; expect "cat com \$HOME/" "$(used b9)" 1
+fi
+fire "$(jq -cn --arg s g1 --arg p "$vault/20_Permanent_Notes" '{session_id:$s,tool_name:"Grep",tool_input:{pattern:"x",path:$p}}')"; expect "Grep no vault" "$(used g1)" 1
+fire "$(jq -cn --arg s g2 --arg p "$tmp/outro" '{session_id:$s,tool_name:"Grep",tool_input:{pattern:"x",path:$p}}')"; expect "Grep fora do vault" "$(used g2)" 0
+fire "$(bash_json b10 "cat $vault/a.md" | jq -c '. + {agent_id:"sub1"}')"; expect "Bash de subagente" "$(used b10)" 0
+fire "$(read_json u1 "$vault/20_Permanent_Notes/n.md")"; expect "Read grava .used" "$(used u1)" 1; expect "Read mantém .opened" "$(count u1)" 1
+expect "permissão do .used" "$(stat -c %a "$state/b1.used")" 600
+
 [[ $fail -eq 0 ]] && echo "ok" || exit 1
