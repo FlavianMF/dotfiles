@@ -391,6 +391,9 @@ for line in "${PENDING[@]}"; do
     if [[ -f "$job_out/SUCCESS" && -f "$raw" ]]; then
         dest="$INBOX_DIR/$cid-$(slugify "$ctitle").md"
         if finalize_draft "$cid" "$line" "$raw" "$dest"; then
+            # Espelha o rascunho em ~/.local/state/second-brain/drafts para o sb review web exibir
+            mkdir -p "$STATE_DIR/drafts"
+            cp -f "$dest" "$STATE_DIR/drafts/$cid.md" 2>/dev/null || true
             echo "✓ $cid -> $dest"
             OK_COUNT=$((OK_COUNT + 1))
             continue
