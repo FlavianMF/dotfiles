@@ -44,8 +44,8 @@ help:
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
 	@echo ""
 	@echo "Remote Control & Home Assistant:"
-	@echo "  make pc-ctl-install   - Cria link de bin/sb bin/pc-ctl em ~/.local/bin"
-	@echo "  make pc-ctl-test      - Executa os testes unitarios TDD de bin/sb bin/pc-ctl"
+	@echo "  make pc-ctl-install   - Cria links de bin/pc-ctl em ~/.local/bin e de lib/pc-ctl-log.sh em ~/.local/lib"
+	@echo "  make pc-ctl-test      - Executa os testes unitarios TDD de bin/pc-ctl"
 	@echo "  make ha-vps-pack      - Gera tarball da stack Home Assistant para envio a VPS"
 	@echo "  make ha-vps-deploy [VPS=user@ip] - Deploy automatizado via SSH para a VPS"
 	@echo "  make ha-mcp-check     - Testa conectividade com o Home Assistant e disponibilidade do uvx"
@@ -184,9 +184,10 @@ version:
 	@./bin/dotfiles-version
 
 pc-ctl-install:
-	@mkdir -p $(HOME)/.local/bin
-	ln -sfn $(CURDIR)/bin/sb bin/pc-ctl $(HOME)/.local/bin/sb bin/pc-ctl
-	@echo "✓ bin/sb bin/pc-ctl instalado em $(HOME)/.local/bin/sb bin/pc-ctl"
+	@mkdir -p $(HOME)/.local/bin $(HOME)/.local/lib
+	ln -sfn $(CURDIR)/bin/pc-ctl $(HOME)/.local/bin/pc-ctl
+	ln -sfn $(CURDIR)/lib/pc-ctl-log.sh $(HOME)/.local/lib/pc-ctl-log.sh
+	@echo "✓ bin/pc-ctl e lib/pc-ctl-log.sh instalados em $(HOME)/.local/"
 
 pc-ctl-test:
 	@bash tests/pc_ctl_test.sh

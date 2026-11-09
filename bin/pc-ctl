@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/pc-ctl-log.sh
-source "$SCRIPT_DIR/lib/pc-ctl-log.sh"
+REAL_SRC="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SRC")/.." && pwd)"
+if [[ -f "$SCRIPT_DIR/lib/pc-ctl-log.sh" ]]; then
+    # shellcheck source=lib/pc-ctl-log.sh
+    source "$SCRIPT_DIR/lib/pc-ctl-log.sh"
+elif [[ -f "$HOME/.local/lib/pc-ctl-log.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "$HOME/.local/lib/pc-ctl-log.sh"
+else
+    echo "Erro: lib/pc-ctl-log.sh não encontrado." >&2
+    exit 1
+fi
 
 WIN_DIR="${WIN_SYS_DIR:-/mnt/c/Windows/System32}"
 PS_DIR="${WIN_PS_DIR:-$WIN_DIR/WindowsPowerShell/v1.0}"
