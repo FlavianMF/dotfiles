@@ -44,8 +44,8 @@ help:
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
 	@echo ""
 	@echo "Remote Control & Home Assistant:"
-	@echo "  make pc-ctl-install   - Cria link de bin/sb bin/pc-ctl em ~/.local/bin"
-	@echo "  make pc-ctl-test      - Executa os testes unitarios TDD de bin/sb bin/pc-ctl"
+	@echo "  make pc-ctl-install   - Cria links de bin/pc-ctl em ~/.local/bin e de lib/pc-ctl-log.sh em ~/.local/lib"
+	@echo "  make pc-ctl-test      - Executa os testes unitarios TDD de bin/pc-ctl"
 	@echo "  make ha-vps-pack      - Gera tarball da stack Home Assistant para envio a VPS"
 	@echo "  make ha-vps-deploy [VPS=user@ip] - Deploy automatizado via SSH para a VPS"
 	@echo "  make ha-mcp-check     - Testa conectividade com o Home Assistant e disponibilidade do uvx"
@@ -132,9 +132,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; zsh -n zsh/harness2.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -184,9 +184,10 @@ version:
 	@./bin/dotfiles-version
 
 pc-ctl-install:
-	@mkdir -p $(HOME)/.local/bin
-	ln -sfn $(CURDIR)/bin/sb bin/pc-ctl $(HOME)/.local/bin/sb bin/pc-ctl
-	@echo "✓ bin/sb bin/pc-ctl instalado em $(HOME)/.local/bin/sb bin/pc-ctl"
+	@mkdir -p $(HOME)/.local/bin $(HOME)/.local/lib
+	ln -sfn $(CURDIR)/bin/pc-ctl $(HOME)/.local/bin/pc-ctl
+	ln -sfn $(CURDIR)/lib/pc-ctl-log.sh $(HOME)/.local/lib/pc-ctl-log.sh
+	@echo "✓ bin/pc-ctl e lib/pc-ctl-log.sh instalados em $(HOME)/.local/"
 
 pc-ctl-test:
 	@bash tests/pc_ctl_test.sh

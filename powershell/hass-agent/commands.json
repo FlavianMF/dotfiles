@@ -74,14 +74,44 @@
       "arguments": "-NoProfile -WindowStyle Hidden -Command \"Start-Process wt\""
     },
     {
-      "id": "pc_mode_llm_boost",
-      "name": "pc_mode_llm_boost",
-      "friendly_name": "Ativar Lenovo LLM Boost",
-      "description": "Ajusta ventoinhas e energia para alta performance com IA local",
+      "id": "pc_mode_eco",
+      "name": "pc_mode_eco",
+      "friendly_name": "Perfil Energia: Eco",
+      "description": "Aplica perfil Economia de Energia via tarefa agendada pc-ctl-power",
       "entity_type": "Button",
       "command_type": "PowerShell",
       "executable": "powershell.exe",
-      "arguments": "-NoProfile -ExecutionPolicy Bypass -File \"$HOME/dotfiles/powershell/Set-LenovoLlmBoost.ps1\" -Mode Performance"
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"Set-Content -Path 'C:\\ProgramData\\pc-ctl\\request.json' -Value '{\\\"profile\\\":\\\"eco\\\"}'; Start-Process schtasks.exe -ArgumentList '/run','/tn','pc-ctl-power' -NoNewWindow\""
+    },
+    {
+      "id": "pc_mode_balanced",
+      "name": "pc_mode_balanced",
+      "friendly_name": "Perfil Energia: Equilibrado",
+      "description": "Aplica perfil Equilibrado via tarefa agendada pc-ctl-power",
+      "entity_type": "Button",
+      "command_type": "PowerShell",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"Set-Content -Path 'C:\\ProgramData\\pc-ctl\\request.json' -Value '{\\\"profile\\\":\\\"balanced\\\"}'; Start-Process schtasks.exe -ArgumentList '/run','/tn','pc-ctl-power' -NoNewWindow\""
+    },
+    {
+      "id": "pc_mode_llm_boost",
+      "name": "pc_mode_llm_boost",
+      "friendly_name": "Perfil Energia: LLM Boost",
+      "description": "Aplica perfil LLM Boost via tarefa agendada pc-ctl-power",
+      "entity_type": "Button",
+      "command_type": "PowerShell",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"Set-Content -Path 'C:\\ProgramData\\pc-ctl\\request.json' -Value '{\\\"profile\\\":\\\"llm-boost\\\",\\\"ttl_minutes\\\":120}'; Start-Process schtasks.exe -ArgumentList '/run','/tn','pc-ctl-power' -NoNewWindow\""
+    },
+    {
+      "id": "pc_mode_max",
+      "name": "pc_mode_max",
+      "friendly_name": "Perfil Energia: Maximo",
+      "description": "Aplica perfil Desempenho Maximo via tarefa agendada pc-ctl-power",
+      "entity_type": "Button",
+      "command_type": "PowerShell",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -ExecutionPolicy Bypass -Command \"Set-Content -Path 'C:\\ProgramData\\pc-ctl\\request.json' -Value '{\\\"profile\\\":\\\"max\\\",\\\"ttl_minutes\\\":120}'; Start-Process schtasks.exe -ArgumentList '/run','/tn','pc-ctl-power' -NoNewWindow\""
     },
     {
       "id": "pc_status_traycer",

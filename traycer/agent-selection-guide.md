@@ -60,3 +60,9 @@ Harness `opencode`, model `llamacpp:gpt-oss-20b`, effort `medium`, on `llama-ser
 ## Handoff
 
 The handoff between agents is an artifact. Before you open a new chat for a follow-up, write a `spec` artifact with the decision, the current state and the next step. Point the new agent to that artifact, and do not paste the context into the message.
+## Power and Sleep Integration
+
+- Pause >= 30m: check with `traycer_list_tasks` that no other agent is active (excluding self). If clear, run `pc-ctl schedule-sleep --until <timestamp> --agents-idle-checked`. If busy, skip sleep.
+- Heavy local LLM work: run `pc-ctl power-mode llm-boost --ttl <duration>` (ceiling 4h). When done, run `pc-ctl power-mode balanced`.
+- Resuming after sleep: always run `pc-ctl wake-check` before any LLM or MCP call.
+- Never run `pc-ctl wake-setup` or `pc-ctl wake-test` (user-only commands).

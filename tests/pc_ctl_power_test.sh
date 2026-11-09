@@ -1,0 +1,452 @@
+#!/bin/bash
+# Testes TDD de lib/pc-ctl-log.sh e subcomandos de energia do bin/pc-ctl
+# Uso: bash tests/pc_ctl_power_test.sh
+set -u
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d)"
+trap 'chmod -R u+w "$tmp" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+
+fail=0
+expect() {
+    if [[ "$2" != "$3" ]]; then
+        echo "❌ FALHA: $1 (obtido: '$2', esperado: '$3')"
+        fail=1
+    else
+        echo "✅ PASSOU: $1"
+    fi
+}
+
+has() {
+    if ! grep -F -q -- "$2" <<<"$3"; then
+        echo "❌ FALHA: $1 (faltou '$2' em: $3)"
+        fail=1
+    else
+        echo "✅ PASSOU: $1"
+    fi
+}
+
+# ==============================================================================
+# 1. Testes do módulo lib/pc-ctl-log.sh
+# ==============================================================================
+LOG_LIB="$ROOT/lib/pc-ctl-log.sh"
+if [[ ! -f "$LOG_LIB" ]]; then
+    echo "❌ FALHA: lib/pc-ctl-log.sh não existe (fase RED do TDD)"
+    echo "Fim dos testes: 1 falha(s)"
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$LOG_LIB"
+
+test_log="$tmp/test_sleep.log"
+export PC_CTL_LOG_FILE="$test_log"
+
+# Teste 1.1: Log completo
+pc_ctl_log --cmd "power-mode" --result "applied" --profile "llm-boost" --reason "ok" --until "2026-11-01T20:00:00Z"
+
+if [[ ! -f "$test_log" ]]; then
+    echo "❌ FALHA: arquivo de log não foi criado em $test_log"
+    fail=1
+else
+    line="$(tail -n 1 "$test_log")"
+    cmd_val="$(jq -r '.cmd' <<<"$line")"
+    result_val="$(jq -r '.result' <<<"$line")"
+    profile_val="$(jq -r '.profile' <<<"$line")"
+    reason_val="$(jq -r '.reason' <<<"$line")"
+    until_val="$(jq -r '.until' <<<"$line")"
+    ts_val="$(jq -r '.ts' <<<"$line")"
+
+    expect "log registra cmd=power-mode" "$cmd_val" "power-mode"
+    expect "log registra result=applied" "$result_val" "applied"
+    expect "log registra profile=llm-boost" "$profile_val" "llm-boost"
+    expect "log registra reason=ok" "$reason_val" "ok"
+    expect "log registra until" "$until_val" "2026-11-01T20:00:00Z"
+    has "log registra timestamp ISO 8601" "T" "$ts_val"
+fi
+
+# Teste 1.2: Log com campos opcionais nulos
+pc_ctl_log --cmd "wake-setup" --result "dry-run" --reason "dry_run"
+line2="$(tail -n 1 "$test_log")"
+profile_val2="$(jq -r '.profile' <<<"$line2")"
+until_val2="$(jq -r '.until' <<<"$line2")"
+expect "campo profile ausente vira null no JSON" "$profile_val2" "null"
+expect "campo until ausente vira null no JSON" "$until_val2" "null"
+
+# Teste 1.3: Validação do valor de result (applied|refused|failed|dry-run)
+rc_invalid=0
+pc_ctl_log --cmd "power-mode" --result "invalido" 2>/dev/null || rc_invalid=$?
+if [[ "$rc_invalid" -ne 0 ]]; then
+    echo "✅ PASSOU: result inválido rejeitado com erro"
+else
+    echo "❌ FALHA: result inválido deveria ter retornado erro"
+    fail=1
+fi
+
+# Teste 1.4: result 'requested' (pedido enviado; o resultado real vem do state.json)
+rc_req=0
+pc_ctl_log --cmd "power-mode" --result "requested" --reason "task_started" --profile "max" || rc_req=$?
+expect "result 'requested' aceito" "$rc_req" "0"
+expect "log registra result=requested" "$(jq -r '.result' <<<"$(tail -n 1 "$test_log")")" "requested"
+
+
+# ==============================================================================
+# 2. Testes dos scripts PowerShell do Windows (powershell/pc-ctl/)
+# ==============================================================================
+SET_POWER_PS="$ROOT/powershell/pc-ctl/Set-PowerProfile.ps1"
+INSTALL_PS="$ROOT/powershell/pc-ctl/Install-PcCtl.ps1"
+
+if [[ ! -f "$SET_POWER_PS" ]]; then
+    echo "❌ FALHA: powershell/pc-ctl/Set-PowerProfile.ps1 não existe (fase RED do TDD)"
+    fail=1
+else
+    ps_content="$(cat "$SET_POWER_PS")"
+    has "Set-PowerProfile suporta eco" "eco" "$ps_content"
+    has "Set-PowerProfile suporta balanced" "balanced" "$ps_content"
+    has "Set-PowerProfile suporta llm-boost" "llm-boost" "$ps_content"
+    has "Set-PowerProfile suporta max" "max" "$ps_content"
+    has "Set-PowerProfile le request.json" "request.json" "$ps_content"
+    has "Set-PowerProfile checa PowerLineStatus na bateria" "PowerLineStatus" "$ps_content"
+    has "Set-PowerProfile agenda pc-ctl-power-revert" "pc-ctl-power-revert" "$ps_content"
+    has "Set-PowerProfile grava state.json" "state.json" "$ps_content"
+    has "Set-PowerProfile reaproveita Set-LenovoLlmBoost" "Set-LenovoLlmBoost.ps1" "$ps_content"
+
+    # request.json: o usuário só tem RX na pasta, então apagar o arquivo impede o próximo pedido.
+    if grep -iE '^[^#]*Remove-Item[^|]*(RequestFile|request\.json)' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile apaga o request.json com Remove-Item"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não apaga o request.json"
+    fi
+    # A reversão do TTL não pode depender da localidade (schtasks /sd usa dd/MM/yyyy em pt-BR).
+    if grep -iE '^[^#]*schtasks' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile usa schtasks (formato de data depende da localidade)"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa schtasks"
+    fi
+    has "Set-PowerProfile registra a reversão com Register-ScheduledTask" "Register-ScheduledTask" "$ps_content"
+    has "Set-PowerProfile usa gatilho New-ScheduledTaskTrigger -Once -At" "New-ScheduledTaskTrigger -Once -At" "$ps_content"
+    has "Set-PowerProfile remove a reversão com Unregister-ScheduledTask" "Unregister-ScheduledTask" "$ps_content"
+    has "Set-PowerProfile roda a reversão como SYSTEM por SID" "S-1-5-18" "$ps_content"
+    # O script elevado só executa Set-LenovoLlmBoost.ps1 de dentro da pasta protegida ($ConfigDir).
+    if grep -E '^[^#]*PSScriptRoot' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile procura scripts fora de ConfigDir via PSScriptRoot"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa PSScriptRoot"
+    fi
+    has "Set-PowerProfile executa só o Set-LenovoLlmBoost de ConfigDir" "Join-Path \$ConfigDir 'Set-LenovoLlmBoost.ps1'" "$ps_content"
+    has "Set-PowerProfile aborta se Set-LenovoLlmBoost.ps1 faltar" "Set-LenovoLlmBoost.ps1 não encontrado" "$ps_content"
+    # O parâmetro $Profile sombrearia a variável automática $PROFILE do PowerShell.
+    if grep -iE '^[^#]*\$Profile\b' "$SET_POWER_PS" >/dev/null; then
+        echo "❌ FALHA: Set-PowerProfile usa \$Profile (sombreia a variável automática \$PROFILE)"
+        fail=1
+    else
+        echo "✅ PASSOU: Set-PowerProfile não usa \$Profile"
+    fi
+    has "Set-PowerProfile declara o parâmetro \$PowerProfile" '[string]$PowerProfile' "$ps_content"
+    has "Set-PowerProfile mantém -Profile como alias" "[Alias('Profile')]" "$ps_content"
+    # O resultado real (applied|refused|failed) vai para o state.json, que o status lê.
+    has "Set-PowerProfile grava last_result no state.json" "last_result" "$ps_content"
+    has "Set-PowerProfile grava last_reason no state.json" "last_reason" "$ps_content"
+    has "Set-PowerProfile registra recusa" "refused" "$ps_content"
+    has "Set-PowerProfile registra falha" "failed" "$ps_content"
+    has "Set-PowerProfile recusa na bateria com reason on_battery" "on_battery" "$ps_content"
+    has "Set-PowerProfile sobrescreve request.json com {}" "'{}' | Set-Content -Path \$RequestFile" "$ps_content"
+fi
+
+if [[ ! -f "$INSTALL_PS" ]]; then
+    echo "❌ FALHA: powershell/pc-ctl/Install-PcCtl.ps1 não existe (fase RED do TDD)"
+    fail=1
+else
+    inst_content="$(cat "$INSTALL_PS")"
+    has "Install-PcCtl instala em ProgramData" "ProgramData\\pc-ctl" "$inst_content"
+    has "Install-PcCtl ajusta ACL via icacls" "icacls" "$inst_content"
+    has "Install-PcCtl concede escrita para Users em request.json" "request.json" "$inst_content"
+
+    # Windows pt-BR: nomes de grupo em inglês não existem. O icacls deve usar SIDs.
+    icacls_lines="$(grep -iE '^[^#]*icacls' "$INSTALL_PS" || true)"
+    has "Install-PcCtl usa SID de Administradores no icacls" '*S-1-5-32-544' "$icacls_lines"
+    has "Install-PcCtl usa SID de SYSTEM no icacls" '*S-1-5-18' "$icacls_lines"
+    has "Install-PcCtl usa SID de Usuarios no icacls" '*S-1-5-32-545' "$icacls_lines"
+    if grep -qE '(^|[^A-Za-z])(Administrators|SYSTEM|Users):' <<<"$icacls_lines"; then
+        echo "❌ FALHA: icacls usa nome de grupo em inglês (quebra no Windows pt-BR)"
+        fail=1
+    else
+        echo "✅ PASSOU: icacls não usa nomes de grupo em inglês"
+    fi
+    # request.json: Usuários escrevem, mas não apagam. (M) inclui DELETE, e a pasta só dá RX,
+    # então um arquivo apagado não volta até o próximo wake-setup.
+    req_acl_line="$(grep -F 'requestFile' <<<"$icacls_lines" || true)"
+    has "request.json concede (R,W) a Usuarios" "*S-1-5-32-545:(R,W)" "$req_acl_line"
+    if grep -qE 'S-1-5-32-545:\((M|F)\)' <<<"$req_acl_line"; then
+        echo "❌ FALHA: request.json concede (M) ou (F) a Usuários (inclui DELETE)"
+        fail=1
+    else
+        echo "✅ PASSOU: request.json não concede DELETE a Usuários"
+    fi
+    if grep -q 'Out-Null' <<<"$icacls_lines"; then
+        echo "❌ FALHA: icacls engole a saída com Out-Null"
+        fail=1
+    else
+        echo "✅ PASSOU: icacls não engole erro com Out-Null"
+    fi
+    # A criação da tarefa e o powercfg rodam dentro do script elevado.
+    has "Install-PcCtl registra a tarefa com Register-ScheduledTask" "Register-ScheduledTask" "$inst_content"
+    has "Install-PcCtl registra pc-ctl-power" "pc-ctl-power" "$inst_content"
+    has "Install-PcCtl usa RunLevel Highest" "-RunLevel Highest" "$inst_content"
+    has "Install-PcCtl habilita wake timers na tomada (AC)" "/setacvalueindex" "$inst_content"
+    has "Install-PcCtl habilita wake timers na bateria (DC)" "/setdcvalueindex" "$inst_content"
+    has "Install-PcCtl referencia SUB_SLEEP" "SUB_SLEEP" "$inst_content"
+    has "Install-PcCtl referencia GUID do wake timer" "BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D" "$inst_content"
+    has "Install-PcCtl executa Set-PowerProfile.ps1 instalado" "Set-PowerProfile.ps1" "$inst_content"
+    if grep -q '/mnt/' "$INSTALL_PS"; then
+        echo "❌ FALHA: Install-PcCtl contém caminho /mnt/ do WSL"
+        fail=1
+    else
+        echo "✅ PASSOU: Install-PcCtl não contém caminho /mnt/"
+    fi
+    lastexit_count="$(grep -c 'LASTEXITCODE' "$INSTALL_PS" || true)"
+    if [[ "$lastexit_count" -ge 2 ]]; then
+        echo "✅ PASSOU: Install-PcCtl checa LASTEXITCODE depois de cada icacls"
+    else
+        echo "❌ FALHA: Install-PcCtl deve checar LASTEXITCODE depois de cada icacls (achou $lastexit_count)"
+        fail=1
+    fi
+fi
+
+
+# ==============================================================================
+# 3. Testes do subcomando wake-setup do bin/pc-ctl
+# ==============================================================================
+# 3.1 Help exibe wake-setup
+out_help="$(bash "$ROOT/bin/pc-ctl" --help 2>&1)"
+has "help lista wake-setup" "wake-setup" "$out_help"
+
+# 3.2 Dry-run do wake-setup: só dispara o script elevado. powercfg e tarefa vivem no Install-PcCtl.ps1.
+out_wake_dry="$(bash "$ROOT/bin/pc-ctl" --dry-run wake-setup 2>&1)"
+has "dry-run wake-setup invoca Install-PcCtl.ps1" "Install-PcCtl.ps1" "$out_wake_dry"
+has "dry-run wake-setup pede elevação (RunAs)" "RunAs" "$out_wake_dry"
+if grep -qE 'schtasks|powercfg' <<<"$out_wake_dry"; then
+    echo "❌ FALHA: wake-setup roda schtasks/powercfg fora da elevação"
+    fail=1
+else
+    echo "✅ PASSOU: wake-setup não roda schtasks/powercfg fora da elevação"
+fi
+
+# Nenhum argumento enviado ao Windows pode conter caminho /mnt/ (o executável é a 1a palavra)
+wake_dry_args="$(sed -E 's/^\[DRY-RUN\] [^ ]+ //' <<<"$out_wake_dry")"
+if grep -q '/mnt/' <<<"$wake_dry_args"; then
+    echo "❌ FALHA: argumento do wake-setup contém caminho /mnt/: $wake_dry_args"
+    fail=1
+else
+    echo "✅ PASSOU: argumentos do wake-setup não contêm /mnt/"
+fi
+
+line_wake_dry="$(tail -n 1 "$test_log")"
+expect "log wake-setup dry-run cmd" "$(jq -r '.cmd' <<<"$line_wake_dry")" "wake-setup"
+expect "log wake-setup dry-run result" "$(jq -r '.result' <<<"$line_wake_dry")" "dry-run"
+
+# 3.3 Execução com mocks de sistema (cada mock registra seus argumentos em $MOCK_LOG)
+mock_win="$tmp/mock_win"
+mkdir -p "$mock_win"
+export MOCK_LOG="$tmp/mock_calls.log"
+cat >"$mock_win/powershell.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_PS $*"
+echo "MOCK_PS $*" >>"$MOCK_LOG"
+exit "${MOCK_PS_RC:-0}"
+MOCK
+cat >"$mock_win/powercfg.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_POWERCFG $*"
+echo "MOCK_POWERCFG $*" >>"$MOCK_LOG"
+MOCK
+cat >"$mock_win/schtasks.exe" <<'MOCK'
+#!/bin/bash
+echo "MOCK_SCHTASKS $*"
+echo "MOCK_SCHTASKS $*" >>"$MOCK_LOG"
+MOCK
+chmod +x "$mock_win/"*.exe
+
+: >"$MOCK_LOG"
+out_wake_mock="$(WIN_SYS_DIR="$mock_win" WIN_PS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" wake-setup 2>&1)"
+has "wake-setup mock chama powershell Install-PcCtl" "MOCK_PS" "$out_wake_mock"
+has "wake-setup mock passa Install-PcCtl.ps1" "Install-PcCtl.ps1" "$(cat "$MOCK_LOG")"
+if grep -qE 'MOCK_POWERCFG|MOCK_SCHTASKS' "$MOCK_LOG"; then
+    echo "❌ FALHA: wake-setup chamou powercfg/schtasks fora da elevação"
+    fail=1
+else
+    echo "✅ PASSOU: wake-setup não chama powercfg/schtasks fora da elevação"
+fi
+if grep -q '/mnt/' "$MOCK_LOG"; then
+    echo "❌ FALHA: argumento enviado ao Windows contém /mnt/: $(cat "$MOCK_LOG")"
+    fail=1
+else
+    echo "✅ PASSOU: nenhum argumento enviado ao Windows contém /mnt/"
+fi
+
+line_wake_applied="$(tail -n 1 "$test_log")"
+expect "log wake-setup applied cmd" "$(jq -r '.cmd' <<<"$line_wake_applied")" "wake-setup"
+expect "log wake-setup applied result" "$(jq -r '.result' <<<"$line_wake_applied")" "applied"
+
+# 3.4 Falha do script elevado: wake-setup propaga o código de saída e registra failed
+rc_wake_fail=0
+MOCK_PS_RC=1 WIN_SYS_DIR="$mock_win" WIN_PS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" wake-setup >/dev/null 2>&1 || rc_wake_fail=$?
+expect "wake-setup sai com 1 se o script elevado falhar" "$rc_wake_fail" "1"
+line_wake_fail="$(tail -n 1 "$test_log")"
+expect "log wake-setup falha result" "$(jq -r '.result' <<<"$line_wake_fail")" "failed"
+
+# O Start-Process elevado deve devolver o código de saída do Install-PcCtl.ps1
+has "wake-setup propaga ExitCode do processo elevado" "ExitCode" "$(cat "$ROOT/bin/pc-ctl")"
+
+
+# ==============================================================================
+# 4. Testes do subcomando power-mode do bin/pc-ctl
+# ==============================================================================
+# 4.1 Help exibe power-mode
+out_help_pwr="$(bash "$ROOT/bin/pc-ctl" --help 2>&1)"
+has "help lista power-mode" "power-mode" "$out_help_pwr"
+
+# 4.2 Validações de argumento do power-mode
+rc_no_prof=0
+out_no_prof="$(bash "$ROOT/bin/pc-ctl" power-mode 2>&1)" || rc_no_prof=$?
+expect "power-mode sem perfil sai com 1" "$rc_no_prof" "1"
+has "power-mode sem perfil lista perfis validos" "eco, balanced, llm-boost, max, status" "$out_no_prof"
+
+rc_inv_prof=0
+out_inv_prof="$(bash "$ROOT/bin/pc-ctl" power-mode perfil_invalido 2>&1)" || rc_inv_prof=$?
+expect "power-mode com perfil invalido sai com 1" "$rc_inv_prof" "1"
+has "power-mode com perfil invalido exibe mensagem" "Perfil desconhecido" "$out_inv_prof"
+
+# 4.3 Dry-run com llm-boost e TTL 90m
+out_dry_pwr="$(PC_CTL_MOCK_POWER_LINE="Online" bash "$ROOT/bin/pc-ctl" --dry-run power-mode llm-boost --ttl 90m 2>&1)"
+has "dry-run power-mode mostra escrita de request.json" "request.json" "$out_dry_pwr"
+has "dry-run power-mode mostra perfil llm-boost" "llm-boost" "$out_dry_pwr"
+has "dry-run power-mode mostra ttl 90" "90" "$out_dry_pwr"
+has "dry-run power-mode executa schtasks run pc-ctl-power" "schtasks" "$out_dry_pwr"
+has "dry-run power-mode roda pc-ctl-power" "pc-ctl-power" "$out_dry_pwr"
+
+line_pwr_dry="$(tail -n 1 "$test_log")"
+expect "log dry-run power-mode cmd" "$(jq -r '.cmd' <<<"$line_pwr_dry")" "power-mode"
+expect "log dry-run power-mode result" "$(jq -r '.result' <<<"$line_pwr_dry")" "dry-run"
+expect "log dry-run power-mode profile" "$(jq -r '.profile' <<<"$line_pwr_dry")" "llm-boost"
+
+# 4.4 Validação de TTL acima do teto de 4 horas (240m)
+rc_ttl_ceil=0
+out_ttl_ceil="$(PC_CTL_MOCK_POWER_LINE="Online" bash "$ROOT/bin/pc-ctl" power-mode max --ttl 5h 2>&1)" || rc_ttl_ceil=$?
+expect "TTL acima do teto de 4h sai com 1" "$rc_ttl_ceil" "1"
+has "mensagem de TTL acima do teto" "240" "$out_ttl_ceil"
+
+line_ttl_ceil="$(tail -n 1 "$test_log")"
+expect "log ttl excedido result" "$(jq -r '.result' <<<"$line_ttl_ceil")" "refused"
+expect "log ttl excedido reason" "$(jq -r '.reason' <<<"$line_ttl_ceil")" "ttl_exceeded"
+
+# 4.5 Bloqueio quando na bateria (mock Offline)
+rc_bat_max=0
+out_bat_max="$(PC_CTL_MOCK_POWER_LINE="Offline" bash "$ROOT/bin/pc-ctl" power-mode max 2>&1)" || rc_bat_max=$?
+expect "power-mode max na bateria sai com 1" "$rc_bat_max" "1"
+has "mensagem de recusa na bateria" "bateria" "$out_bat_max"
+
+line_bat_max="$(tail -n 1 "$test_log")"
+expect "log bateria max result" "$(jq -r '.result' <<<"$line_bat_max")" "refused"
+expect "log bateria max reason" "$(jq -r '.reason' <<<"$line_bat_max")" "on_battery"
+expect "log bateria max profile" "$(jq -r '.profile' <<<"$line_bat_max")" "max"
+
+# 4.6 Perfis eco e balanced permitidos na bateria
+out_bat_eco="$(PC_CTL_MOCK_POWER_LINE="Offline" bash "$ROOT/bin/pc-ctl" --dry-run power-mode eco 2>&1)"
+has "eco permitido na bateria em dry-run" "request.json" "$out_bat_eco"
+
+# 4.6b Falha aberta: se o powershell.exe falhar, o estado é Unknown e llm-boost/max são recusados
+mock_ps_fail="$tmp/mock_ps_fail"
+mkdir -p "$mock_ps_fail"
+printf '#!/bin/bash\nexit 1\n' >"$mock_ps_fail/powershell.exe"
+mock_ps_empty="$tmp/mock_ps_empty"
+mkdir -p "$mock_ps_empty"
+printf '#!/bin/bash\nexit 0\n' >"$mock_ps_empty/powershell.exe"
+mock_ps_online="$tmp/mock_ps_online"
+mkdir -p "$mock_ps_online"
+printf '#!/bin/bash\nprintf "Online\\r\\n"\n' >"$mock_ps_online/powershell.exe"
+chmod +x "$mock_ps_fail/powershell.exe" "$mock_ps_empty/powershell.exe" "$mock_ps_online/powershell.exe"
+
+for ps_case in fail empty; do
+    ps_dir="$tmp/mock_ps_$ps_case"
+    for prof in llm-boost max; do
+        rc_unk=0
+        out_unk="$(WIN_PS_DIR="$ps_dir" bash "$ROOT/bin/pc-ctl" --dry-run power-mode "$prof" 2>&1)" || rc_unk=$?
+        expect "powershell $ps_case: power-mode $prof sai com 1" "$rc_unk" "1"
+        has "powershell $ps_case: mensagem de $prof cita Unknown" "Unknown" "$out_unk"
+        line_unk="$(tail -n 1 "$test_log")"
+        expect "powershell $ps_case: log $prof result" "$(jq -r '.result' <<<"$line_unk")" "refused"
+        expect "powershell $ps_case: log $prof reason" "$(jq -r '.reason' <<<"$line_unk")" "power_unknown"
+    done
+    rc_unk_eco=0
+    WIN_PS_DIR="$ps_dir" bash "$ROOT/bin/pc-ctl" --dry-run power-mode eco >/dev/null 2>&1 || rc_unk_eco=$?
+    expect "powershell $ps_case: eco continua permitido" "$rc_unk_eco" "0"
+done
+
+rc_online=0
+WIN_PS_DIR="$mock_ps_online" bash "$ROOT/bin/pc-ctl" --dry-run power-mode max >/dev/null 2>&1 || rc_online=$?
+expect "powershell Online (com CRLF): max permitido" "$rc_online" "0"
+
+# 4.7 Execução com mock de schtasks e request.json
+mock_req_dir="$tmp/progdata"
+mkdir -p "$mock_req_dir"
+mock_req_file="$mock_req_dir/request.json"
+
+out_mock_run="$(PC_CTL_MOCK_POWER_LINE="Online" PC_CTL_REQUEST_FILE="$mock_req_file" WIN_SYS_DIR="$mock_win" bash "$ROOT/bin/pc-ctl" power-mode balanced 2>&1)"
+has "execucao grava request.json e informa o pedido" "solicitado" "$out_mock_run"
+if [[ -f "$mock_req_file" ]]; then
+    expect "request.json contem balanced" "$(jq -r '.profile' "$mock_req_file")" "balanced"
+    echo "✅ PASSOU: request.json gerado corretamente"
+else
+    echo "❌ FALHA: request.json não foi criado em $mock_req_file"
+    fail=1
+fi
+
+line_applied_pwr="$(tail -n 1 "$test_log")"
+expect "log power-mode applied cmd" "$(jq -r '.cmd' <<<"$line_applied_pwr")" "power-mode"
+expect "log power-mode grava requested (o resultado real vem do state.json)" "$(jq -r '.result' <<<"$line_applied_pwr")" "requested"
+expect "log power-mode applied profile" "$(jq -r '.profile' <<<"$line_applied_pwr")" "balanced"
+
+# 4.8 Status do power-mode
+mock_state_file="$mock_req_dir/state.json"
+cat >"$mock_state_file" <<'JSON'
+{
+  "active_profile": "llm-boost",
+  "applied_at": "2026-11-01T18:00:00Z",
+  "ttl_minutes": 120,
+  "expires_at": "2026-11-01T20:00:00Z"
+}
+JSON
+
+out_pwr_status="$(PC_CTL_STATE_FILE="$mock_state_file" bash "$ROOT/bin/pc-ctl" power-mode status 2>&1)"
+has "status exibe perfil ativo" "llm-boost" "$out_pwr_status"
+has "status exibe TTL restante ou total" "120" "$out_pwr_status"
+
+# 4.9 Status mostra o último pedido gravado pela tarefa elevada (recusa do lado Windows)
+cat >"$mock_state_file" <<'JSON'
+{
+  "active_profile": "balanced",
+  "applied_at": "2026-11-01T18:00:00Z",
+  "ttl_minutes": 0,
+  "expires_at": null,
+  "last_result": "refused",
+  "last_reason": "on_battery",
+  "last_profile": "max",
+  "last_at": "2026-11-01T19:00:00Z"
+}
+JSON
+out_pwr_status2="$(PC_CTL_STATE_FILE="$mock_state_file" bash "$ROOT/bin/pc-ctl" power-mode status 2>&1)"
+has "status exibe o resultado do último pedido" "refused" "$out_pwr_status2"
+has "status exibe o motivo do último pedido" "on_battery" "$out_pwr_status2"
+has "status exibe o perfil do último pedido" "max" "$out_pwr_status2"
+
+echo "----------------------------------------"
+if [[ $fail -eq 0 ]]; then
+    echo "🎉 Testes de lib/pc-ctl-log.sh PASSARAM!"
+else
+    echo "💥 Foram encontradas $fail falhas no teste TDD."
+fi
+exit $fail
