@@ -4,7 +4,7 @@
 
 | Skill | Claude Code (`~/.claude/skills`) | Codex e OpenCode (`~/.agents/skills`) |
 | --- | --- | --- |
-| `figjam-pm-canvas`, `reverse-engineer-anything` | sim | sim |
+| `figjam-pm-canvas`, `reverse-engineer-anything`, `second-brain-triage` | sim | sim |
 | `flow`, `phase` (no submódulo `vendor/flows-editor`) | sim | **não** |
 
 ## Por que `flow` e `phase` só no Claude Code

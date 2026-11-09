@@ -820,6 +820,7 @@ if [[ ! -d "$VAULT_DIR/.git" ]]; then
     as_user git clone https://github.com/FlavianMF/obisidian_vault.git "$VAULT_DIR"
 fi
 link_shared_skill second-brain-sync "$VAULT_DIR/00_META/skills/second-brain-sync"
+link_shared_skill second-brain-triage "$REPO_DIR/agents/skills/second-brain-triage"
 # reverse-engineer-anything ships with rea-agents@REA_VERSION; versioned here so the
 # skill and the MCP it documents stay in step (resync from the package on a bump).
 link_shared_skill reverse-engineer-anything "$REPO_DIR/agents/skills/reverse-engineer-anything"
