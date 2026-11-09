@@ -1,0 +1,24 @@
+TASK: Write unit tests for {SYMBOL} in {SOURCE_PATH}. Put them in {TEST_PATH}.
+FRAMEWORK: {vitest | pytest | bash}
+
+CODE UNDER TEST:
+```{LANG}
+{FUNCTION_OR_MODULE_SOURCE}
+```
+
+EXISTING TEST (copy its structure, helpers and naming):
+```{LANG}
+{ONE_EXISTING_TEST_FROM_THE_REPO}
+```
+
+CASES TO COVER:
+1. {HAPPY_PATH}
+2. {EDGE_CASE}
+3. {ERROR_CASE}
+
+RULES:
+- One test per case. Test names describe behavior.
+- No network, no real filesystem outside a temp dir, no sleeps.
+- Do not modify {SOURCE_PATH}.
+
+Output: one ```{LANG} block with the full test file.

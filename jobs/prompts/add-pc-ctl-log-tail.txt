@@ -1,0 +1,60 @@
+TASK: Apply targeted edit to lib/pc-ctl-log.sh to add pc_ctl_log_tail helper function.
+
+ORIGINAL FILE EXCERPT (end of file):
+```bash
+    local log_file="${PC_CTL_LOG_FILE:-$HOME/.local/state/pc-ctl/sleep.log}"
+    local log_dir
+    log_dir="$(dirname "$log_file")"
+    if [[ ! -d "$log_dir" ]]; then
+        mkdir -p "$log_dir"
+    fi
+
+    python3 -c '
+import json, sys
+ts, cmd, result, reason, profile, until = sys.argv[1:7]
+entry = {
+    "ts": ts,
+    "cmd": cmd,
+    "result": result,
+    "reason": reason if reason else None,
+    "profile": profile if profile else None,
+    "until": until if until else None,
+}
+print(json.dumps(entry, separators=(",", ":")))
+' "$ts" "$cmd" "$result" "$reason" "$profile" "$until" >> "$log_file"
+}
+```
+
+INSTRUCTIONS:
+Add `pc_ctl_log_tail` function after `pc_ctl_log()`.
+Your SEARCH block MUST include the unique line:
+`' "$ts" "$cmd" "$result" "$reason" "$profile" "$until" >> "$log_file"`
+followed by `}` to match the exact closing of `pc_ctl_log`.
+
+REPLACEMENT CODE:
+```bash
+' "$ts" "$cmd" "$result" "$reason" "$profile" "$until" >> "$log_file"
+}
+
+pc_ctl_log_tail() {
+    local lines="${1:-10}"
+    local log_file="${PC_CTL_LOG_FILE:-$HOME/.local/state/pc-ctl/sleep.log}"
+    if [[ -f "$log_file" ]]; then
+        tail -n "$lines" "$log_file"
+    fi
+}
+```
+
+CONSTRAINTS:
+- Do not reorder untouched code.
+- Search block MUST match original file text verbatim.
+- Output ONLY the search/replace block inside ```search-replace fence.
+
+Output format:
+```search-replace
+<<<<<<< SEARCH
+[exact original code lines to find]
+=======
+[replacement code lines]
+>>>>>>> REPLACE
+```

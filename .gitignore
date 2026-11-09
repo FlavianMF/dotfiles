@@ -65,3 +65,7 @@ homeassistant/config/
 # Temporary files
 tmp/
 skills/
+
+# Local LLM runners
+logs/
+out/

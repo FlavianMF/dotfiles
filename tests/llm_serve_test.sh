@@ -97,6 +97,15 @@ hasnt "main não passa -ngl" "-ngl" "$a"
 hasnt "main não passa -fit" "-fit" "$a"
 hasnt "main sem LLM_N_CPU_MOE não passa --n-cpu-moe" "--n-cpu-moe" "$a"
 
+# --- 5b. perfil coder7b ---
+reset
+out="$(bash "$SERVE" coder7b 2>&1)"; rc=$?
+expect "coder7b sai 0" "$rc" "0"
+a="$(args)"
+has "coder7b usa -hf com Qwen 2.5 Coder 7B" "-hf Qwen/Qwen2.5-Coder-7B-Instruct-GGUF:Q4_K_M" "$a"
+has "coder7b usa --alias qwen2.5-coder-7b" "--alias qwen2.5-coder-7b" "$a"
+has "coder7b usa -np 1" "-np 1" "$a"
+
 # --- 6. LLM_N_CPU_MOE ---
 reset
 LLM_N_CPU_MOE=7 bash "$SERVE" main >/dev/null 2>&1; rc=$?
