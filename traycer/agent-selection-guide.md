@@ -10,7 +10,7 @@ Spend quota in this order: the `claude` Pro plan, then the `antigravity` Google 
 | Orchestrator, on a trigger | `claude` | `opus` | `high` | Pro |
 | Self-contained implementation, tests included | `claude` | `sonnet` | `high` | Pro |
 | Bounded task, web research | `antigravity` | `gemini-3.8-flash` | `medium` | Gemini |
-| Git operation (commit, merge, push, rebase) | `claude` | `haiku` | `low` | Pro |
+| Git operation (commit, merge, push, rebase) | `opencode` (ou `claude`) | `llamacpp:coder7b` (ou `haiku`) | `none` (ou `low`) | Local (0 quota) |
 | Mechanical task | `claude` | `haiku` | `low` | Pro |
 | Review | `antigravity` | `claude-opus-5.5` | `high` | 3p |
 | Second opinion | `claude` | `fable` | `high` | Pro |
@@ -18,7 +18,7 @@ Spend quota in this order: the `claude` Pro plan, then the `antigravity` Google 
 
 - Orchestrator triggers for `opus`: an architecture decision, a debug stuck after 2 attempts, or the final review of a sensitive change. Return to `sonnet` afterwards.
 - Mechanical tasks are formatting and renaming.
-- Git operations always use `claude` `haiku` `low`. Give the agent the commit message and the file list, and tell it to follow the `git-ops` rules: no push, no AI attribution.
+- Git operations prefer local `opencode` `llamacpp:coder7b` whenever llama-server is healthy (spending 0 quota), falling back to `claude` `haiku` `low`. Give the agent the commit message and the file list, and tell it to follow the `git-ops` rules: no push, no AI attribution.
 - Sensitive topics are secrets, authentication, payments, migrations, deploy and CI.
 - Implementers and reviewers use the `traycer-implement` and `traycer-review` skills.
 

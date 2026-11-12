@@ -3,6 +3,10 @@
     "figma": {
       "serverUrl": "https://mcp.figma.com/mcp"
     },
+    "headroom": {
+      "command": "/home/flv/.local/bin/headroom",
+      "args": ["mcp", "serve"]
+    },
     "playwright": {
       "command": "npx",
       "args": ["-y", "@playwright/mcp@latest"]
