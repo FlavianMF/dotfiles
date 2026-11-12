@@ -11,6 +11,7 @@ for arg in "$@"; do
     esac
 done
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEADROOM_URL="http://127.0.0.1:8787"
 PROVIDER_OVERRIDES="${TRAYCER_PROVIDER_OVERRIDES:-$HOME/.traycer/host/config/provider-overrides.json}"
 
@@ -19,9 +20,11 @@ if command -v traycer >/dev/null 2>&1; then
     if [[ $DRY_RUN -eq 1 ]]; then
         echo "[dry-run] traycer config env set --key ANTHROPIC_BASE_URL --value $HEADROOM_URL"
         echo "[dry-run] traycer config env set --key GOOGLE_GEMINI_BASE_URL --value $HEADROOM_URL"
+        echo "[dry-run] traycer config env set --key AGY_ACP_CCPA_BASE_URL --value $HEADROOM_URL"
     else
         traycer config env set --key ANTHROPIC_BASE_URL --value "$HEADROOM_URL"
         traycer config env set --key GOOGLE_GEMINI_BASE_URL --value "$HEADROOM_URL"
+        traycer config env set --key AGY_ACP_CCPA_BASE_URL --value "$HEADROOM_URL"
         echo "Configured Traycer global env overrides for Headroom ($HEADROOM_URL)"
     fi
 else
@@ -38,7 +41,10 @@ if [[ -f "$PROVIDER_OVERRIDES" ]]; then
                 .providers["claude-code"] = (.providers["claude-code"] // {}) |
                 .providers["claude-code"].envOverrides = ((.providers["claude-code"].envOverrides // {}) + {"ANTHROPIC_BASE_URL": $url}) |
                 .providers["antigravity"] = (.providers["antigravity"] // {}) |
-                .providers["antigravity"].envOverrides = ((.providers["antigravity"].envOverrides // {}) + {"GOOGLE_GEMINI_BASE_URL": $url})
+                .providers["antigravity"].envOverrides = ((.providers["antigravity"].envOverrides // {}) + {
+                    "GOOGLE_GEMINI_BASE_URL": $url,
+                    "AGY_ACP_CCPA_BASE_URL": $url
+                })
                 ' "$PROVIDER_OVERRIDES")"
 
             if [[ $DRY_RUN -eq 1 ]]; then
@@ -60,5 +66,14 @@ else
         echo "[dry-run] $PROVIDER_OVERRIDES not found; skipping"
     else
         echo "NOTE: $PROVIDER_OVERRIDES not found; skipping."
+    fi
+fi
+
+# 3. Ensure agy_acp_server wrapper is updated to forward CCPA to Headroom
+if [[ -f "$ROOT/install_agy_wrapper.sh" ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+        "$ROOT/install_agy_wrapper.sh" --dry-run
+    else
+        "$ROOT/install_agy_wrapper.sh"
     fi
 fi

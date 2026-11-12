@@ -289,6 +289,14 @@ def main():
         sys.stderr.write("agy-acp-wrapper: cannot locate the real agy_acp_server: %s\n" % err)
         return 127
 
+    # Traycer host explicitly strips AGY_ACP_* environment variables before spawning
+    # agy_acp_server. Restore AGY_ACP_CCPA_BASE_URL (inherited via GOOGLE_GEMINI_BASE_URL)
+    # so that CCPA requests are routed to the Headroom proxy.
+    if "AGY_ACP_CCPA_BASE_URL" not in os.environ:
+        target = os.environ.get("GOOGLE_GEMINI_BASE_URL") or os.environ.get("HEADROOM_URL")
+        if target:
+            os.environ["AGY_ACP_CCPA_BASE_URL"] = target
+
     child = subprocess.Popen(
         [server] + sys.argv[1:],
         stdin=subprocess.PIPE,
