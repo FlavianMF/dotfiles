@@ -277,6 +277,135 @@ pc-ctl --dry-run app obsidian
 make pc-ctl-test
 ```
 
+#### Configuração de Wake e Tarefas Elevadas (`wake-setup`)
+Configuração única e idempotente executada com elevação de Administrador no Windows:
+```bash
+# Simulação segura do que será configurado no Windows
+pc-ctl --dry-run wake-setup
+
+# Execução real (solicita prompt UAC no Windows uma única vez)
+pc-ctl wake-setup
+```
+O que o `wake-setup` realiza:
+1. Executa `Install-PcCtl.ps1`, copiando os scripts para `C:\ProgramData\pc-ctl\` e restringindo as permissões (ACL) para que apenas **Administradores** e **SYSTEM** possam gravar ou alterar os scripts. A ACL usa SIDs (`*S-1-5-32-544`, `*S-1-5-18`, `*S-1-5-32-545`), então funciona em Windows de qualquer idioma, e o script aborta se o `icacls` falhar.
+2. Cria o arquivo de requisição `C:\ProgramData\pc-ctl\request.json` com leitura e escrita para usuários comuns (`(R,W)`, sem permissão de apagar).
+3. Habilita os temporizadores de ativação (Wake Timers) do Windows na tomada (AC) e na bateria (DC) para o subgrupo `SUB_SLEEP` (`BD3B718A-0680-4D9D-8AB2-E1D2B4AC806D`).
+4. Registra a tarefa agendada `pc-ctl-power` com privilégios elevados (`RunLevel Highest`), executando `Set-PowerProfile.ps1` sem solicitar UAC ao usuário durante o uso diário. Os passos 3 e 4 rodam dentro do script elevado, com `Register-ScheduledTask` e `powercfg`.
+
+Se o script elevado falhar, o `wake-setup` sai com código 1 e grava `failed` no log.
+
+#### Modos de Energia e Refrigeração (`power-mode`)
+Permite selecionar perfis de energia do Windows e modos térmicos Lenovo sem prompt de UAC:
+```bash
+# Perfis disponíveis: eco, balanced, llm-boost, max, status
+
+# Ativar perfil equilibrado padrão
+pc-ctl power-mode balanced
+
+# Ativar perfil econômico silencioso (SmartFanMode 1, Dynamic Boost 0)
+pc-ctl power-mode eco
+
+# Ativar otimização para inferência local com TTL de 90 minutos (padrão 2h, teto 4h)
+pc-ctl power-mode llm-boost --ttl 90m
+
+# Ativar perfil de desempenho máximo
+pc-ctl power-mode max --ttl 2h
+
+# Consultar perfil ativo e TTL restante
+pc-ctl power-mode status
+
+# Simulação com --dry-run (mostra a escrita no request.json e o schtasks /run)
+pc-ctl --dry-run power-mode llm-boost --ttl 90m
+```
+Regras de segurança e invariantes:
+- **Proteção de Bateria**: Os modos de alta potência (`llm-boost` e `max`) são recusados se o computador estiver na bateria (`on_battery`) ou se o estado da tomada não puder ser lido (`power_unknown`). O motivo vai para o log.
+- **Canal sem UAC**: O comando do WSL2 escreve apenas no arquivo validado `C:\ProgramData\pc-ctl\request.json` e dispara a tarefa `schtasks /run /tn "pc-ctl-power"`. O script elevado valida rigorosamente o perfil contra a lista fixa e o TTL contra o teto.
+- **Reversão Automática**: No fim do TTL (padrão de 2 horas, teto de 4 horas), a tarefa elevada agenda `pc-ctl-power-revert` para retornar automaticamente ao perfil `balanced`.
+- **Log de Auditoria**: Cada decisão é registrada em formato JSON Lines em `~/.local/state/pc-ctl/sleep.log` com campos `ts`, `cmd`, `result` (`applied|refused|failed|dry-run|requested`), `reason`, `profile` e `until`.
+- **Resultado real**: o `schtasks /run` é assíncrono. O `power-mode` grava `requested` no log. A tarefa elevada grava `applied`, `refused` ou `failed` no `state.json`, e `pc-ctl power-mode status` mostra o último pedido.
+
+#### Visão Geral da Cadeia de Energia e Despertar
+```mermaid
+flowchart TD
+    subgraph Traycer["Agente Traycer"]
+        P["Pausa >= 30m"] --> Check["traycer_list_tasks (outros agentes?)"]
+        Check -- "Livre" --> SS["pc-ctl schedule-sleep --until &lt;ts&gt; --agents-idle-checked"]
+        Check -- "Ocupado" --> NoSleep["Pausa normal sem suspender"]
+    end
+
+    subgraph PC["Lenovo LOQ (Host)"]
+        SS --> Locks{"Travas Locais<br>(Ociosidade >= 10m &amp;<br>Zero Builds Ativos)"}
+        Locks -- "Falha" --> Refuse["Refusão segura + Log"]
+        Locks -- "OK" --> Tasks["1. Agenda Tarefa pc-ctl-wake (RTC WakeToRun -5min)<br>2. Publica MQTT pc/loq/sleeping_until (retain)<br>3. Aplica perfil eco<br>4. Suspende (S3 na tomada / Hibernar na bateria)"]
+    end
+
+    subgraph WakeChain["Cadeia de Despertar & Fallback"]
+        Tasks -.->|"-5 min"| RTC["1. RTC WakeToRun (Hardware Wake)"]
+        RTC --> WCheck["pc-ctl wake-check<br>(setup-mcp.sh + pc-ctl status)"]
+        WCheck -- "Saudável" --> ClearMQTT["Limpa pc/loq/sleeping_until (MQTT)"]
+
+        Tasks -.->|"+10 min &amp; Offline"| ESP32["2. Fallback WoL: ESP32 dispara Magic Packet"]
+        Tasks -.->|"+20 min &amp; Offline"| Push["3. Fallback Alerta: Notificação Mobile (iOS/Android)"]
+    end
+```
+
+#### Suspensão Agendada com Wake RTC (`schedule-sleep`)
+Permite suspender o computador com garantia de despertar automático (RTC Wake Timers) e sincronização de estado com o Home Assistant:
+```bash
+# Simular plano de suspensão até uma data/hora no futuro (mínimo 30 minutos)
+pc-ctl --dry-run schedule-sleep --until "2026-11-02T22:00:00Z" --agents-idle-checked
+
+# Execução real: agenda wake para 5 minutos antes, notifica HA, aplica perfil eco e suspende
+pc-ctl schedule-sleep --until "2026-11-02T22:00:00Z" --agents-idle-checked
+```
+Ordem de operações e travas de segurança:
+1. **Validação temporal**: `until` precisa estar no futuro e a pausa deve durar 30 minutos ou mais.
+2. **Travas locais (falham fechado)**:
+   - Trava de ociosidade: Windows precisa estar ocioso há 10 minutos ou mais (`GetLastInputInfo`).
+   - Trava de build: Nenhum processo ativo de compilação ou build (`make`, `cargo`, `npm`, `pnpm`, `go build`, `docker build`, `docker compose up`) no WSL2.
+   - Trava de agentes: Exige flag `--agents-idle-checked` informada pelo agente chamador.
+3. **Agendamento de Wake**: Registra a tarefa Windows `pc-ctl-wake` com gatilho `-WakeToRun` para 5 minutos antes de `until`.
+4. **Publicação no Home Assistant**: Envia payload retido (`retain: true`) com `until`, `mode` e `set_at` para o tópico MQTT `pc/loq/sleeping_until`.
+5. **Perfil Eco**: Dispara `pc-ctl power-mode eco` antes da suspensão.
+6. **Suspensão segura**: S3 (Espera) quando conectado na tomada (AC), ou Hibernar quando operando na bateria (DC).
+
+#### Health Check Pós-Wake (`wake-check`)
+Valida o retorno dos serviços essenciais após o computador despertar e limpa o estado retido no Home Assistant:
+```bash
+# Executar verificação de saúde e limpeza do tópico MQTT (tenta a cada 30s por até 5m)
+pc-ctl wake-check
+
+# Com parâmetros customizados de timeout e intervalo
+pc-ctl wake-check --timeout 180 --interval 15
+
+# Simulação com --dry-run
+pc-ctl --dry-run wake-check
+```
+O que o `wake-check` realiza:
+1. Executa `homeassistant/setup-mcp.sh check` para validar a conectividade e integridade do MCP.
+2. Executa `pc-ctl status` para checar a interoperabilidade com o Windows Host.
+3. Se algum serviço ainda estiver inicializando, aguarda o intervalo configurado e repete o teste por até 5 minutos.
+4. Ao passar, publica payload vazio retido (`retain: true`) no tópico `pc/loq/sleeping_until`, notificando o Home Assistant que o host está online e operacional.
+
+#### Teste de Despertar RTC e WoL (`wake-test`)
+Permite validar o despertar do sistema tanto via temporizadores de hardware (RTC) quanto via rede (Magic Packet):
+```bash
+# Teste de despertar via RTC (agenda wake para daqui a 3 minutos e testa S3, depois Hibernar)
+pc-ctl wake-test rtc
+
+# Teste RTC específico para S3 ou Hibernar com delay customizado
+pc-ctl wake-test rtc --mode s3 --delay 60
+pc-ctl wake-test rtc --mode hibernate --delay 60
+
+# Teste de despertar via ESP32 Wake-on-LAN (dispara button.wake_loq_pc no Home Assistant)
+pc-ctl wake-test wol --delay 15
+
+# Simulação com --dry-run
+pc-ctl --dry-run wake-test rtc
+pc-ctl --dry-run wake-test wol
+```
+- **Modos RTC**: Valida o registro da tarefa `pc-ctl-wake` com privilégio de despertar (`WakeToRun`), suspende no modo selecionado e grava o resultado (`woke_s3` e `woke_hibernate`) no log de auditoria.
+
 ### 2. Instalação e Conexão do Tailscale
 Para habilitar a rede mesh criptografada no Linux/WSL2 ou Windows:
 ```bash

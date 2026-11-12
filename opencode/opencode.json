@@ -113,6 +113,14 @@
             "context": 32768,
             "output": 8192
           }
+        },
+        "coder7b": {
+          "name": "Qwen2.5-Coder-7B-Instruct (local, llama.cpp)",
+          "tool_call": true,
+          "limit": {
+            "context": 16384,
+            "output": 8192
+          }
         }
       }
     }

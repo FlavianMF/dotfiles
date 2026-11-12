@@ -1,0 +1,408 @@
+#!/usr/bin/env bash
+# sb-nightly-triage: triagem noturna não supervisionada da fila do Second Brain (Pilar 4).
+# Lê os candidatos pendentes de queue.jsonl (ids que não constam em review.jsonl), gera rascunhos de
+# nota markdown 100% offline via llm-batch (GPU local) e deposita em <vault>/00_Inbox/.
+# O perfil de energia do host é elevado via pc-ctl durante o lote e restaurado ao sair (trap EXIT).
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+PC_CTL_BIN="${PC_CTL_BIN:-$ROOT_DIR/bin/pc-ctl}"
+LLM_BATCH_BIN="${LLM_BATCH_BIN:-$ROOT_DIR/bin/llm-batch}"
+
+STATE_DIR="${SECOND_BRAIN_STATE_DIR:-$HOME/.local/state/second-brain}"
+VAULT_PATH="${SB_VAULT_PATH:-$HOME/obsidian_vault}"
+QUEUE_FILE=""
+QUEUE_EXPLICIT=0
+LIMIT=10
+DRY_RUN=0
+SKIP_POWER=0
+PROFILE="${SB_TRIAGE_PROFILE:-coder7b}"
+POWER_TTL="2h"
+
+POWER_BOOSTED=0
+WORK_DIR=""
+
+show_help() {
+    cat <<'HELP'
+sb-nightly-triage: triagem noturna offline da fila do Second Brain (RTX local + pc-ctl).
+Uso: sb-nightly-triage [opções]
+
+Fluxo:
+  1. pc-ctl power-mode llm-boost --ttl 2h   (a menos que --skip-power)
+  2. lê os candidatos pendentes (ids de queue.jsonl ausentes em review.jsonl)
+  3. llm-batch gera um rascunho de nota por candidato (frontmatter canônico, confidence: low)
+  4. grava os rascunhos em <vault>/00_Inbox/<id>-<slug>.md
+  5. pc-ctl power-mode balanced             (sempre, inclusive em erro/sinal)
+
+Opções:
+  --dry-run              Lista os candidatos e os comandos sem acionar GPU nem energia
+  --limit N              Máximo de notas no lote noturno (padrão: 10)
+  --vault-path DIR       Cofre Obsidian (padrão: ~/obsidian_vault ou $SB_VAULT_PATH)
+  --queue-file FILE      queue.jsonl explícito (padrão: $SECOND_BRAIN_STATE_DIR/queue.jsonl,
+                         com SECOND_BRAIN_STATE_DIR padrão ~/.local/state/second-brain)
+  --profile NOME         Perfil do llama-server no llm-batch (padrão: coder7b ou $SB_TRIAGE_PROFILE)
+  --skip-power           Não altera perfis de energia via pc-ctl (testes, bateria, dry-run)
+  -h, --help             Exibe esta mensagem de ajuda
+
+Variáveis: PC_CTL_BIN, LLM_BATCH_BIN, SECOND_BRAIN_STATE_DIR, SB_VAULT_PATH, SB_TRIAGE_PROFILE,
+           SB_TRIAGE_KEEP_WORK=1 (preserva o diretório temporário de jobs/saídas).
+
+Códigos de saída: 0 sucesso (inclui fila vazia); 1 erro de execução ou falha em algum candidato;
+                  2 erro de uso (argumentos inválidos).
+HELP
+}
+
+die_usage() {
+    echo "Erro: $1" >&2
+    echo "Use --help para ver as opções." >&2
+    exit 2
+}
+
+cleanup() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    if [[ "$POWER_BOOSTED" -eq 1 ]]; then
+        POWER_BOOSTED=0
+        echo "Restaurando perfil de energia 'balanced'..." >&2
+        "$PC_CTL_BIN" power-mode balanced >&2 || echo "Aviso: falha ao restaurar pc-ctl power-mode balanced." >&2
+    fi
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" && "${SB_TRIAGE_KEEP_WORK:-0}" != "1" ]]; then
+        rm -rf "$WORK_DIR"
+    fi
+    exit "$exit_code"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        --skip-power)
+            SKIP_POWER=1
+            shift
+            ;;
+        --limit)
+            [[ $# -gt 1 ]] || die_usage "--limit requer um número."
+            LIMIT="$2"
+            shift 2
+            ;;
+        --vault-path)
+            [[ $# -gt 1 ]] || die_usage "--vault-path requer um diretório."
+            VAULT_PATH="$2"
+            shift 2
+            ;;
+        --queue-file)
+            [[ $# -gt 1 ]] || die_usage "--queue-file requer um arquivo."
+            QUEUE_FILE="$2"
+            QUEUE_EXPLICIT=1
+            shift 2
+            ;;
+        --profile)
+            [[ $# -gt 1 ]] || die_usage "--profile requer um nome."
+            PROFILE="$2"
+            shift 2
+            ;;
+        *)
+            die_usage "argumento desconhecido: '$1'."
+            ;;
+    esac
+done
+
+[[ "$LIMIT" =~ ^[0-9]+$ && "$LIMIT" -ge 1 ]] || die_usage "--limit deve ser um inteiro positivo (recebido: '$LIMIT')."
+
+command -v jq >/dev/null 2>&1 || { echo "Erro: jq é necessário." >&2; exit 1; }
+
+[[ -n "$QUEUE_FILE" ]] || QUEUE_FILE="$STATE_DIR/queue.jsonl"
+if [[ "$QUEUE_EXPLICIT" -eq 1 ]]; then
+    # Com --queue-file, review.jsonl é procurado ao lado dele.
+    REVIEW_FILE="$(dirname "$QUEUE_FILE")/review.jsonl"
+else
+    REVIEW_FILE="$STATE_DIR/review.jsonl"
+fi
+INBOX_DIR="$VAULT_PATH/00_Inbox"
+
+# ---------------------------------------------------------------------------
+# Seleção de candidatos pendentes
+# ---------------------------------------------------------------------------
+if [[ ! -f "$QUEUE_FILE" ]]; then
+    if [[ "$QUEUE_EXPLICIT" -eq 1 ]]; then
+        echo "Erro: queue file não encontrado: $QUEUE_FILE" >&2
+        exit 1
+    fi
+    echo "Fila inexistente ($QUEUE_FILE): nada a triar."
+    exit 0
+fi
+
+SEEN_JSON="{}"
+if [[ -f "$REVIEW_FILE" ]]; then
+    SEEN_JSON="$(jq -R -s -c 'split("\n") | map(fromjson? | select(type=="object") | .id | strings | {(.): true}) | add // {}' "$REVIEW_FILE")"
+fi
+
+# Candidatos únicos (primeira ocorrência), objetos com id string seguro, ainda não revisados.
+mapfile -t ALL_PENDING < <(jq -R -c --argjson seen "$SEEN_JSON" \
+    'fromjson? | select(type=="object" and (.id|type)=="string" and (.id|test("^[A-Za-z0-9_-]+$")) and ($seen[.id]|not))' \
+    "$QUEUE_FILE")
+
+slugify() {
+    local s
+    s="$(printf '%s' "$1" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null || printf '%s' "$1")"
+    s="$(printf '%s' "$s" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-60 | sed -E 's/-+$//')"
+    printf '%s' "${s:-nota}"
+}
+
+draft_exists() {
+    compgen -G "$INBOX_DIR/$1-*.md" >/dev/null 2>&1
+}
+
+PENDING=()
+declare -A SEEN_IN_QUEUE=()
+ALREADY_DRAFTED=0
+for line in "${ALL_PENDING[@]:-}"; do
+    [[ -n "$line" ]] || continue
+    cid="$(jq -r '.id' <<<"$line")"
+    [[ -z "${SEEN_IN_QUEUE[$cid]:-}" ]] || continue
+    SEEN_IN_QUEUE[$cid]=1
+    if draft_exists "$cid"; then
+        ALREADY_DRAFTED=$((ALREADY_DRAFTED + 1))
+        continue
+    fi
+    PENDING+=("$line")
+done
+
+TOTAL_PENDING=${#PENDING[@]}
+if [[ "$TOTAL_PENDING" -gt "$LIMIT" ]]; then
+    PENDING=("${PENDING[@]:0:$LIMIT}")
+fi
+BATCH_SIZE=${#PENDING[@]}
+
+if [[ "$BATCH_SIZE" -eq 0 ]]; then
+    echo "Nenhum candidato pendente (já com rascunho em 00_Inbox: $ALREADY_DRAFTED). Nada a fazer."
+    exit 0
+fi
+
+echo "Candidatos pendentes: $TOTAL_PENDING (lote: $BATCH_SIZE, limite: $LIMIT)"
+
+# ---------------------------------------------------------------------------
+# Dry-run
+# ---------------------------------------------------------------------------
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "=== Modo Dry-Run: nenhuma GPU ou perfil de energia será acionado ==="
+    for line in "${PENDING[@]}"; do
+        cid="$(jq -r '.id' <<<"$line")"
+        ctitle="$(jq -r '.title // "(sem título)"' <<<"$line")"
+        echo "  - $cid | $ctitle -> $INBOX_DIR/$cid-$(slugify "$ctitle").md"
+    done
+    echo "Comandos que seriam executados:"
+    if [[ "$SKIP_POWER" -eq 0 ]]; then
+        echo "  pc-ctl power-mode llm-boost --ttl $POWER_TTL"
+    fi
+    echo "  llm-batch run --queue-dir <jobs> --out-dir <out> --skip-power-check   (perfil: $PROFILE)"
+    if [[ "$SKIP_POWER" -eq 0 ]]; then
+        echo "  pc-ctl power-mode balanced"
+    fi
+    echo "Dry-run concluído com sucesso."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Preparação dos jobs
+# ---------------------------------------------------------------------------
+WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sb-nightly-triage.XXXXXX")"
+JOBS_DIR="$WORK_DIR/jobs"
+OUT_DIR="$WORK_DIR/out"
+mkdir -p "$JOBS_DIR" "$OUT_DIR"
+
+SYSTEM_FILE="$WORK_DIR/system.txt"
+cat >"$SYSTEM_FILE" <<'SYS'
+Você é um curador do Second Brain (cofre Obsidian, em português do Brasil).
+Receba UM candidato a nota (JSON) e responda SOMENTE com o rascunho da nota em markdown, sem cercas
+de código e sem comentários fora da nota.
+
+A nota começa com frontmatter YAML exatamente com estes campos:
+---
+title: <título legível>
+type: <concept|pattern|decision|trap|project|literature|unclassified>
+tags: [<tags em minúsculas>]
+created: <YYYY-MM-DD>
+summary: <resumo de uma linha>
+confidence: low
+---
+
+Depois do frontmatter, escreva o corpo estruturado: um título H1, uma seção "Contexto", uma seção
+"Detalhes" e, se fizer sentido, "Armadilhas" ou "Próximos passos". Use apenas informação presente no
+candidato; não invente fatos, comandos, versões nem wikilinks. Toda nota nova nasce com confidence: low.
+SYS
+
+build_prompt() {
+    local candidate_json="$1" prompt_file="$2"
+    {
+        echo "Escreva o rascunho de nota para o candidato abaixo (data de hoje: $(date +%F))."
+        echo
+        echo '```json'
+        jq . <<<"$candidate_json"
+        echo '```'
+    } >"$prompt_file"
+}
+
+for line in "${PENDING[@]}"; do
+    cid="$(jq -r '.id' <<<"$line")"
+    build_prompt "$line" "$WORK_DIR/$cid.prompt.md"
+    jq -n --arg id "$cid" --arg profile "$PROFILE" \
+        --arg prompt "$WORK_DIR/$cid.prompt.md" --arg system "$SYSTEM_FILE" \
+        '{id: $id, profile: $profile, prompt_file: $prompt, system_file: $system, max_tokens: 2500, timeout_s: 1800}' \
+        >"$JOBS_DIR/$cid.json"
+done
+
+# ---------------------------------------------------------------------------
+# Energia + inferência
+# ---------------------------------------------------------------------------
+if [[ "$SKIP_POWER" -eq 0 ]]; then
+    echo "Elevando perfil de energia: pc-ctl power-mode llm-boost --ttl $POWER_TTL"
+    POWER_BOOSTED=1
+    if ! "$PC_CTL_BIN" power-mode llm-boost --ttl "$POWER_TTL"; then
+        echo "Erro: pc-ctl power-mode llm-boost falhou (bateria? use --skip-power para ignorar)." >&2
+        exit 1
+    fi
+fi
+
+echo "Executando llm-batch (perfil $PROFILE) para $BATCH_SIZE candidato(s)..."
+BATCH_RC=0
+# O controle de AC fica a cargo do pc-ctl (llm-boost recusa em bateria); aqui evitamos checar duas vezes.
+"$LLM_BATCH_BIN" run --queue-dir "$JOBS_DIR" --out-dir "$OUT_DIR" --skip-power-check || BATCH_RC=$?
+if [[ "$BATCH_RC" -ne 0 ]]; then
+    echo "Aviso: llm-batch terminou com código $BATCH_RC." >&2
+fi
+
+# ---------------------------------------------------------------------------
+# Pós-processamento: valida/normaliza o rascunho e deposita em 00_Inbox/
+# ---------------------------------------------------------------------------
+VALID_TYPES='meta|pattern|decision|concept|trap|project|literature|moc|inbox|template|unclassified|article|literature-note|permanent'
+
+# Remove <think>…</think> e cerca ```markdown externa.
+sanitize_output() {
+    local f="$1"
+    perl -0pe 's/<think>.*?<\/think>//sg' "$f" \
+        | awk '
+            { lines[NR] = $0 }
+            END {
+                s = 1; e = NR
+                while (s <= e && lines[s] ~ /^[[:space:]]*$/) s++
+                while (e >= s && lines[e] ~ /^[[:space:]]*$/) e--
+                if (s < e && lines[s] ~ /^```[A-Za-z]*[[:space:]]*$/ && lines[e] ~ /^```[[:space:]]*$/) { s++; e-- }
+                while (s <= e && lines[s] ~ /^[[:space:]]*$/) s++
+                for (i = s; i <= e; i++) print lines[i]
+            }'
+}
+
+# Retorna 0 se o texto começa com frontmatter completo e válido.
+frontmatter_valid() {
+    local text="$1" fm
+    [[ "$(head -n1 <<<"$text")" == "---" ]] || return 1
+    fm="$(awk 'NR==1{next} /^---[[:space:]]*$/{found=1; exit} {print}' <<<"$text")"
+    awk 'NR==1{next} /^---[[:space:]]*$/{f=1} END{exit f?0:1}' <<<"$text" || return 1
+    local key
+    for key in title type tags created summary confidence; do
+        grep -Eq "^${key}:" <<<"$fm" || return 1
+    done
+    grep -Eq "^type:[[:space:]]*\"?(${VALID_TYPES})\"?[[:space:]]*$" <<<"$fm" || return 1
+    return 0
+}
+
+# Remove um bloco de frontmatter inicial, se houver (mesmo malformado, desde que fechado).
+strip_frontmatter() {
+    local text="$1"
+    if [[ "$(head -n1 <<<"$text")" == "---" ]] && awk 'NR==1{next} /^---[[:space:]]*$/{f=1} END{exit f?0:1}' <<<"$text"; then
+        awk 'NR==1{next} !done && /^---[[:space:]]*$/{done=1; next} done{print}' <<<"$text"
+    else
+        printf '%s\n' "$text"
+    fi
+}
+
+compose_frontmatter() {
+    local candidate_json="$1" kind ctype title summary project tags
+    kind="$(jq -r '.kind // "unclassified"' <<<"$candidate_json")"
+    if grep -Eq "^(${VALID_TYPES})$" <<<"$kind"; then ctype="$kind"; else ctype="unclassified"; fi
+    title="$(jq -c '.title // "Sem título"' <<<"$candidate_json")"
+    summary="$(jq -c '(.summary // .title // "") | gsub("\\s+"; " ")' <<<"$candidate_json")"
+    project="$(jq -r '.project // empty' <<<"$candidate_json" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g')"
+    tags="second-brain, triagem-noturna, ${ctype}"
+    [[ -z "$project" ]] || tags="$tags, $project"
+    printf -- '---\ntitle: %s\ntype: %s\ntags: [%s]\ncreated: %s\nprovenance: sb-nightly-triage\nsummary: %s\nconfidence: low\n---\n' \
+        "$title" "$ctype" "$tags" "$(date +%F)" "$summary"
+}
+
+# Toda nota nova nasce confidence: low (vault_sync.py recusa o contrário).
+force_confidence_low() {
+    awk '
+        NR == 1 { print; infm = 1; has_prov = 0; next }
+        infm && /^provenance:/ { has_prov = 1 }
+        infm && /^---[[:space:]]*$/ {
+            if (!has_prov) print "provenance: sb-nightly-triage"
+            infm = 0
+            print
+            next
+        }
+        infm && /^confidence:/ { print "confidence: low"; next }
+        { print }
+    ' <<<"$1"
+}
+
+finalize_draft() {
+    local cid="$1" candidate_json="$2" raw_file="$3" dest="$4"
+    local text body
+    text="$(sanitize_output "$raw_file")"
+    if [[ -z "${text//[[:space:]]/}" ]]; then
+        echo "Resposta vazia para $cid." >&2
+        return 1
+    fi
+    if frontmatter_valid "$text"; then
+        text="$(force_confidence_low "$text")"
+    else
+        body="$(strip_frontmatter "$text")"
+        if [[ -z "${body//[[:space:]]/}" ]]; then
+            echo "Corpo vazio para $cid." >&2
+            return 1
+        fi
+        text="$(compose_frontmatter "$candidate_json")"$'\n'"$body"
+    fi
+    printf '%s\n' "$text" >"$dest.tmp.$$"
+    mv "$dest.tmp.$$" "$dest"
+}
+
+mkdir -p "$INBOX_DIR"
+OK_COUNT=0
+FAIL_COUNT=0
+for line in "${PENDING[@]}"; do
+    cid="$(jq -r '.id' <<<"$line")"
+    ctitle="$(jq -r '.title // ""' <<<"$line")"
+    job_out="$OUT_DIR/$cid"
+    raw="$job_out/raw_output.txt"
+    [[ -f "$raw" ]] || raw="$job_out/output.txt"
+    if [[ -f "$job_out/SUCCESS" && -f "$raw" ]]; then
+        dest="$INBOX_DIR/$cid-$(slugify "$ctitle").md"
+        if finalize_draft "$cid" "$line" "$raw" "$dest"; then
+            # Espelha o rascunho em ~/.local/state/second-brain/drafts para o sb review web exibir
+            mkdir -p "$STATE_DIR/drafts"
+            cp -f "$dest" "$STATE_DIR/drafts/$cid.md" 2>/dev/null || true
+            echo "✓ $cid -> $dest"
+            OK_COUNT=$((OK_COUNT + 1))
+            continue
+        fi
+    fi
+    echo "✗ $cid: falha na geração do rascunho ($(cat "$job_out/FAILED" 2>/dev/null || echo sem resultado))." >&2
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+done
+
+echo "Triagem concluída: $OK_COUNT rascunho(s) gerado(s), $FAIL_COUNT falha(s)."
+[[ "$FAIL_COUNT" -eq 0 ]] || exit 1
+exit 0

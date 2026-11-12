@@ -5,6 +5,7 @@
 # Variáveis:
 #   ECC_AUTO=0     desliga a parte do ECC (o claude abre como antes)
 #   PLUGINS_AUTO=0 desliga a camada de carga de outros plugins (claude/plugins-project.sh)
+#   SKILLS_AUTO=0  desliga a camada de carga das skills soltas (claude/skills-project.sh)
 #   DOTFILES_DIR   raiz do repo de dotfiles (padrão ~/dotfiles)
 # Opt-out por projeto: `make ecc-off DIR=...` ou `touch .claude/ecc.off`. Filtros: claude/ecc-auto.conf.
 claude() {
@@ -21,6 +22,11 @@ claude() {
             local plugins_script="${DOTFILES_DIR:-$HOME/dotfiles}/claude/plugins-project.sh"
             if [[ "${PLUGINS_AUTO:-1}" != 0 && -x "$plugins_script" ]]; then
                 timeout 5 "$plugins_script" auto "$PWD" >&2 || true
+            fi
+            # Skills soltas de design: ligadas por link só em projetos web (claude/skills-project.sh).
+            local skills_script="${DOTFILES_DIR:-$HOME/dotfiles}/claude/skills-project.sh"
+            if [[ "${SKILLS_AUTO:-1}" != 0 && -x "$skills_script" ]]; then
+                timeout 5 "$skills_script" auto "$PWD" >&2 || true
             fi
             ;;
     esac

@@ -37,6 +37,9 @@ if [[ $UPDATE -eq 0 ]]; then
     wrapper_args=()
     [[ $DRY_RUN -eq 1 ]] && wrapper_args=(--dry-run)
     bash "$ROOT/install_agy_wrapper.sh" "${wrapper_args[@]}" || echo "WARNING: could not install the agy_acp_server wrapper." >&2
+    headroom_args=()
+    [[ $DRY_RUN -eq 1 ]] && headroom_args=(--dry-run)
+    bash "$ROOT/setup_headroom.sh" "${headroom_args[@]}" || echo "WARNING: could not setup Headroom integration." >&2
 fi
 
 [[ "$(uname -m)" == x86_64 ]] || { echo "Traycer ships x86_64 builds only (this is $(uname -m))" >&2; exit 1; }

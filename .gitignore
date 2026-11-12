@@ -64,4 +64,12 @@ homeassistant/config/
 
 # Temporary files
 tmp/
-skills/
+/skills/
+
+# Local LLM runners
+logs/
+out/
+
+# Local MCP configurations
+.mcp.json
+homeassistant/.mcp.json

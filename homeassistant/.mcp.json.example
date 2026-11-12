@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "home-assistant": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "ha-mcp"
+      ],
+      "env": {
+        "HOMEASSISTANT_URL": "http://100.105.143.75:8123",
+        "HOMEASSISTANT_TOKEN": "<SEU_TOKEN>"
+      }
+    }
+  }
+}

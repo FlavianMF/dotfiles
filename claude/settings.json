@@ -7,7 +7,8 @@
     "JEV_MODE_E": "shadow",
     "ECC_HOOK_PROFILE": "strict",
     "ECC_OBSERVE_SKIP_PATHS": "observer-sessions,.claude-mem,secrets,.ssh,.aws",
-    "ECC_INSTINCT_CONFIDENCE_THRESHOLD": "1"
+    "ECC_INSTINCT_CONFIDENCE_THRESHOLD": "1",
+    "ANTHROPIC_BASE_URL": "http://127.0.0.1:8787"
   },
   "permissions": {
     "deny": [
@@ -216,16 +217,6 @@
             "timeout": 4
           }
         ]
-      },
-      {
-        "matcher": "Bash|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$HOME/.claude/hooks/sb-prune.sh\"",
-            "timeout": 4
-          }
-        ]
       }
     ],
     "SubagentStop": [
@@ -263,7 +254,7 @@
     "typesafe@typesafe-ai": true,
     "mattpocock-skills@claude-plugins-official": true,
     "impeccable@impeccable": true,
-    "github@claude-plugins-official": true,
+    "github@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "ste80@ste80": true,
     "ecc@ecc": false
@@ -280,7 +271,8 @@
       "source": {
         "source": "github",
         "repo": "tamaratran/fast-jev-compaction"
-      }
+      },
+      "autoUpdate": false
     },
     "typesafe-ai": {
       "source": {
@@ -340,14 +332,14 @@
       "### Org-wide",
       "**Organization**: None configured",
       "**Cloud provider(s)**: None configured",
-      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public — unable to verify here (no remotes configured for this repo)",
-      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public \u2014 unable to verify here (no remotes configured for this repo)",
+      "**Internal sharing / snippet hosting**: None configured \u2014 treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
-      "**Default / protected branches**: unknown — origin/HEAD unset, no remotes configured",
+      "**Default / protected branches**: unknown \u2014 origin/HEAD unset, no remotes configured",
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
-      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
-      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured) — this repo has no remotes configured",
+      "**Host containment**: None configured \u2014 assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured) \u2014 this repo has no remotes configured",
       "**Trusted internal domains**: None configured",
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: None configured",
@@ -355,11 +347,11 @@
       "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
       "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
-      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected deployment namespaces / environments**: None configured \u2014 fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
       "**Primary use of Claude Code**: software development",
-      "**Trusted repo**: The git repository the agent started in (/home/flv/projetos_claude) — no remotes configured, so no remote scope to extend trust to",
+      "**Trusted repo**: The git repository the agent started in (/home/flv/projetos_claude) \u2014 no remotes configured, so no remote scope to extend trust to",
       "**Org-specific CLIs**: None configured"
     ]
   }

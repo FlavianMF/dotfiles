@@ -127,34 +127,37 @@ run_check() {
 configure_claude() {
     echo ""
     echo "=== [Claude Code] ==="
-    local cmd="claude mcp add home-assistant -s user -e \"HOMEASSISTANT_URL=$HA_URL\" -e \"HOMEASSISTANT_TOKEN=${HA_TOKEN:-<SEU_TOKEN>}\" -- uvx ha-mcp"
+    local cmd="claude mcp add home-assistant -s project -e \"HOMEASSISTANT_URL=$HA_URL\" -e \"HOMEASSISTANT_TOKEN=${HA_TOKEN:-<SEU_TOKEN>}\" -- uvx ha-mcp"
     if [[ $DRY_RUN -eq 1 ]]; then
-        echo "[dry-run] Executaria:"
+        echo "[dry-run] Executaria no diretório do projeto alvo:"
         echo "  $cmd"
         return 0
     fi
 
     if ! command -v claude >/dev/null 2>&1; then
-        echo "⚠️  Claude CLI não está instalado no PATH. Comando para executar manualmente:"
+        echo "⚠️  Claude CLI não está instalado no PATH. Comando para executar manualmente no projeto:"
         echo "  $cmd"
         return 0
     fi
 
     if [[ -z "$HA_TOKEN" ]]; then
         echo "⚠️  HOMEASSISTANT_TOKEN não informado em secrets/mcp.env."
-        echo "Para registrar manualmente após obter o token, execute:"
+        echo "Para registrar manualmente no escopo do projeto após obter o token, execute:"
         echo "  $cmd"
         return 0
     fi
 
-    echo "Registrando ha-mcp no Claude Code (user scope)..."
-    # Remove se já existir para atualizar variáveis
+    # Remove do escopo global de usuário para evitar token bloat em outras sessões
     claude mcp remove home-assistant -s user < /dev/null >/dev/null 2>&1 || true
-    if claude mcp add home-assistant -s user \
+
+    echo "Registrando ha-mcp no Claude Code (project scope)..."
+    # Remove se já existir no projeto para atualizar variáveis
+    claude mcp remove home-assistant -s project < /dev/null >/dev/null 2>&1 || true
+    if claude mcp add home-assistant -s project \
         -e "HOMEASSISTANT_URL=$HA_URL" \
         -e "HOMEASSISTANT_TOKEN=$HA_TOKEN" \
         -- uvx ha-mcp < /dev/null; then
-        echo "✓ ha-mcp registrado com sucesso no Claude Code."
+        echo "✓ ha-mcp registrado com sucesso no Claude Code (project scope)."
     else
         echo "❌ Falha ao registrar ha-mcp no Claude Code."
     fi

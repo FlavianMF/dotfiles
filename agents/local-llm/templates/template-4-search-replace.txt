@@ -1,0 +1,28 @@
+TASK: Apply the targeted edits below to {PATH}.
+
+ORIGINAL FILE EXCERPT:
+```{LANG}
+{TARGET_FILE_EXCERPT}
+```
+
+INSTRUCTIONS:
+{SPECIFIC_EDITS_INSTRUCTIONS}
+
+EXTERNAL SIGNATURES / TYPES (available to import/use, do not re-declare):
+```{LANG}
+{EXTERNAL_SIGNATURES}
+```
+
+CONSTRAINTS:
+- Do not reorder or reformat untouched lines.
+- Search blocks MUST match the original file text verbatim (character for character, including whitespace).
+- Output one or more search/replace blocks inside ONE ```search-replace fence.
+
+Output format:
+```search-replace
+<<<<<<< SEARCH
+[exact original code lines to find]
+=======
+[replacement code lines]
+>>>>>>> REPLACE
+```
