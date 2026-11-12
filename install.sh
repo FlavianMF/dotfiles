@@ -1082,8 +1082,15 @@ fi
 if [[ ${SELECTED_COMPONENTS[ecc]} -eq 1 ]]; then
     log_info "Linking vendored ECC skills, agents and rules..."
     # Skills: canonical in ~/.agents/skills (Codex, OpenCode) + link for Claude.
+    # Skills de claude/skills-auto.conf ficam só em ~/.agents/skills (sem link global no Claude).
+    scoped_skills="$(sed -E 's/[[:space:]]+//g; /^(#|$)/d; /^[^=]+=[^=]+$/!d; s/=.*//' "$REPO_DIR/claude/skills-auto.conf")"
     for skill_dir in "$REPO_DIR"/vendor/ecc/skills/*/; do
-        link_shared_skill "$(basename "$skill_dir")" "${skill_dir%/}"
+        skill_name="$(basename "$skill_dir")"
+        if grep -qxF -- "$skill_name" <<<"$scoped_skills"; then
+            create_config_link "${skill_dir%/}" "$HOME/.agents/skills/$skill_name"
+        else
+            link_shared_skill "$skill_name" "${skill_dir%/}"
+        fi
     done
     # Agents: Claude Code format. Codex has no agent-file equivalent (skills only).
     for agent_file in "$REPO_DIR"/vendor/ecc/agents/*.md; do

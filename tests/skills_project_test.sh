@@ -54,4 +54,16 @@ mkdir "$tmp/nogit"
 expect "fora do git silencioso" "$("$SP" auto "$tmp/nogit" 2>&1)" ""
 expect "dotfiles ignorado" "$("$SP" auto "$ROOT" 2>&1)" ""
 
+# 6. tipo manual: o auto não liga; add liga sem posse e o auto não apaga.
+printf 'taste=web\nmanual1=manual\n' >"$SKILLS_AUTO_CONF"; mkdir -p "$tmp/src/manual1"
+d="$(newrepo manual)"; web "$d"
+"$SP" auto "$d" >/dev/null
+expect "manual não é ligada pelo auto" "$(linked "$d" manual1)" no
+"$SP" add manual1 "$d" >/dev/null
+expect "add liga" "$(linked "$d" manual1)" yes
+expect "add sem posse" "$(grep -c manual1 "$d/.claude/skills.auto" 2>/dev/null)" 0
+rm "$d/package.json"; "$SP" auto "$d" >/dev/null
+expect "auto preserva a manual" "$(linked "$d" manual1)" yes
+expect "add inexistente falha" "$("$SP" add nope "$d" >/dev/null 2>&1; echo $?)" 1
+
 [[ $fail -eq 0 ]] && echo "ok" || exit 1

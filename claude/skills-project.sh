@@ -2,6 +2,7 @@
 # Camada de carga das skills soltas: liga por projeto as skills que o tipo do projeto usa.
 #
 # Uso: claude/skills-project.sh auto|status [dir]
+#      claude/skills-project.sh add <skill> [dir]
 #
 # auto:   para cada linha `skill=tipos` de claude/skills-auto.conf, cria o link
 #         <raiz do git>/.claude/skills/<skill> -> ~/.agents/skills/<skill> quando o tipo do projeto
@@ -9,6 +10,7 @@
 #         (lista em .claude/skills.auto). Nunca toca em skill do projeto que o auto não criou.
 #         Silencioso e sem efeito se houver .claude/skills.off ou se o projeto for este repo.
 # status: mostra o que o auto gerencia no projeto.
+# add:    liga uma skill avulsa no projeto, mesmo a de tipo `manual` (o auto nunca a liga nem a apaga).
 # O estado só vale em sessão nova.
 set -euo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE
@@ -19,8 +21,13 @@ CONF="${SKILLS_AUTO_CONF:-$REPO_DIR/claude/skills-auto.conf}"
 SRC="${SKILLS_AUTO_SRC:-$HOME/.agents/skills}"
 
 action="${1:-}"; shift || true
+skill_arg=""
+if [[ "$action" == add ]]; then
+    skill_arg="${1:-}"; shift || true
+    [[ -n "$skill_arg" ]] || { echo "Uso: $0 add <skill> [dir]" >&2; exit 1; }
+fi
 dir="${1:-.}"
-[[ "$action" =~ ^(auto|status)$ ]] || { echo "Uso: $0 auto|status [dir]" >&2; exit 1; }
+[[ "$action" =~ ^(auto|status|add)$ ]] || { echo "Uso: $0 auto|status [dir] | add <skill> [dir]" >&2; exit 1; }
 [[ -d "$dir" ]] || { [[ "$action" == auto ]] && exit 0; echo "Diretório não existe: $dir" >&2; exit 1; }
 dir="$(cd "$dir" && pwd)"
 top="$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)" || { [[ "$action" == auto ]] && exit 0; echo "Fora de um repositório git" >&2; exit 1; }
@@ -63,6 +70,18 @@ case "$action" in
             echo "  $skill (ligada em: $kinds): $mark"
         done < <(entries)
         [[ -e "$off_marker" ]] && echo "  skills.off presente"
+        ;;
+    add)
+        [[ -d "$SRC/$skill_arg" ]] || { echo "Skill não existe em $SRC: $skill_arg" >&2; exit 1; }
+        [[ ! -e "$dir/.claude" || -d "$dir/.claude" ]] || { echo "$dir/.claude não é um diretório" >&2; exit 1; }
+        mkdir -p "$skills_dir"
+        if [[ -e "$skills_dir/$skill_arg" || -L "$skills_dir/$skill_arg" ]]; then
+            echo "Já existe: $skills_dir/$skill_arg"
+        else
+            ln -s "$SRC/$skill_arg" "$skills_dir/$skill_arg"
+            exclude_add "/.claude/skills/$skill_arg"
+            echo "Ligada: $skills_dir/$skill_arg"
+        fi
         ;;
     auto)
         [[ -e "$off_marker" ]] && exit 0
