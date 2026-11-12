@@ -1055,6 +1055,10 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
             impeccable
             typesafe-ai
         )
+        # Skills de design cobertas por claude/skills-auto.conf: só projetos web as carregam.
+        while IFS="=" read -r scoped _; do
+            [[ -n "$scoped" ]] && PLUGIN_DUPLICATE_SKILLS+=("$scoped")
+        done < <(sed -E 's/[[:space:]]+//g; /^(#|$)/d; /^[^=]+=[^=]+$/!d' "$REPO_DIR/claude/skills-auto.conf")
         for dup in "${PLUGIN_DUPLICATE_SKILLS[@]}"; do
             if [[ -L "$HOME/.claude/skills/$dup" ]]; then
                 as_user rm -f "$HOME/.claude/skills/$dup"
