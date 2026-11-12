@@ -7,7 +7,8 @@
       {
         "matcher": "*",
         "hooks": [
-          { "command": "\"@REPO@/antigravity/hooks/second-brain-count.sh\"" }
+          { "command": "\"@REPO@/antigravity/hooks/second-brain-count.sh\"" },
+          { "command": "\"@REPO@/antigravity/hooks/second-brain-note-opened.sh\"" }
         ]
       }
     ],
