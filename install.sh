@@ -940,22 +940,14 @@ if [[ ${SELECTED_COMPONENTS[antigravity]} -eq 1 ]] || has_native_cmd agy || [[ -
     ANTIGRAVITY_ACTIVE=1
 fi
 
-# --- rea MCP (user scope), pinned like the Codex/OpenCode entries ---
-# `claude mcp add` is used instead of editing ~/.claude.json, which Claude rewrites.
-REA_PACKAGE="rea-agents@6.4.0"
-HOPPER_LAUNCHER="/opt/hopper/bin/Hopper"
+# --- rea MCP: retired from global user scope to prevent token bloat (~95 tools schema overhead) ---
+# REA is heavy; configure it in project scope (.mcp.json) where reverse engineering is actually performed.
 if has_native_cmd claude; then
     current_rea="$(claude mcp get rea 2>/dev/null || true)"
-    if grep -qF "$REA_PACKAGE" <<< "$current_rea" && grep -qF "$HOPPER_LAUNCHER" <<< "$current_rea"; then
-        log_info "rea MCP already registered ($REA_PACKAGE)"
-    else
-        log_info "Registering rea MCP ($REA_PACKAGE)..."
-        [[ -n "$current_rea" ]] && as_user claude mcp remove rea -s user < /dev/null || true
-        as_user claude mcp add rea -s user -e "HOPPER_LAUNCHER_PATH=$HOPPER_LAUNCHER" -- npx -y "$REA_PACKAGE" mcp < /dev/null \
-            || log_warn "claude mcp add rea failed"
+    if [[ -n "$current_rea" ]]; then
+        log_info "Removing rea MCP from Claude Code global user scope..."
+        as_user claude mcp remove rea -s user < /dev/null || true
     fi
-else
-    log_warn "claude CLI not found; skipping rea MCP registration"
 fi
 
 # --- Claude Code plugins, reconciled from claude/settings.json ---
@@ -1054,6 +1046,20 @@ if [[ ${SELECTED_COMPONENTS[claudeskills]} -eq 1 ]]; then
             skills_add figma/mcp-server-guide --skill '*' -a codex opencode
             skills_add typesafe-ai/skills --skill typesafe-ai -a codex opencode
         fi
+
+        # Retire duplicate symlinks in ~/.claude/skills for skills already supplied by Claude plugins
+        PLUGIN_DUPLICATE_SKILLS=(
+            cavecrew caveman caveman-commit caveman-compress caveman-help caveman-review caveman-stats
+            code-review codebase-design diagnosing-bugs domain-modeling grilling prototype research tdd wizard writing-for-agents
+            figma-code-connect figma-code-workflows figma-create-new-file figma-design-to-code figma-generate-design figma-generate-diagram figma-generate-library figma-generative-plugins figma-implement-motion figma-shaders figma-spec figma-swiftui figma-use figma-use-figjam figma-use-motion figma-use-slides
+            impeccable
+            typesafe-ai
+        )
+        for dup in "${PLUGIN_DUPLICATE_SKILLS[@]}"; do
+            if [[ -L "$HOME/.claude/skills/$dup" ]]; then
+                as_user rm -f "$HOME/.claude/skills/$dup"
+            fi
+        done
     else
         log_warn "Node >=20 required by the skills CLI (found $(node -v 2>/dev/null || echo none)); skipping npx skills add. Install a newer Node (e.g. nvm) and rerun."
     fi

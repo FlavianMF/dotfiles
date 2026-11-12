@@ -69,3 +69,7 @@ tmp/
 # Local LLM runners
 logs/
 out/
+
+# Local MCP configurations
+.mcp.json
+homeassistant/.mcp.json

@@ -254,7 +254,7 @@
     "typesafe@typesafe-ai": true,
     "mattpocock-skills@claude-plugins-official": true,
     "impeccable@impeccable": true,
-    "github@claude-plugins-official": true,
+    "github@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "ste80@ste80": true,
     "ecc@ecc": false
