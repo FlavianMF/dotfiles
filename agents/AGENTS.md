@@ -52,38 +52,7 @@ Fonte única: `~/dotfiles/agents/AGENTS.md`. Linkado em `~/.codex/AGENTS.md`,
 
 ## Skills de design de interface
 
-Duas skills cobrem este domínio e **nunca devem ser usadas na mesma tarefa**: elas se
-contradizem em fonte (`Geist` é correção numa e tell na outra) e em hero centralizado.
-
-**`impeccable` é o padrão** sempre que houver projeto real com UI. Tem detector
-determinístico com exit code, `PRODUCT.md` / `DESIGN.md`, hooks por harness, `critique` /
-`polish` com backlog persistido, audit de acessibilidade, e cobre também mobile nativo.
-
-**`design-taste-frontend` (Taste) só** para gerar uma página avulsa — landing, portfólio ou
-redesign — em React/Next + Tailwind v4, sem contexto de projeto durável. Ao usá-la,
-declarar `DESIGN_VARIANCE`, `MOTION_INTENSITY` e `VISUAL_DENSITY` na resposta antes de
-escrever código.
-
-Se as duas forem plausíveis, `impeccable` vence e o motivo vai na resposta.
-
-**Não carregar a Taste** para dashboard, data table, formulário multi-etapa, editor de
-código, UI de colaboração em tempo real, mobile nativo, Vue/Svelte/Angular, nem para
-ajuste pontual de CSS. São ~20k tokens e a própria skill declara esses casos fora de
-escopo (§13).
-
-Outras skills do pacote Taste:
-
-- `gpt-taste` só em harness GPT/Codex. Nunca junto de `design-taste-frontend`.
-- Uma direção estética por tarefa: `minimalist-ui` **ou** `industrial-brutalist-ui` **ou**
-  `high-end-visual-design`. `full-output-enforcement` é ortogonal e pode empilhar com
-  qualquer uma.
-- Em conflito dentro do pacote, `design-taste-frontend/SKILL.md` vence
-  (`stitch-design-taste/DESIGN.md` está desatualizado quanto a serifas).
-- `design-taste-frontend-v1` só para projeto que dependa do comportamento antigo.
-- `redesign-existing-projects` foi absorvida pelo §11 da v2; preferir a v2.
-
-Contexto e decisões por trás destas regras:
-`~/obsidian_vault/30_MOCs/Design de Interface com Agente.md`.
+Antes de escolher skill para UI, leia `~/dotfiles/agents/docs/design-skills.md`. Regra fixa: `impeccable` é o padrão e nunca roda na mesma tarefa que `design-taste-frontend`.
 
 ## Second brain
 
@@ -132,18 +101,7 @@ Vale se `TRAYCER_EPIC_ID` existe ou se as ferramentas `traycer_*` estão dispon�
 
 ## ECC por projeto
 
-O plugin `ecc@ecc` custa ~45 mil tokens por sessão; fica desligado no escopo de usuário. Política permanente do
-usuário (2026-10-15): o ECC é ligado **automaticamente** em projetos web, C e backend Node pelo wrapper `claude` do zsh
-(`zsh/ecc-auto.zsh` chama `claude/ecc-project.sh auto` antes de abrir a sessão). A linha `ECC ligado|desligado (...)` no
-início da sessão informa o estado.
-
-- O agente nunca roda `make ecc-on|ecc-off|ecc-auto` nem `ecc-project.sh` por conta própria; quem liga é o wrapper ou o usuário.
-- ECC desligado num projeto web/C/Node (sessão aberta fora do wrapper, ou `.claude/ecc.off`): informe e sugira
-  `make ecc-on DIR=...` só se a tarefa se beneficiar; respeite o `ecc.off`. Fora desses tipos, sugira ligar apenas para revisão
-  Go/Java/Kotlin, `orch-review` ou `review-pr`, e desligar no resto.
-- Com o ECC desligado, não invoque agentes `ecc:*` nem skills do plugin; use os `cavecrew-*`, o `Explore` ou a sessão principal.
-- Com o ECC ligado, o teto de 3 agentes por rodada e o contrato de delegação valem acima de qualquer "PROACTIVELY" de agente `ecc:*`.
-- Mudança de estado só vale numa sessão nova (`/reload-plugins` não dispara o SessionStart).
+O ECC é ligado pelo wrapper `claude` do zsh. O agente nunca roda `make ecc-on|ecc-off` nem `ecc-project.sh`. Ao ler a linha `ECC ligado|desligado` ou ao falar de ECC, leia `~/dotfiles/agents/docs/ecc-por-projeto.md`.
 
 ## Comunicação entre agentes (Herdr)
 
