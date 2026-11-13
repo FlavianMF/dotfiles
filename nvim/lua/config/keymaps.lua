@@ -21,7 +21,7 @@ keymap.set("n", "sk", "<C-w>k")
 keymap.set("n", "sj", "<C-w>j")
 keymap.set("n", "sl", "<C-w>l")
 -- Toggle explorer
-keymap.set("n", "<C-b>", ":NvimTreeToggle<Return>", opts)
+keymap.set("n", "<C-b>", ":Neotree toggle<Return>", opts)
 
 keymap.set("n", "<M-o>", ":ClangdSwitchSourceHeader<Return>", opts)
 
