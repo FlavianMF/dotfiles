@@ -135,6 +135,7 @@ declare -A OPTIONAL_COMPONENTS=(
     [antigravity]="Antigravity CLI (agy, ~/.local/bin, self-updating) + ~/.gemini/config and ~/.gemini/antigravity-cli config"
     [ccr]="Claude Code Router (npm, ~/.local, version in ccr/VERSION); providers and routes are set in its UI"
     [traycer]="Traycer desktop (AppImage pinned by sha256 in traycer/SHA256, ~/.local/opt/traycer)"
+    [herdr]="Herdr (AI agent terminal multiplexer, ~/.local/bin/herdr) + ~/.config/herdr/config.toml"
     [obsidian]="Obsidian (AppImage pinned by obsidian/VERSION + SHA256, ~/.local/opt/obsidian) + registers ~/obsidian_vault"
     [ecc]="ECC pieces vendored in vendor/ecc (skills, agents, language rules) + local C/Make/CMake rules"
     [hopper]="Hopper Disassembler 6.4.2 demo (.deb pinned by size+SHA-1) + Xvfb deps, backend of the rea MCP"
@@ -174,6 +175,7 @@ declare -A SELECTED_COMPONENTS=(
     [antigravity]=0
     [ccr]=0
     [traycer]=0
+    [herdr]=0
     [ecc]=0
     [jev]=0
     [nvim]=0
@@ -205,7 +207,7 @@ select_components() {
         return
     fi
 
-    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer harness2 ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip tailscale)
+    local -a options=(systemwide node python docker gh vscode eim hopper claudeskills obsidian codex opencode antigravity ccr traycer herdr harness2 ecc jev nvim yazi ripgrep fd lazygit shellcheck usbip tailscale)
     local current=0
     local done=0
     local old_stty
@@ -907,6 +909,14 @@ if [[ ${SELECTED_COMPONENTS[traycer]} -eq 1 ]]; then
     )
 fi
 
+if [[ ${SELECTED_COMPONENTS[herdr]} -eq 1 ]]; then
+    log_info "Installing Herdr (herdr/VERSION + SHA256)..."
+    as_user bash "$REPO_DIR/herdr/install.sh" "${sub_dry[@]}" || log_warn "herdr install failed"
+    HARNESS_CHECKLIST+=(
+        "Herdr: multiplexador para agentes de IA instalado em ~/.local/bin/herdr; execute 'herdr' para iniciar (ver herdr/README.md)"
+    )
+fi
+
 if [[ ${SELECTED_COMPONENTS[obsidian]} -eq 1 ]]; then
     # After the obsidian_vault clone above: the installer registers the vault in Obsidian's config.
     log_info "Installing Obsidian (obsidian/VERSION + SHA256)..."
@@ -1288,6 +1298,7 @@ echo "✓ System dependencies installed"
 [[ ${SELECTED_COMPONENTS[lazygit]} -eq 1 ]] && echo "✓ lazygit installed"
 [[ ${SELECTED_COMPONENTS[shellcheck]} -eq 1 ]] && echo "✓ shellcheck installed"
 [[ ${SELECTED_COMPONENTS[yazi]} -eq 1 ]] && echo "✓ yazi installed"
+[[ ${SELECTED_COMPONENTS[herdr]} -eq 1 ]] && echo "✓ Herdr installed"
 [[ ${SELECTED_COMPONENTS[usbip]} -eq 1 ]] && echo "✓ usbip client installed"
 echo "✓ Oh My Zsh configured"
 echo "✓ Zsh plugins installed (autosuggestions, syntax-highlighting)"

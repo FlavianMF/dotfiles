@@ -1,0 +1,84 @@
+# Herdr configuration
+# Linked from ~/dotfiles/herdr/config.toml to ~/.config/herdr/config.toml
+
+# Set to false to bypass initial setup prompts
+onboarding = false
+
+[theme]
+# Matches the Catppuccin Mocha theme used across tmux and yazi in ~/dotfiles
+name = "catppuccin"
+auto_switch = false
+
+[terminal]
+# Matches default-shell from ~/dotfiles/tmux/.tmux.conf
+default_shell = "/usr/bin/zsh"
+shell_mode = "auto"
+new_cwd = "follow"
+kitty_graphics = true
+
+[keys]
+# Tmux-compatible prefix key (tmux: set -g prefix C-Space)
+prefix = "ctrl+space"
+extra_prefixes = ["ctrl+b"]
+
+# Tmux-compatible reload config (tmux: bind r source-file ~/.tmux.conf)
+reload_config = "prefix+r"
+
+# Window / Tab management (tmux: c, n, p, 1..9, &)
+new_tab = "prefix+c"
+next_tab = "prefix+n"
+previous_tab = "prefix+p"
+switch_tab = "prefix+1..9"
+close_tab = ["prefix+shift+x", "prefix+ampersand"]
+
+# Pane splits (vertical split right, horizontal split down)
+split_vertical = "prefix+v"
+split_horizontal = "prefix+minus"
+
+# Vim navigation between panes (tmux: h, j, k, l)
+focus_pane_left = "prefix+h"
+focus_pane_down = "prefix+j"
+focus_pane_up = "prefix+k"
+focus_pane_right = "prefix+l"
+cycle_pane_next = "prefix+tab"
+cycle_pane_previous = "prefix+shift+tab"
+
+# Pane resizing with vim motions (tmux: bind -r H/J/K/L resize-pane 5)
+resize_pane_left = "prefix+shift+h"
+resize_pane_down = "prefix+shift+j"
+resize_pane_up = "prefix+shift+k"
+resize_pane_right = "prefix+shift+l"
+
+# Pane controls (tmux: z for zoom, x for kill-pane)
+zoom = "prefix+z"
+close_pane = "prefix+x"
+
+# Detach session (tmux: prefix+d; also keep prefix+q)
+detach = ["prefix+d", "prefix+q"]
+
+# Navigate-mode movements (vim-style)
+navigate_pane_left = "h"
+navigate_pane_down = "j"
+navigate_pane_up = "k"
+navigate_pane_right = "l"
+
+# Agent cycling shortcuts
+previous_agent = "f7"
+next_agent = "f8"
+
+[ui]
+# Sort agents by priority (blocked -> working -> done -> idle)
+agent_panel_sort = "priority"
+window_title = "herdr · {terminal_title}"
+
+[ui.toast]
+delivery = "herdr"
+
+[ui.sidebar.agents]
+rows = [
+    ["state_icon", "workspace"],
+    ["agent", "terminal_title_stripped"],
+]
+
+[update]
+channel = "stable"
