@@ -168,7 +168,9 @@
                       "content": {
                         "mod": "agenttrail",
                         "props": {
-                          "port": 5330
+                          "localMachines": [
+                            "wsl"
+                          ]
                         }
                       }
                     }
