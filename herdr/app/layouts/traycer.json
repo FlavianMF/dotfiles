@@ -22,37 +22,62 @@
           "type": "column",
           "children": [
             {
-              "id": "over9k",
-              "type": "block",
-              "content": {
-                "mod": "over9k"
-              },
+              "id": "left-tabs",
+              "type": "stack",
+              "active": "over9k",
               "size": {
                 "weight": 2
               },
-              "min": 160
+              "min": 160,
+              "children": [
+                {
+                  "id": "over9k",
+                  "type": "block",
+                  "content": {
+                    "mod": "over9k"
+                  }
+                },
+                {
+                  "id": "filetree",
+                  "type": "block",
+                  "content": {
+                    "mod": "filetree"
+                  }
+                }
+              ],
+              "header": {
+                "content": {
+                  "mod": "lower-tabs",
+                  "props": {
+                    "stack": "left-tabs",
+                    "bg": "chrome",
+                    "tabs": [
+                      [
+                        "over9k",
+                        "Projetos"
+                      ],
+                      [
+                        "filetree",
+                        "Arquivos"
+                      ]
+                    ]
+                  }
+                },
+                "reveal": "always",
+                "height": 30,
+                "position": "top"
+              }
             },
             {
-              "id": "filetree",
+              "id": "cache-hit",
               "type": "block",
               "content": {
-                "mod": "filetree"
+                "mod": "cache-hit"
               },
               "size": {
                 "weight": 1
               },
               "min": 90
-            },
-            {
-              "id": "cache-hit",
-              "type": "block",
-              "size": {
-                "weight": 1
-              },
-              "min": 90,
-              "content": {
-                "mod": "cache-hit"
-              }
             }
           ]
         },

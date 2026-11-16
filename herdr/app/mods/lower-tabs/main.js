@@ -18,13 +18,13 @@ function find(node, id) {
 export default class LowerTabs extends View {
   render(_cx) {
     const t = theme();
-    const { stack = "", tabs = [] } = props() ?? {};
+    const { stack = "", tabs = [], bg = "surface" } = props() ?? {};
     const active = find(layout(), stack)?.active;
-    return h_flex().id("lower-tabs").size_full().px(8).gap(4).items_center().bg(t.surface).children(
+    return h_flex().id("lower-tabs").size_full().px(8).gap(4).items_center().bg(t[bg] ?? t.surface).children(
       tabs.map(([child, label]) =>
         div().id(`lt-${child}`).px(10).py(3).rounded(6).text_size(12)
           .text_color(child === active ? t.foreground : t.muted)
-          .bg(child === active ? t.raised : t.surface)
+          .bg(child === active ? t.raised : t[bg] ?? t.surface)
           .hover((s) => s.bg(t.raised))
           .on_click(() => run("layout.select", { stack, child }))
           .child(label)));
