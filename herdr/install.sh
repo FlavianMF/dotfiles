@@ -140,6 +140,7 @@ fi
 # Configure ~/.config/herdr/config.toml link
 if [[ $DRY_RUN -eq 1 ]]; then
     echo "[dry-run] link $ROOT/config.toml to $CONFIG_DIR/config.toml"
+    echo "[dry-run] link $ROOT/scripts to $CONFIG_DIR/scripts"
 else
     mkdir -p "$CONFIG_DIR"
     TARGET_CONFIG="$CONFIG_DIR/config.toml"
@@ -160,6 +161,27 @@ else
     else
         ln -s "$SRC_CONFIG" "$TARGET_CONFIG"
         echo "Created link: $TARGET_CONFIG -> $SRC_CONFIG"
+    fi
+
+    # Link scripts directory if present
+    TARGET_SCRIPTS="$CONFIG_DIR/scripts"
+    SRC_SCRIPTS="$ROOT/scripts"
+    if [[ -d "$SRC_SCRIPTS" ]]; then
+        if [[ -L "$TARGET_SCRIPTS" ]]; then
+            CURRENT_SCRIPTS_LINK="$(readlink -f "$TARGET_SCRIPTS")"
+            if [[ "$CURRENT_SCRIPTS_LINK" != "$SRC_SCRIPTS" ]]; then
+                ln -sfn "$SRC_SCRIPTS" "$TARGET_SCRIPTS"
+                echo "Updated link: $TARGET_SCRIPTS -> $SRC_SCRIPTS"
+            fi
+        elif [[ -e "$TARGET_SCRIPTS" ]]; then
+            BACKUP="$TARGET_SCRIPTS.bak.$(date +%Y%m%d-%H%M%S)"
+            mv "$TARGET_SCRIPTS" "$BACKUP"
+            ln -s "$SRC_SCRIPTS" "$TARGET_SCRIPTS"
+            echo "Created link: $TARGET_SCRIPTS -> $SRC_SCRIPTS"
+        else
+            ln -s "$SRC_SCRIPTS" "$TARGET_SCRIPTS"
+            echo "Created link: $TARGET_SCRIPTS -> $SRC_SCRIPTS"
+        fi
     fi
 fi
 
