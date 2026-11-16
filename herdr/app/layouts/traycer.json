@@ -1,68 +1,36 @@
 {
   "id": "root",
   "type": "row",
-  "titlebar": "none",
-  "traffic_lights": [
-    12,
-    16
-  ],
-  "background": "canvas",
-  "terminal_padding": [
-    14,
-    12
-  ],
-  "divider": {
-    "width": 1,
-    "color": "border"
-  },
   "children": [
     {
       "id": "sidebar",
       "type": "column",
-      "size": {
-        "px": 268
-      },
-      "min": 44,
-      "max": 480,
-      "background": "chrome",
-      "resizable": false,
       "children": [
         {
           "id": "brand",
           "type": "block",
+          "content": {
+            "mod": "workspace-chrome"
+          },
           "size": {
             "px": 46
           },
-          "window_drag": true,
-          "content": {
-            "mod": "workspace-chrome"
-          }
+          "window_drag": true
         },
         {
           "id": "sidebar-lists",
           "type": "column",
           "children": [
             {
-              "id": "spaces",
+              "id": "over9k",
               "type": "block",
-              "size": {
-                "weight": 1
-              },
-              "min": 90,
               "content": {
-                "mod": "spaces"
-              }
-            },
-            {
-              "id": "agents",
-              "type": "block",
-              "size": {
-                "weight": 1
+                "mod": "over9k"
               },
-              "min": 90,
-              "content": {
-                "mod": "agents"
-              }
+              "size": {
+                "weight": 2
+              },
+              "min": 160
             },
             {
               "id": "filetree",
@@ -80,39 +48,43 @@
         {
           "id": "sidebar-footer",
           "type": "block",
-          "size": {
-            "px": 69
-          },
           "content": {
             "mod": "workspace-chrome",
             "props": {
               "footer": true
             }
+          },
+          "size": {
+            "px": 69
           }
         }
-      ]
+      ],
+      "size": {
+        "px": 268
+      },
+      "min": 44,
+      "max": 480,
+      "background": "chrome",
+      "resizable": false
     },
     {
       "id": "work",
       "type": "column",
-      "resizable": false,
       "children": [
         {
           "id": "tabs",
           "type": "block",
+          "content": {
+            "mod": "tabs"
+          },
           "size": {
             "px": 42
           },
-          "window_drag": true,
-          "content": {
-            "mod": "tabs"
-          }
+          "window_drag": true
         },
         {
           "id": "work-body",
           "type": "row",
-          "padding": 8,
-          "gap": 8,
           "children": [
             {
               "id": "main",
@@ -120,10 +92,15 @@
               "content": {
                 "tab": "active",
                 "pane": {
-                  "gap": 8,
-                  "radius": 10,
+                  "header": {
+                    "content": {
+                      "mod": "pane"
+                    },
+                    "reveal": "always",
+                    "height": 30,
+                    "position": "top"
+                  },
                   "background": "background",
-                  "lone": true,
                   "border": {
                     "width": 1,
                     "color": "border"
@@ -132,14 +109,9 @@
                     "width": 1,
                     "color": "accent"
                   },
-                  "header": {
-                    "content": {
-                      "mod": "pane"
-                    },
-                    "height": 30,
-                    "position": "top",
-                    "reveal": "always"
-                  }
+                  "radius": 10,
+                  "gap": 8,
+                  "lone": true
                 }
               },
               "size": {
@@ -149,42 +121,10 @@
             {
               "id": "side",
               "type": "column",
-              "size": {
-                "weight": 2
-              },
-              "min": 360,
-              "max": 900,
-              "gap": 8,
               "children": [
                 {
                   "id": "lower",
                   "type": "stack",
-                  "active": "epic",
-                  "size": {
-                    "weight": 1
-                  },
-                  "min": 140,
-                  "header": {
-                    "content": {
-                      "mod": "lower-tabs",
-                      "props": {
-                        "stack": "lower",
-                        "tabs": [
-                          [
-                            "epic",
-                            "Épico"
-                          ],
-                          [
-                            "agenttrail",
-                            "Agenttrail"
-                          ]
-                        ]
-                      }
-                    },
-                    "height": 30,
-                    "position": "top",
-                    "reveal": "always"
-                  },
                   "children": [
                     {
                       "id": "epic",
@@ -202,25 +142,61 @@
                           "port": 5330
                         }
                       }
+                    },
+                    {
+                      "id": "cache-hit",
+                      "type": "block",
+                      "content": {
+                        "mod": "cache-hit"
+                      }
                     }
-                  ]
+                  ],
+                  "active": "epic",
+                  "header": {
+                    "content": {
+                      "mod": "lower-tabs",
+                      "props": {
+                        "stack": "lower",
+                        "tabs": [
+                          [
+                            "epic",
+                            "Épico"
+                          ],
+                          [
+                            "agenttrail",
+                            "Agenttrail"
+                          ],
+                          [
+                            "cache-hit",
+                            "Cache"
+                          ]
+                        ]
+                      }
+                    },
+                    "reveal": "always",
+                    "height": 30,
+                    "position": "top"
+                  },
+                  "size": {
+                    "weight": 1
+                  },
+                  "min": 140
                 }
-              ]
+              ],
+              "size": {
+                "weight": 2
+              },
+              "min": 360,
+              "max": 900,
+              "gap": 8
             },
             {
               "id": "panel",
               "type": "column",
-              "hidden": true,
-              "size": {
-                "px": 368
-              },
-              "min": 280,
-              "max": 900,
               "children": [
                 {
                   "id": "panel-body",
                   "type": "stack",
-                  "active": "files",
                   "children": [
                     {
                       "id": "files",
@@ -236,33 +212,57 @@
                         "mod": "changes"
                       }
                     }
-                  ]
+                  ],
+                  "active": "files"
                 }
-              ]
+              ],
+              "size": {
+                "px": 368
+              },
+              "min": 280,
+              "max": 900,
+              "hidden": true
             }
-          ]
+          ],
+          "padding": 8,
+          "gap": 8
         },
         {
           "id": "usage",
           "type": "block",
-          "size": {
-            "px": 30
-          },
           "content": {
             "mod": "over9k-usage"
+          },
+          "size": {
+            "px": 30
           }
         },
         {
           "id": "status",
           "type": "block",
-          "size": {
-            "px": 28
-          },
           "content": {
             "mod": "workspace-status"
+          },
+          "size": {
+            "px": 28
           }
         }
-      ]
+      ],
+      "resizable": false
     }
+  ],
+  "background": "canvas",
+  "terminal_padding": [
+    14,
+    12
+  ],
+  "divider": {
+    "width": 1,
+    "color": "border"
+  },
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
   ]
 }

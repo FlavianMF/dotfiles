@@ -1,0 +1,11 @@
+{
+  "place": "none",
+  "cloned_from": {
+    "name": "sidebar-options",
+    "version": "0.1.11"
+  },
+  "overlay": {
+    "width": 740,
+    "height": 600
+  }
+}

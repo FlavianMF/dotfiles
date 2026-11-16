@@ -1,0 +1,9 @@
+{
+  "place": "left",
+  "title": "Spaces",
+  "cloned_from": {
+    "name": "spaces-projects",
+    "version": "0.1.11"
+  },
+  "size": 268
+}
