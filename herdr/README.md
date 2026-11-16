@@ -74,6 +74,7 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
   - `cache-hit`: contador de cache dos agentes, abaixo de `filetree` na barra lateral esquerda.
   - `usage`: barra do `over9k-usage` acima da barra de status.
+  - `usage-limits`: limites do Claude/Codex na linha da barra de status, ao lado do `workspace-status`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
@@ -89,6 +90,7 @@ Mods rodam como o seu usuário, sem sandbox. Eu li o código dos commits abaixo 
 | `filetree` ([cybertron288/herdr-mods](https://github.com/cybertron288/herdr-mods/tree/main/filetree)) | `34e7c33` | — | Árvore de arquivos com cores de git. Só leitura de arquivos, sem rede, e funciona com a máquina `wsl`. Só cria `~/.local/state/herdr-filetree` no Windows. O `bridge.ts` é um hook opcional do Claude Code (exige `bun`): não foi ligado. |
 | `agenttrail` ([sodiumsun/agenttrail](https://github.com/sodiumsun/agenttrail)) | `3785d4e` | — | Só lê `127.0.0.1:5330-5344`. Inicia `npx -y agenttrail@0.4.1` apenas no botão "Start Map here". Com um terminal do `wsl` focado, mostra "No terminal in focus". |
 | `space-names` ([SaifHarding/herdr-space-names](https://github.com/SaifHarding/herdr-space-names)) | `81523bc` | — | Sem `exec`, sem rede. |
+| `usage-limits` ([nozikov/herdr-usage-limits](https://github.com/nozikov/herdr-usage-limits)) | `ca22615` | — | Sem rede. Roda `claude` e `codex` do WSL via `wsl.exe` (limites 5h/semana) e lê sessões locais. Adaptado em `herdr/app/mods/usage-limits`: `io/sh.js`, `io/helpers.js` e `ui/bar.js` (alinhamento à esquerda) mudaram, e o `wsl-run.sh` é novo. Fica na linha da barra de status do layout `traycer`. `sqlite3` falta no WSL: só o bloco de sessão do OpenCode fica de fora. |
 | `tmux-prefix` ([herdrdev/herdr-layout-examples](https://github.com/herdrdev/herdr-layout-examples)) | `0ec9676` | `ctrl-space` | Versão adaptada em `herdr/app/mods/tmux-prefix`: prefixo `Ctrl+Space` (igual ao `tmux/.tmux.conf`) e `n`/`p` repetem como `bind -r`. `ctrl-space` duas vezes envia um `^@` real. Não há equivalente a `H/J/K/L` nem a `T/E`: o app não tem comando de resize por pane. |
 
 O `keys.json` ganhou 4 chaves (`ctrl-b` virou `ctrl-space`). O backup está em `keys.json.bak.*` na mesma pasta.
