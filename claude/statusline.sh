@@ -28,9 +28,23 @@ C_BLUE=$'\033[34m'
 C_YELLOW=$'\033[33m'
 C_GREEN=$'\033[32m'
 C_RED=$'\033[31m'
+C_MAGENTA=$'\033[35m'
 
 if [[ -n "${NO_COLOR:-}" ]]; then
-    C_RESET=""; C_DIM=""; C_CYAN=""; C_BLUE=""; C_YELLOW=""; C_GREEN=""; C_RED=""
+    C_RESET=""; C_DIM=""; C_CYAN=""; C_BLUE=""; C_YELLOW=""; C_GREEN=""; C_RED=""; C_MAGENTA=""
+fi
+
+# Segmento de conta/perfil ativo (via CLAUDE_CONFIG_DIR ou ~/.claude-active)
+account_seg=""
+profile_name=""
+if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+    profile_name="$(basename "$CLAUDE_CONFIG_DIR")"
+    [[ "$profile_name" == ".claude" ]] && profile_name="default"
+elif [[ -L "$HOME/.claude-active" ]]; then
+    profile_name="$(basename "$(readlink -f "$HOME/.claude-active" 2>/dev/null)")"
+fi
+if [[ -n "$profile_name" && "$profile_name" != "default" ]]; then
+    account_seg=" ${C_DIM}|${C_RESET} ${C_MAGENTA}@${profile_name}${C_RESET}"
 fi
 
 short_cwd="${cwd/#$HOME/\~}"
@@ -136,5 +150,5 @@ if [[ $candidates -gt 0 ]]; then
     fi
 fi
 
-printf '%s\n' "${C_CYAN}${model}${C_RESET} ${C_DIM}|${C_RESET} ${short_cwd}${git_seg}${ctx_seg}${caveman_seg}"
+printf '%s\n' "${C_CYAN}${model}${C_RESET}${account_seg} ${C_DIM}|${C_RESET} ${short_cwd}${git_seg}${ctx_seg}${caveman_seg}"
 printf '%s\n' "${ecc_seg} ${C_DIM}·${C_RESET} ${sb_seg}"
