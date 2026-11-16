@@ -162,6 +162,15 @@
       "environment": {
         "HOPPER_LAUNCHER_PATH": "/opt/hopper/bin/Hopper"
       }
+    },
+    "headroom": {
+      "type": "local",
+      "command": [
+        "/home/flv/.local/bin/headroom",
+        "mcp",
+        "serve"
+      ],
+      "enabled": true
     }
   },
   "permission": {
