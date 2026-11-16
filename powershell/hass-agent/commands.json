@@ -152,6 +152,26 @@
       "command_type": "Custom",
       "executable": "powershell.exe",
       "arguments": "-NoProfile -WindowStyle Hidden -Command \"Start-Process wsl.exe -WindowStyle Hidden -ArgumentList '-d','Ubuntu','--','bash','-lc','obsidian'\""
+    },
+    {
+      "id": "pc_wsl_restart",
+      "name": "pc_wsl_restart",
+      "friendly_name": "Reiniciar WSL2",
+      "description": "Reinicia o WSL2 (executa wsl --shutdown e inicializa a distribuicao Ubuntu)",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -WindowStyle Hidden -Command \"wsl.exe --shutdown; Start-Sleep -Seconds 2; wsl.exe -d Ubuntu --exec /bin/true\""
+    },
+    {
+      "id": "pc_wsl_shutdown",
+      "name": "pc_wsl_shutdown",
+      "friendly_name": "Desligar WSL2",
+      "description": "Encerra o WSL2 e libera memoria RAM (wsl --shutdown)",
+      "entity_type": "Button",
+      "command_type": "Custom",
+      "executable": "powershell.exe",
+      "arguments": "-NoProfile -WindowStyle Hidden -Command \"wsl.exe --shutdown\""
     }
   ]
 }
