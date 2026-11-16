@@ -145,13 +145,16 @@ ssh wsl
 ```
 
 ### 5. Add Machine in Herdr Desktop
+- **Via CLI (Recommended for first run):**
+  Open Windows PowerShell and run:
+  ```powershell
+  hc machine add wsl
+  ```
+  *(Or with automatic install: `hc machine add wsl --install`)*
 - **Via GUI:** Open Herdr Desktop on Windows. Click **Add Machine** (or `+`) in the left sidebar:
   - **Label:** `WSL`
   - **Target:** `wsl` (or `ssh -p 2222 <user>@localhost`)
-- **Via CLI:**
-  ```powershell
-  herdr machine add wsl --label WSL
-  ```
+  *(Note: The GUI cannot answer interactive prompts. If adding via GUI fails, run `hc machine add wsl` in a terminal first).*
 
 ---
 
@@ -174,6 +177,27 @@ Once the WSL machine is connected in Herdr Desktop:
 ---
 
 ## 5. Troubleshooting & FAQ
+
+### Error: "Couldn't add wsl here: it needs you to answer something (a password, a new host key, or installing herdr-core there)"
+This happens when you click **Add Machine** in the Herdr Desktop GUI before approving the SSH connection or installing `herdr-core` in WSL. Because the GUI dialog cannot present an interactive terminal prompt (such as asking for your password, asking `Are you sure you want to continue connecting (yes/no)?`, or asking to install `herdr-core`), it cancels immediately.
+
+**Fix:**
+1. Open **Windows PowerShell** (or Windows Terminal).
+2. Run:
+   ```powershell
+   hc machine add wsl
+   ```
+   *(If `hc` is not in your Windows PATH, use: `& "$env:LOCALAPPDATA\Programs\Herdr\hc.exe" machine add wsl`)*
+3. If it asks:
+   - `Are you sure you want to continue connecting (yes/no)?` -> Type `yes` and press Enter.
+   - If prompted for a password -> Enter your WSL password.
+   - If prompted to install or select session -> Confirm with Enter.
+4. Once completed, the `wsl` machine is saved and will appear active in Herdr Desktop.
+
+Alternatively, you can add WSL without SSH using Herdr's direct WSL bridge:
+```powershell
+hc machine add --via "wsl.exe -e sh -c" --name wsl
+```
 
 ### Connection Refused (`port 2222: Connection refused`)
 - Verify that `sshd` is running in WSL2:

@@ -97,7 +97,22 @@ else
     echo "[INFO] No new Windows SSH keys needed importing."
 fi
 
-# 6. Verify Herdr CLI in WSL
+# 6. Ensure non-interactive PATH contains ~/.local/bin in ~/.bashrc
+BASHRC="$HOME/.bashrc"
+if [[ -f "$BASHRC" ]] && ! grep -q 'export PATH=.*\.local/bin' "$BASHRC"; then
+    echo "[INFO] Ensuring ~/.local/bin is in PATH for non-interactive SSH in ~/.bashrc..."
+    # shellcheck disable=SC2016
+    sed -i '1s|^|# Non-interactive PATH for SSH remote commands\n[ -d "$HOME/.local/bin" ] \&\& export PATH="$HOME/.local/bin:$PATH"\n\n|' "$BASHRC"
+fi
+
+# 7. Verify Herdr CLI and Herdr Core (hc) in WSL
+if ! command -v hc >/dev/null 2>&1; then
+    echo "[INFO] herdr-core (hc) not found. Installing from https://releases.herdr.dev/core/install.sh..."
+    curl -fsSL https://releases.herdr.dev/core/install.sh | sh || echo "[WARN] Failed to install herdr-core"
+else
+    echo "[OK] herdr-core (hc) is installed: $(hc --version 2>/dev/null || echo 'hc')"
+fi
+
 if ! command -v herdr >/dev/null 2>&1; then
     echo "[WARN] Herdr CLI not found in PATH."
     if [[ -x "$ROOT/install.sh" ]]; then

@@ -174,20 +174,36 @@ try {
 
 # 7. Add WSL Machine to Herdr Desktop
 Write-Info "Checking Herdr machine registration..."
-if (Get-Command herdr -ErrorAction SilentlyContinue) {
+$HcCmd = Get-Command hc -ErrorAction SilentlyContinue
+if (-not $HcCmd) {
+    $PossibleHc = @(
+        "$env:LOCALAPPDATA\Programs\Herdr\hc.exe",
+        "$env:LOCALAPPDATA\herdr\hc.exe",
+        "$env:USERPROFILE\.local\bin\hc.exe"
+    )
+    foreach ($p in $PossibleHc) {
+        if (Test-Path $p) {
+            $HcCmd = $p
+            break
+        }
+    }
+}
+
+if ($HcCmd) {
+    Write-Info "Registering machine 'wsl' via Herdr Core CLI ($HcCmd)..."
     try {
-        herdr machine add wsl --label WSL
-        Write-Host "[OK] Machine 'WSL' registered in Herdr successfully!" -ForegroundColor Green
+        & $HcCmd machine add wsl --install
+        Write-Host "[OK] Machine 'wsl' registered in Herdr successfully!" -ForegroundColor Green
     } catch {
-        # If it was already added or requires user input
-        Write-Info "Herdr machine command executed (verify in Herdr UI or run 'herdr machine list')."
+        Write-Warn "Automatic registration encountered: $_"
+        Write-Info "Run this command manually in a Windows terminal:"
+        Write-Host "  hc machine add wsl" -ForegroundColor Yellow
     }
 } else {
-    Write-Info "Herdr CLI is not in Windows PATH yet."
-    Write-Info "You can add it in Herdr Desktop GUI:"
-    Write-Host "  1. Open Herdr Desktop." -ForegroundColor Cyan
-    Write-Host "  2. Click '+' or 'Add Machine' in the left sidebar." -ForegroundColor Cyan
-    Write-Host "  3. Label: WSL  |  Target: wsl (or ssh -p $WslPort $WslUser@localhost)" -ForegroundColor Cyan
+    Write-Info "Herdr CLI (hc) not found in Windows PATH."
+    Write-Info "To complete adding the machine, open Windows PowerShell and run:"
+    Write-Host "  hc machine add wsl" -ForegroundColor Yellow
+    Write-Info "(If prompted, type 'yes' to accept the SSH fingerprint)."
 }
 
 Write-Host ""
