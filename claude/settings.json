@@ -71,6 +71,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "^(startup|resume|clear|compact|fork)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '/home/flv/.claude/hooks/herdr-agent-state.sh' session",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -89,6 +99,15 @@
             "type": "command",
             "command": "bash \"$HOME/.claude/hooks/jev-e.sh\"",
             "timeout": 2
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "JEV_ROUTE_HOOK_MODE=active bash \"$HOME/.claude/hooks/jev-route.sh\"",
+            "timeout": 3
           }
         ]
       },
@@ -248,16 +267,18 @@
     "padding": 0
   },
   "enabledPlugins": {
-    "caveman@caveman": true,
-    "figma@claude-plugins-official": true,
+    "caveman@caveman": false,
+    "figma@claude-plugins-official": false,
     "fast-jev-compaction@fast-jev-compaction": true,
     "typesafe@typesafe-ai": true,
     "mattpocock-skills@claude-plugins-official": true,
-    "impeccable@impeccable": true,
+    "impeccable@impeccable": false,
     "github@claude-plugins-official": false,
     "playwright@claude-plugins-official": true,
     "ste80@ste80": true,
-    "ecc@ecc": false
+    "ecc@ecc": false,
+    "effortless@effortless": true,
+    "humanizer@humanizer": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -301,6 +322,18 @@
         "repo": "FlavianMF/ste80"
       },
       "autoUpdate": false
+    },
+    "effortless": {
+      "source": {
+        "source": "github",
+        "repo": "HeyCubit/effortless"
+      }
+    },
+    "humanizer": {
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer"
+      }
     }
   },
   "effortLevel": "xhigh",
@@ -312,7 +345,10 @@
       "effortLevel": "xhigh"
     },
     "claude-sonnet-5-5": {
-      "effortLevel": "medium"
+      "effortLevel": "high"
+    },
+    "claude-haiku-5-5": {
+      "effortLevel": "low"
     }
   },
   "pluginConfigs": {
@@ -320,6 +356,23 @@
       "options": {
         "hooks_enabled": true,
         "hook_profile": "strict"
+      }
+    },
+    "effortless@effortless": {
+      "options": {
+        "judge": "jev",
+        "handoffAfter": "continue",
+        "effortBias": "0",
+        "effortFloor": "low",
+        "effortCeiling": "max",
+        "modelAuto": "on",
+        "helpers": "off",
+        "handoffButton": "advised",
+        "compactWith": "haiku",
+        "swampAt": "70",
+        "appearance": "dark",
+        "theme": "violet",
+        "layout": "default"
       }
     }
   },
@@ -332,14 +385,14 @@
       "### Org-wide",
       "**Organization**: None configured",
       "**Cloud provider(s)**: None configured",
-      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public \u2014 unable to verify here (no remotes configured for this repo)",
-      "**Internal sharing / snippet hosting**: None configured \u2014 treat public paste/gist services as outside the trust boundary",
+      "**Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public — unable to verify here (no remotes configured for this repo)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
       "**Secrets management**: None configured",
-      "**Default / protected branches**: unknown \u2014 origin/HEAD unset, no remotes configured",
+      "**Default / protected branches**: unknown — origin/HEAD unset, no remotes configured",
       "**CI/CD deploy targets**: None configured",
       "**Network posture**: None configured",
-      "**Host containment**: None configured \u2014 assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
-      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured) \u2014 this repo has no remotes configured",
+      "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine or CI runner with open internet",
+      "**Source control**: The trusted repo and its remote(s) only (no additional orgs configured) — this repo has no remotes configured",
       "**Trusted internal domains**: None configured",
       "**Trusted cloud buckets**: None configured",
       "**Key internal services**: None configured",
@@ -347,11 +400,11 @@
       "**Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
       "**Data retention / declassification**: None configured",
       "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
-      "**Protected deployment namespaces / environments**: None configured \u2014 fall back to the Sensitive remote targets heuristic",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
       "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
       "### User-specific",
       "**Primary use of Claude Code**: software development",
-      "**Trusted repo**: The git repository the agent started in (/home/flv/projetos_claude) \u2014 no remotes configured, so no remote scope to extend trust to",
+      "**Trusted repo**: The git repository the agent started in (/home/flv/projetos_claude) — no remotes configured, so no remote scope to extend trust to",
       "**Org-specific CLIs**: None configured"
     ]
   }
