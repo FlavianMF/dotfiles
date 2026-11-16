@@ -1,0 +1,19 @@
+diff --git a/scripts/herdr-app-shim.sh b/scripts/herdr-app-shim.sh
+index fcf00dd..f4675bd 100755
+--- a/scripts/herdr-app-shim.sh
++++ b/scripts/herdr-app-shim.sh
+@@ -51,6 +51,14 @@ hc_info() {
+     info=$(jq -c --argjson fg "$fg" --argjson sess "$sess" '.foreground = {pid: $fg.pid, name: $fg.name,
+       argv: ($fg.argv // [$fg.name]), cwd: ($sess.cwd // $fg.cwd // null)} | .claude_session = ($sess.sessionId // "")' <<<"$info")
+   fi
++  # WSL/Linux: o hc informa o pid do claude; a sessão vem de ~/.claude/sessions/<pid>.json.
++  # Sem isto, dois claude na mesma pasta não resolvem a sessão (heurística por cwd).
++  pid=$(jq -r 'select(.foreground.name == "claude") | .foreground.pid // empty' <<<"$info")
++  root=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
++  if [[ "$pid" =~ ^[0-9]+$ && -f "$root/sessions/$pid.json" ]]; then
++    sess=$(jq -r '.sessionId // empty' "$root/sessions/$pid.json" 2>/dev/null)
++    [[ -n "$sess" ]] && info=$(jq -c --arg s "$sess" '.claude_session = $s' <<<"$info")
++  fi
+   printf '%s\n' "$info"
+ }
+ 

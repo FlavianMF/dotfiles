@@ -70,7 +70,7 @@ make herdr-app-install               # ou: herdr/install-app.sh [--dry-run]
 O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. Depois, no app, aperte `ctrl-shift-l` para alternar o layout.
 
 - **Layout `traycer`:** clone do `main` com uma coluna `side` à direita.
-  - `lower`: pilha com abas Épico e Agenttrail (mod `lower-tabs` desenha as abas e chama `layout.select`).
+  - `lower`: pilha com abas Épico, Agenttrail e Cache (`cache-hit`) (mod `lower-tabs` desenha as abas e chama `layout.select`).
   - `epic`: mod que lista os artifacts do épico Traycer mais recente.
   - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
   - `usage`: barra do `over9k-usage` acima da barra de status.
