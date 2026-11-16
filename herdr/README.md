@@ -59,6 +59,41 @@ The configuration in `herdr/config.toml` uses the same bindings as your `tmux/.t
 | **Detach session** | `prefix` + `d` (or `prefix` + `q`) | `bind d detach-client` |
 | **Cycle agents** | `F7` / `F8` | Previous / Next agent |
 
+## Herdr app: layout `traycer` e mod `epic`
+
+Mods e layouts existem só no **Herdr app** (GUI no Windows), em `%USERPROFILE%\.config\herdr-app`. O TUI (`herdr` 0.9.5) não tem mods. A referência autoritativa é o `AGENTS.md` dessa pasta.
+
+```bash
+make herdr-app-install               # ou: herdr/install-app.sh [--dry-run]
+```
+
+O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. Depois, no app, aperte `ctrl-shift-l` para alternar o layout.
+
+- **Layout `traycer`:** clone do `main` com uma coluna `side` à direita.
+  - `lower`: pilha com abas Épico e Agenttrail (mod `lower-tabs` desenha as abas e chama `layout.select`).
+  - `epic`: mod que lista os artifacts do épico Traycer mais recente.
+  - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
+  - `usage`: barra do `over9k-usage` acima da barra de status.
+  - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
+- **Mod `epic`:** lê o frontmatter de `~/.traycer/epics/<id>/artifacts/*/index.md` no WSL a cada 5 s. É só leitura. O épico é o dono do artifact modificado por último.
+- **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\epic'` e `herdr-app.exe shot`.
+- **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
+
+### Mods de terceiros instalados no app
+
+Mods rodam como o seu usuário, sem sandbox. Eu li o código dos commits abaixo antes de copiar. Eles ficam só em `%USERPROFILE%\.config\herdr-app\mods`, não neste repo.
+
+| Mod | Commit lido | Tecla | Observação |
+| :--- | :--- | :--- | :--- |
+| `over9k-usage` ([herunan/herdr-over9k](https://github.com/herunan/herdr-over9k)) | `a53c200` | — | Sem rede. Lê `~/.claude.json` e sessões do Codex. Os switches editam `~/.claude/settings.json`: deixe desligados. |
+| `revive` ([dmazlum/herdr-revive](https://github.com/dmazlum/herdr-revive)) | `6e1b4a2` | `ctrl-shift-r` | **Não funciona com a máquina `wsl`**: o mod mostra "Revive works on this computer for now" para terminais de outra máquina. O passo `install` não foi rodado. Ele gravaria hooks em `~/.claude/settings.json`, `~/.codex/hooks.json` e `~/.zshrc`, que são symlinks para este repo. |
+| `filetree` ([cybertron288/herdr-mods](https://github.com/cybertron288/herdr-mods/tree/main/filetree)) | `34e7c33` | — | Árvore de arquivos com cores de git. Só leitura de arquivos, sem rede, e funciona com a máquina `wsl`. Só cria `~/.local/state/herdr-filetree` no Windows. O `bridge.ts` é um hook opcional do Claude Code (exige `bun`): não foi ligado. |
+| `agenttrail` ([sodiumsun/agenttrail](https://github.com/sodiumsun/agenttrail)) | `3785d4e` | — | Só lê `127.0.0.1:5330-5344`. Inicia `npx -y agenttrail@0.4.1` apenas no botão "Start Map here". Com um terminal do `wsl` focado, mostra "No terminal in focus". |
+| `space-names` ([SaifHarding/herdr-space-names](https://github.com/SaifHarding/herdr-space-names)) | `81523bc` | — | Sem `exec`, sem rede. |
+| `tmux-prefix` ([herdrdev/herdr-layout-examples](https://github.com/herdrdev/herdr-layout-examples)) | `0ec9676` | `ctrl-space` | Versão adaptada em `herdr/app/mods/tmux-prefix`: prefixo `Ctrl+Space` (igual ao `tmux/.tmux.conf`) e `n`/`p` repetem como `bind -r`. `ctrl-space` duas vezes envia um `^@` real. Não há equivalente a `H/J/K/L` nem a `T/E`: o app não tem comando de resize por pane. |
+
+O `keys.json` ganhou 4 chaves (`ctrl-b` virou `ctrl-space`). O backup está em `keys.json.bak.*` na mesma pasta.
+
 ## Agent Integrations & CLI Control
 
 From a terminal or script:
