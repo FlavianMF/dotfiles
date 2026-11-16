@@ -7,9 +7,18 @@ Terminal workspace manager and multiplexer purpose-built for AI coding agents (C
 ```bash
 make herdr-install                    # Installs herdr pinned in herdr/VERSION + herdr/SHA256
 make herdr-update [VERSION=x.y.z]     # Re-pin to latest (or specific version), update SHA256 and review diff
+make herdr-ssh-setup                  # Configures SSH on port 2222 in WSL2 for Herdr Desktop integration
 ```
 
 The executable is installed to `~/.local/bin/herdr` and the configuration is linked from `herdr/config.toml` to `~/.config/herdr/config.toml`.
+
+### Windows Host + WSL2 Setup (Option C)
+
+For running the native **Herdr Desktop GUI** on Windows with agents running inside **WSL2** over SSH:
+- See the complete guide in [installation.md](installation.md).
+- Quick setup:
+  - In WSL: `make herdr-ssh-setup` (or `./herdr/setup-wsl-ssh.sh`)
+  - In Windows PowerShell: `powershell -ExecutionPolicy Bypass -File .\herdr\setup-host.ps1`
 
 ## Key Features
 

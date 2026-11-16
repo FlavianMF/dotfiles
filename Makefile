@@ -1,4 +1,4 @@
-.PHONY: flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update codex-drift audit lint version
+.PHONY: flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup codex-drift audit lint version
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -41,6 +41,7 @@ help:
 	@echo "  make antigravity-config  - Reaplica MCPs, permissões, skills e hooks do agy em ~/.gemini (merge, não link)"
 	@echo "  make herdr-install    - Instala o Herdr (multiplexador para agentes) em ~/.local/bin"
 	@echo "  make herdr-update [VERSION=x.y.z] - Fixa a release do Herdr em herdr/VERSION + SHA256"
+	@echo "  make herdr-ssh-setup  - Configura SSH no WSL2 (porta 2222) e importa chaves para o Herdr Desktop"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
@@ -134,9 +135,9 @@ audit:
 	npx -y ecc-agentshield@$(AGENTSHIELD_VERSION) scan --path $(AUDIT_PATH)
 
 lint:
-	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh claude/skills-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh herdr/install.sh herdr/scripts/*.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
+	@for f in install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh claude/skills-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh herdr/install.sh herdr/setup-wsl-ssh.sh herdr/scripts/*.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; do bash -n "$$f" || exit 1; done
 	@if command -v zsh >/dev/null; then zsh -n zsh/ecc-auto.zsh || exit 1; zsh -n zsh/ccr.zsh || exit 1; zsh -n zsh/harness2.zsh || exit 1; fi
-	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh claude/skills-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh herdr/install.sh herdr/scripts/*.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
+	@if command -v shellcheck >/dev/null; then shellcheck -S warning install.sh claude/statusline.sh claude/plugins-freeze.sh claude/ecc-project.sh claude/ecc-detect.sh claude/plugins-project.sh claude/skills-project.sh vendor/ecc/fetch-upstream.sh claude/hooks/*.sh ccr/install.sh traycer/install.sh traycer/install_guide.sh traycer/install_agy_wrapper.sh obsidian/install.sh herdr/install.sh herdr/setup-wsl-ssh.sh herdr/scripts/*.sh bin/llm-serve bin/llm-ask bin/llm-batch bin/sb bin/pc-ctl bin/dotfiles-version .github/scripts/next-version.sh bin/ha-deploy homeassistant/setup-mcp.sh tailscale/install.sh antigravity/install.sh antigravity/render_config.sh antigravity/hooks/*.sh harness2/install.sh lib/*.sh tests/*.sh; else echo "shellcheck não instalado (componente shellcheck do install.sh)"; fi
 	@for f in claude/settings.json claude/plugins.lock.json opencode/opencode.json antigravity/*.json; do jq empty "$$f" || exit 1; done
 	@python3 -c 'import sys, tomllib; [tomllib.load(open(f, "rb")) for f in sys.argv[1:]]' codex/config.base.toml codex/yolo.config.toml herdr/config.toml
 	@python3 -m py_compile codex/render_config.py opencode/render_agents.py
@@ -173,6 +174,9 @@ herdr-install:
 
 herdr-update:
 	./herdr/install.sh --update $(VERSION)
+
+herdr-ssh-setup:
+	./herdr/setup-wsl-ssh.sh
 
 harness2-install:
 	./harness2/install.sh
