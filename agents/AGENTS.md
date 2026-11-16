@@ -139,3 +139,18 @@ início da sessão informa o estado.
 - Com o ECC desligado, não invoque agentes `ecc:*` nem skills do plugin; use os `cavecrew-*`, o `Explore` ou a sessão principal.
 - Com o ECC ligado, o teto de 3 agentes por rodada e o contrato de delegação valem acima de qualquer "PROACTIVELY" de agente `ecc:*`.
 - Mudança de estado só vale numa sessão nova (`/reload-plugins` não dispara o SessionStart).
+
+## Comunicação entre agentes (Herdr)
+
+Quando o usuário pedir para enviar mensagens, delegar ou coordenar trabalho entre
+diferentes CLIs de agentes (`agy`, `claude`, `codex`, etc.), **Herdr (`herdr`) é o
+mecanismo padrão** sempre que `HERDR_ENV=1` estiver ativo:
+
+- Descubra os agentes ativos com `herdr agent list` e envie mensagens com
+  `herdr agent prompt <nome-ou-pane-id> "<mensagem>" --wait --timeout 120000`.
+- Leia a resposta com `herdr agent read <nome-ou-pane-id> --source recent-unwrapped --lines 120`.
+- Carregue a skill `herdr` antes de operar panes ou agentes e siga suas regras de
+  segurança (não fechar panes/workspaces que não criou, usar `--no-focus` em
+  trabalho em segundo plano).
+- Fora do Herdr (`HERDR_ENV != 1`), avise o usuário ou use chamada pontual de CLI
+  (`claude -p`) / arquivo compartilhado se solicitado.
