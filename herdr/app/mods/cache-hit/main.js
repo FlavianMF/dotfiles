@@ -134,10 +134,10 @@ export default class CacheHit extends View {
         .when(this.busy, (el) => el.child(svg(SPINNER).size(10).flex_none().text_color(t.working).spin(900))))
       .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(this.error)))
       .when(rows.length === 0, (el) => el.child(div().text_color(t.dim).text_size(11).child("No agents running.")))
-      .children(rows.map((r) => {
+      .child(v_flex().id("cache-list").flex_1().min_h(0).gap(4).overflow_y_scrollbar().children(rows.map((r) => {
         const { a, tok, state, frac } = r;
         const c = color[state];
-        return v_flex().id(`c-${a.address}`).gap(4).px(6).py(4).rounded(5)
+        return v_flex().id(`c-${a.address}`).flex_none().gap(4).px(6).py(4).rounded(5)
           .hover((s) => s.bg(t.hover))
           .on_click(() => run("agent.focus", { terminal: a.address }))
           .child(h_flex().gap(8).items_center().justify_between()
@@ -151,6 +151,6 @@ export default class CacheHit extends View {
             .child(div().flex_1().h(3).rounded(3).bg(t.raised).overflow_hidden()
               .child(div().h(3).rounded(3).bg(c).w(`${Math.round(frac * 100)}%`).transition("width", 600)))
             .child(div().flex_none().text_color(t.dim).text_size(11).child(tok.cache_tokens ?? "")));
-      }));
+      })));
   }
 }
