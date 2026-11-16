@@ -42,6 +42,17 @@
                 "weight": 1
               },
               "min": 90
+            },
+            {
+              "id": "cache-hit",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "min": 90,
+              "content": {
+                "mod": "cache-hit"
+              }
             }
           ]
         },
@@ -142,13 +153,6 @@
                           "port": 5330
                         }
                       }
-                    },
-                    {
-                      "id": "cache-hit",
-                      "type": "block",
-                      "content": {
-                        "mod": "cache-hit"
-                      }
                     }
                   ],
                   "active": "epic",
@@ -165,10 +169,6 @@
                           [
                             "agenttrail",
                             "Agenttrail"
-                          ],
-                          [
-                            "cache-hit",
-                            "Cache"
                           ]
                         ]
                       }
