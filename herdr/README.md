@@ -59,7 +59,7 @@ The configuration in `herdr/config.toml` uses the same bindings as your `tmux/.t
 | **Detach session** | `prefix` + `d` (or `prefix` + `q`) | `bind d detach-client` |
 | **Cycle agents** | `F7` / `F8` | Previous / Next agent |
 
-## Herdr app: layout `traycer` e mod `epic`
+## Herdr app: layout `traycer`
 
 Mods e layouts existem só no **Herdr app** (GUI no Windows), em `%USERPROFILE%\.config\herdr-app`. O TUI (`herdr` 0.9.5) não tem mods. A referência autoritativa é o `AGENTS.md` dessa pasta.
 
@@ -70,14 +70,12 @@ make herdr-app-install               # ou: herdr/install-app.sh [--dry-run]
 O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. Depois, no app, aperte `ctrl-shift-l` para alternar o layout.
 
 - **Layout `traycer`:** clone do `main` com uma coluna `side` à direita.
-  - `lower`: pilha com abas Épico e Agenttrail (mod `lower-tabs` desenha as abas e chama `layout.select`).
-  - `epic`: mod que lista os artifacts do épico Traycer mais recente.
+  - `lower`: pilha com a aba Agenttrail (mod `lower-tabs` desenha as abas e chama `layout.select`).
   - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
   - `cache-hit`: contador de cache dos agentes, abaixo de `filetree` na barra lateral esquerda.
   - `usage`: barra do `over9k-usage` acima da barra de status.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
-- **Mod `epic`:** lê o frontmatter de `~/.traycer/epics/<id>/artifacts/*/index.md` no WSL a cada 5 s. É só leitura. O épico é o dono do artifact modificado por último.
-- **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\epic'` e `herdr-app.exe shot`.
+- **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
 
 ### Mods de terceiros instalados no app

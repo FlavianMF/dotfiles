@@ -42,7 +42,7 @@ help:
 	@echo "  make herdr-install    - Instala o Herdr (multiplexador para agentes) em ~/.local/bin"
 	@echo "  make herdr-update [VERSION=x.y.z] - Fixa a release do Herdr em herdr/VERSION + SHA256"
 	@echo "  make herdr-ssh-setup  - Configura SSH no WSL2 (porta 2222) e importa chaves para o Herdr Desktop"
-	@echo "  make herdr-app-install - Copia o layout traycer e o mod epic para o Herdr app (GUI)"
+	@echo "  make herdr-app-install - Copia o layout traycer e os mods para o Herdr app (GUI)"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"

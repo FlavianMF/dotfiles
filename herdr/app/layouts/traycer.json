@@ -138,13 +138,6 @@
                   "type": "stack",
                   "children": [
                     {
-                      "id": "epic",
-                      "type": "block",
-                      "content": {
-                        "mod": "epic"
-                      }
-                    },
-                    {
                       "id": "agenttrail",
                       "type": "block",
                       "content": {
@@ -155,17 +148,13 @@
                       }
                     }
                   ],
-                  "active": "epic",
+                  "active": "agenttrail",
                   "header": {
                     "content": {
                       "mod": "lower-tabs",
                       "props": {
                         "stack": "lower",
                         "tabs": [
-                          [
-                            "epic",
-                            "Épico"
-                          ],
                           [
                             "agenttrail",
                             "Agenttrail"

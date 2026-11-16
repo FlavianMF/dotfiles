@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala o layout "traycer" e o mod "epic" no Herdr app (GUI).
+# Instala o layout "traycer" e os mods no Herdr app (GUI).
 # Copia, nunca cria symlink: o app grava em ~/.config/herdr-app e roda no Windows.
 # Se o destino já existir e for diferente, guarda <arquivo>.bak.AAAAMMDD-HHMMSS antes.
 # Uso: install-app.sh [--dry-run]
