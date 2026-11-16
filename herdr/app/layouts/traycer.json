@@ -43,6 +43,18 @@
                   "content": {
                     "mod": "filetree"
                   }
+                },
+                {
+                  "id": "agenttrail",
+                  "type": "block",
+                  "content": {
+                    "mod": "agenttrail",
+                    "props": {
+                      "localMachines": [
+                        "wsl"
+                      ]
+                    }
+                  }
                 }
               ],
               "header": {
@@ -59,6 +71,10 @@
                       [
                         "filetree",
                         "Arquivos"
+                      ],
+                      [
+                        "agenttrail",
+                        "Agenttrail"
                       ]
                     ]
                   }
@@ -153,58 +169,6 @@
               "size": {
                 "weight": 3
               }
-            },
-            {
-              "id": "side",
-              "type": "column",
-              "children": [
-                {
-                  "id": "lower",
-                  "type": "stack",
-                  "children": [
-                    {
-                      "id": "agenttrail",
-                      "type": "block",
-                      "content": {
-                        "mod": "agenttrail",
-                        "props": {
-                          "localMachines": [
-                            "wsl"
-                          ]
-                        }
-                      }
-                    }
-                  ],
-                  "active": "agenttrail",
-                  "header": {
-                    "content": {
-                      "mod": "lower-tabs",
-                      "props": {
-                        "stack": "lower",
-                        "tabs": [
-                          [
-                            "agenttrail",
-                            "Agenttrail"
-                          ]
-                        ]
-                      }
-                    },
-                    "reveal": "always",
-                    "height": 30,
-                    "position": "top"
-                  },
-                  "size": {
-                    "weight": 1
-                  },
-                  "min": 140
-                }
-              ],
-              "size": {
-                "weight": 2
-              },
-              "min": 360,
-              "max": 900,
-              "gap": 8
             },
             {
               "id": "panel",

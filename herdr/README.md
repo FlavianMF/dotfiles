@@ -69,8 +69,8 @@ make herdr-app-install               # ou: herdr/install-app.sh [--dry-run]
 
 O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. Depois, reabra o app para ler layout e mods novos. O `ctrl-shift-l` só alterna entre layouts, não recarrega.
 
-- **Layout `traycer`:** clone do `main` com uma coluna `side` à direita.
-  - `lower`: pilha com a aba Agenttrail (mod `lower-tabs` desenha as abas e chama `layout.select`).
+- **Layout `traycer`:** clone do `main` com abas extras na barra lateral esquerda.
+  - `agenttrail`: aba `Agenttrail` na pilha `left-tabs` da barra lateral esquerda, ao lado de `Projetos` e `Arquivos`.
   - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
   - `cache-hit`: contador de cache dos agentes, abaixo de `filetree` na barra lateral esquerda.
   - `usage`: barra do `over9k-usage` acima da barra de status.
