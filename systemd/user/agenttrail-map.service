@@ -1,0 +1,12 @@
+[Unit]
+Description=Agenttrail Map (porta 5330, lida pelo painel do Herdr)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dotfiles
+ExecStart=/usr/bin/bash -c '. "$HOME/.nvm/nvm.sh" && exec npx -y agenttrail@0.4.1 "$HOME/dotfiles" --no-open'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
