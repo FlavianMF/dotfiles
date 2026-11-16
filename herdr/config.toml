@@ -25,9 +25,10 @@ extra_prefixes = ["ctrl+b"]
 reload_config = "prefix+r"
 
 # Window / Tab management (tmux: c, n, p, 1..9, &)
+# Includes Alt+Shift+Left/Right for repeatable tab switching without prefix
 new_tab = "prefix+c"
-next_tab = "prefix+n"
-previous_tab = "prefix+p"
+next_tab = ["prefix+n", "alt+shift+right"]
+previous_tab = ["prefix+p", "alt+shift+left"]
 switch_tab = "prefix+1..9"
 close_tab = ["prefix+shift+x", "prefix+ampersand"]
 
@@ -36,18 +37,26 @@ split_vertical = "prefix+v"
 split_horizontal = "prefix+minus"
 
 # Vim navigation between panes (tmux: h, j, k, l)
-focus_pane_left = "prefix+h"
-focus_pane_down = "prefix+j"
-focus_pane_up = "prefix+k"
-focus_pane_right = "prefix+l"
+# Includes Alt+h/j/k/l for fast direct pane navigation outside Neovim
+focus_pane_left = ["prefix+h", "alt+h"]
+focus_pane_down = ["prefix+j", "alt+j"]
+focus_pane_up = ["prefix+k", "alt+k"]
+focus_pane_right = ["prefix+l", "alt+l"]
 cycle_pane_next = "prefix+tab"
 cycle_pane_previous = "prefix+shift+tab"
 
 # Pane resizing with vim motions (tmux: bind -r H/J/K/L resize-pane 5)
-resize_pane_left = "prefix+shift+h"
-resize_pane_down = "prefix+shift+j"
-resize_pane_up = "prefix+shift+k"
-resize_pane_right = "prefix+shift+l"
+# resize_mode enables modal repeatable resizing (h/j/k/l repeatedly until Esc/Enter)
+# Direct chords (Alt+Shift+H/J/K/L) allow rapid repeating without prefix
+resize_mode = "prefix+shift+r"
+resize_pane_left = ["prefix+shift+h", "alt+shift+h", "ctrl+shift+alt+left"]
+resize_pane_down = ["prefix+shift+j", "alt+shift+j", "ctrl+shift+alt+down"]
+resize_pane_up = ["prefix+shift+k", "alt+shift+k", "ctrl+shift+alt+up"]
+resize_pane_right = ["prefix+shift+l", "alt+shift+l", "ctrl+shift+alt+right"]
+
+# Vi Copy mode & Scrollback (tmux: prefix+[ and vi mode)
+copy_mode = "prefix+["
+edit_scrollback = "prefix+e"
 
 # Pane controls (tmux: z for zoom, x for kill-pane)
 zoom = "prefix+z"
@@ -66,13 +75,30 @@ navigate_pane_right = "l"
 previous_agent = "f7"
 next_agent = "f8"
 
+# 3-column layout shortcuts (tmux: prefix+T and prefix+E via layout-3col.sh)
+[[keys.command]]
+key = "prefix+shift+t"
+type = "shell"
+command = "$HOME/.config/herdr/scripts/layout-3col.sh new"
+
+[[keys.command]]
+key = "prefix+shift+e"
+type = "shell"
+command = "$HOME/.config/herdr/scripts/layout-3col.sh apply"
+
 [ui]
 # Sort agents by priority (blocked -> working -> done -> idle)
 agent_panel_sort = "priority"
 window_title = "herdr · {terminal_title}"
+copy_on_select = true
+mouse_scroll_lines = 3
 
 [ui.toast]
 delivery = "herdr"
+
+[ui.toast.clipboard]
+enabled = true
+position = "bottom-center"
 
 [ui.sidebar.agents]
 rows = [
