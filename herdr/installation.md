@@ -173,6 +173,11 @@ Once the WSL machine is connected in Herdr Desktop:
    agy
    ```
 4. **Agent Monitoring:** Herdr detects agent states (*idle*, *working*, *blocked*, *done*) and displays indicators on the sidebar tabs.
+5. **Keybindings & Tmux Parity:**
+   - **Pane Navigation:** `Ctrl+h` / `Ctrl+j` / `Ctrl+k` / `Ctrl+l` (or `Alt+h/j/k/l`) moves focus across panes and Neovim splits.
+   - **Tab Navigation:** `Ctrl+Shift+Left` / `Ctrl+Shift+Right` (or `Alt+Shift+Left/Right`).
+   - **Pane Splitting & Controls:** `Alt+v` (vertical), `Alt+-` (horizontal), `Alt+z` (zoom), `Alt+x` (close pane).
+   - **Windows GUI Configuration:** Herdr Desktop on Windows reads keybindings directly from `%USERPROFILE%\.config\herdr-app\keys.json` with instant live hot-reloading.
 
 ---
 

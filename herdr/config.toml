@@ -25,10 +25,10 @@ extra_prefixes = ["ctrl+b"]
 reload_config = "prefix+r"
 
 # Window / Tab management (tmux: c, n, p, 1..9, &)
-# Includes Alt+Shift+Left/Right for repeatable tab switching without prefix
+# Includes Alt+Shift+Left/Right and Ctrl+Shift+Left/Right for repeatable tab switching without prefix
 new_tab = "prefix+c"
-next_tab = ["prefix+n", "alt+shift+right"]
-previous_tab = ["prefix+p", "alt+shift+left"]
+next_tab = ["prefix+n", "alt+shift+right", "ctrl+shift+right"]
+previous_tab = ["prefix+p", "alt+shift+left", "ctrl+shift+left"]
 switch_tab = "prefix+1..9"
 close_tab = ["prefix+shift+x", "prefix+ampersand"]
 
@@ -37,11 +37,11 @@ split_vertical = "prefix+v"
 split_horizontal = "prefix+minus"
 
 # Vim navigation between panes (tmux: h, j, k, l)
-# Includes Alt+h/j/k/l for fast direct pane navigation outside Neovim
-focus_pane_left = ["prefix+h", "alt+h"]
-focus_pane_down = ["prefix+j", "alt+j"]
-focus_pane_up = ["prefix+k", "alt+k"]
-focus_pane_right = ["prefix+l", "alt+l"]
+# Includes Alt+h/j/k/l and Ctrl+h/j/k/l for fast direct pane navigation outside Neovim
+focus_pane_left = ["prefix+h", "alt+h", "ctrl+h"]
+focus_pane_down = ["prefix+j", "alt+j", "ctrl+j"]
+focus_pane_up = ["prefix+k", "alt+k", "ctrl+k"]
+focus_pane_right = ["prefix+l", "alt+l", "ctrl+l"]
 cycle_pane_next = "prefix+tab"
 cycle_pane_previous = "prefix+shift+tab"
 
@@ -49,10 +49,10 @@ cycle_pane_previous = "prefix+shift+tab"
 # resize_mode enables modal repeatable resizing (h/j/k/l repeatedly until Esc/Enter)
 # Direct chords (Alt+Shift+H/J/K/L) allow rapid repeating without prefix
 resize_mode = "prefix+shift+r"
-resize_pane_left = ["prefix+shift+h", "alt+shift+h", "ctrl+shift+alt+left"]
-resize_pane_down = ["prefix+shift+j", "alt+shift+j", "ctrl+shift+alt+down"]
-resize_pane_up = ["prefix+shift+k", "alt+shift+k", "ctrl+shift+alt+up"]
-resize_pane_right = ["prefix+shift+l", "alt+shift+l", "ctrl+shift+alt+right"]
+resize_pane_left = ["prefix+shift+h", "alt+shift+h", "ctrl+shift+h", "ctrl+shift+alt+left"]
+resize_pane_down = ["prefix+shift+j", "alt+shift+j", "ctrl+shift+j", "ctrl+shift+alt+down"]
+resize_pane_up = ["prefix+shift+k", "alt+shift+k", "ctrl+shift+k", "ctrl+shift+alt+up"]
+resize_pane_right = ["prefix+shift+l", "alt+shift+l", "ctrl+shift+l", "ctrl+shift+alt+right"]
 
 # Vi Copy mode & Scrollback (tmux: prefix+[ and vi mode)
 copy_mode = "prefix+["

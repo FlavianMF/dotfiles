@@ -40,12 +40,12 @@ The configuration in `herdr/config.toml` uses the same bindings as your `tmux/.t
 | **Prefix key** | `Ctrl+Space` (or `Ctrl+B`) | `set -g prefix C-Space` |
 | **Reload config** | `prefix` + `r` | `bind r source-file ~/.tmux.conf` |
 | **New tab (window)** | `prefix` + `c` | `bind c new-window` |
-| **Next / Prev tab** | `prefix` + `n` / `prefix` + `p` (or `Alt+Shift+Right/Left`) | `bind -r n` / `bind -r p` |
+| **Next / Prev tab** | `prefix` + `n` / `prefix` + `p` (or `Ctrl/Alt+Shift+Right/Left`) | `bind -r n` / `bind -r p` |
 | **Switch tab** | `prefix` + `1..9` | `select-window -t 1..9` |
 | **Close tab** | `prefix` + `&` (or `prefix` + `Shift+x`) | `bind & kill-window` |
 | **Split vertical (right)** | `prefix` + `v` | Split pane vertical |
 | **Split horizontal (down)** | `prefix` + `-` | Split pane horizontal |
-| **Pane navigation (Vim)** | `prefix` + `h` / `j` / `k` / `l` (or `Alt` + `h/j/k/l`) | Vim-tmux-navigator (`select-pane -L/-D/-U/-R`) |
+| **Pane navigation (Vim)** | `prefix` + `h` / `j` / `k` / `l` (or `Ctrl` / `Alt` + `h/j/k/l`) | Vim-tmux-navigator (`select-pane -L/-D/-U/-R`) |
 | **Seamless Neovim nav** | `Ctrl+h` / `j` / `k` / `l` in Neovim | Seamless jump across Neovim splits and Herdr panes |
 | **Cycle panes** | `prefix` + `Tab` / `prefix` + `Shift+Tab` | Cycle panes |
 | **Resize panes (Vim)** | `prefix` + `H` / `J` / `K` / `L` (or `Alt+Shift+H/J/K/L`) | `bind -r H/J/K/L resize-pane 5` |
