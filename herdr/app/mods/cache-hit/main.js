@@ -9,7 +9,19 @@
 // shim refuses to type into terminals, so the cache warmer cannot run here.
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, appHome, exec, home, readTextFile, run, setShared, shared, theme } from "herdr";
+import { svg, image } from "gpui-kit";
+import { agents, appHome, exec, home, readTextFile, run, setShared, shared, terminals, theme } from "herdr";
+
+const CLOCK = "mods/workspace-chrome/clock.svg";
+const SPINNER = "mods/workspace-chrome/spinner.svg";
+const EXPIRING_SECS = 300; // under 5 minutes: warn
+
+// "42 min", "3 min", "50 s", "1 h 05"
+function fmtLeft(secs) {
+  if (secs < 60) return `${Math.max(0, Math.floor(secs))} s`;
+  const m = Math.floor(secs / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}
 
 const SCAN_MS = 15000;
 // "C:\\Users\\User" -> "/mnt/c/Users/User"
@@ -91,24 +103,54 @@ export default class CacheHit extends View {
   render() {
     const t = theme();
     const now = Date.now();
-    const color = { hot: t.done, expiring: t.blocked, unknown: t.dim, cold: t.dim };
+    const progs = Object.fromEntries(terminals().map((k) => [k.address, k.program]));
     const rows = agents().map((a) => {
       const m = this.meta[a.address];
       const tok = m && m.expires_ms > now ? m.tokens : {};
-      const remaining = Number(tok.cache_remaining_secs);
-      const deadline = Number.isFinite(remaining) && remaining > 0 ? remaining : Infinity;
-      return { a, tok, deadline };
-    }).sort((x, y) => x.deadline - y.deadline);
+      // Remaining time comes from the absolute deadline, so it stays right between scans.
+      const dl = Number(tok.cache_deadline);
+      const left = dl > 0 ? dl - now / 1000 : Number(tok.cache_remaining_secs) || 0;
+      const known = Boolean(tok.cache_state) && tok.cache_state !== "unknown";
+      const state = !known ? "unknown" : left <= 0 ? "cold" : left < EXPIRING_SECS ? "expiring" : "hot";
+      const ttl = left > EXPIRING_SECS ? 3600 : EXPIRING_SECS; // 1 h or 5 min cache
+      return { a, tok, left, state, frac: state === "unknown" ? 0 : Math.max(0, Math.min(1, left / ttl)) };
+    }).sort((x, y) => (x.state === "unknown" || x.state === "cold" ? 1e9 : x.left) - (y.state === "unknown" || y.state === "cold" ? 1e9 : y.left));
+    const color = { hot: t.done, expiring: t.blocked, cold: t.ansi1, unknown: t.dim };
+    const icon = (prog) => prog?.icon
+      ? (prog.tint ? svg(prog.icon).size(14).flex_none().text_color(t.foreground) : image(prog.icon).w(14).h(14).flex_none())
+      : svg("icons/shell.svg").size(14).flex_none().text_color(t.foreground);
+    const status = (state) => {
+      const c = color[state];
+      const clock = svg(CLOCK).size(11).flex_none().text_color(c);
+      if (state === "expiring") return clock.loop("opacity", { from: 0.3, to: 1, period: 800 });
+      if (state === "cold") return svg(CLOCK).size(11).flex_none().text_color(c);
+      return clock;
+    };
+    const label = (r) => r.state === "cold" ? "expired" : r.state === "unknown" ? "–" : `${fmtLeft(r.left)}`;
     return v_flex().size_full().bg(t.chrome).p(10).gap(4).text_size(12.5).text_color(t.foreground)
-      .child(div().text_color(t.muted).text_size(11).child("PROMPT CACHE"))
+      .child(h_flex().gap(6).items_center()
+        .child(svg(CLOCK).size(11).flex_none().text_color(t.muted))
+        .child(div().text_color(t.muted).text_size(11).child("PROMPT CACHE"))
+        .when(this.busy, (el) => el.child(svg(SPINNER).size(10).flex_none().text_color(t.working).spin(900))))
       .when(Boolean(this.error), (el) => el.child(div().text_color(t.blocked).child(this.error)))
-      .children(rows.map(({ a, tok }) =>
-        h_flex().id(`c-${a.address}`).gap(8).px(6).py(3).rounded(5).justify_between()
+      .when(rows.length === 0, (el) => el.child(div().text_color(t.dim).text_size(11).child("No agents running.")))
+      .children(rows.map((r) => {
+        const { a, tok, state, frac } = r;
+        const c = color[state];
+        return v_flex().id(`c-${a.address}`).gap(4).px(6).py(4).rounded(5)
           .hover((s) => s.bg(t.hover))
           .on_click(() => run("agent.focus", { terminal: a.address }))
-          .child(v_flex().flex_1().min_w(0)
-            .child(div().truncate().child(`${a.space_name} / ${a.tab_name || a.tab_index}`))
-            .child(div().truncate().text_color(t.dim).text_size(11).child(`${a.app ?? "agent"} · ${a.address}`)))
-          .child(div().text_color(color[tok.cache_state] ?? t.dim).child(tok.cache ?? "–"))));
+          .child(h_flex().gap(8).items_center().justify_between()
+            .child(h_flex().gap(6).items_center().flex_1().min_w(0)
+              .child(icon(progs[a.address]))
+              .child(div().truncate().text_color(state === "cold" || state === "unknown" ? t.muted : t.foreground).child(`${a.space_name} / ${a.tab_name || a.tab_index}`)))
+            .child(h_flex().gap(4).items_center().flex_none()
+              .child(status(state))
+              .child(div().text_color(c).text_size(12).font_semibold().child(label(r)))))
+          .child(h_flex().gap(8).items_center()
+            .child(div().flex_1().h(3).rounded(3).bg(t.raised).overflow_hidden()
+              .child(div().h(3).rounded(3).bg(c).w(`${Math.round(frac * 100)}%`).transition("width", 600)))
+            .child(div().flex_none().text_color(t.dim).text_size(11).child(tok.cache_tokens ?? "")));
+      }));
   }
 }
