@@ -75,6 +75,8 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - `cache-hit`: contador de cache dos agentes, abaixo de `filetree` na barra lateral esquerda.
   - `usage`: barra do `over9k-usage` acima da barra de status.
   - `usage-limits`: limites do Claude/Codex na linha da barra de status, ao lado do `workspace-status`.
+  - Integração com o over9k: `over9k-tabs` no lugar de `tabs` (botões To-do e Timeline, botões de janela), `over9k-todos` e `over9k-prompts` no painel direito, `over9k-footer` no rodapé da sidebar e `terminal_menu: over9k-menu` (lançar, retomar e fechar agentes).
+  - Teclas (`keys/over9k.json`, seções `layout:traycer` e `layout:over9k`): `ctrl-tab` abre o Switcher e `ctrl-shift-w` fecha a aba com confirmação. O `ctrl-shift-x` continua como `pane.close`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
