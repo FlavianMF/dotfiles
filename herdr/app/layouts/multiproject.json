@@ -503,10 +503,7 @@
               "id": "todo",
               "type": "block",
               "content": {
-                "mod": "cockpit",
-                "props": {
-                  "app": "todo"
-                }
+                "mod": "over9k-todos"
               },
               "radius": 10,
               "border": {

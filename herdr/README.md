@@ -85,6 +85,10 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Use um space por projeto e um agente por pane. A vista `home` do cockpit mostra PRs e CI. O `To-do` do cockpit e o `todo` do Herdr são listas diferentes.
   - Teclas: `keys/multiproject.json` junta as teclas do cockpit (`ctrl-alt-*`) com `ctrl-tab` (Switcher) e `ctrl-shift-w` (fecha a aba).
   - Não inclui o painel `skillshare`. O binário `cockpit` roda no WSL, como no layout `cockpit`.
+  - **To-do integrado:** a vista `todo` do cockpit (`ctrl-alt-3` e o botão da sidebar) é o mod `over9k-todos`. O over9k é a fonte: todos os projetos, e o comando `todo` dos agentes.
+  - **Espelho para o cockpit:** o `todo.sh` ganhou o subcomando `todo mirror`, chamado ao sair de `add`, `done`, `undo`, `edit`, `rm` e `clear`. O mod também o chama depois de gravar uma lista no WSL. Ele grava os itens abertos e os feitos hoje em `~/.config/cockpit/todo.md`, com o projeto no fim da linha. A `home` e a paleta do cockpit leem esse arquivo.
+  - O espelho é de uma via: o `todo.md` é sobrescrito. Um `todo.md` que não é do espelho vai para `todo.md.bak.<data>`. Desligue com `COCKPIT_TODO_MIRROR=off`.
+  - O espelho perde o prazo (`due`) dos itens. Itens editados direto no `todo.md` não voltam ao over9k.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
 
