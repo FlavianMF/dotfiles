@@ -67,7 +67,7 @@ Mods e layouts existem só no **Herdr app** (GUI no Windows), em `%USERPROFILE%\
 make herdr-app-install               # ou: herdr/install-app.sh [--dry-run]
 ```
 
-O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. Depois, reabra o app para ler layout e mods novos. O `ctrl-shift-l` só alterna entre layouts, não recarrega.
+O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferir. No WSL, ele também copia `herdr/bin/herdr-app` para `~/.local/bin/herdr-app`, um wrapper de `herdr-app.exe`. O hook e o hub do cockpit chamam `herdr-app`, e sem o wrapper a lista `Agents` do sidebar fica vazia. Depois, reabra o app para ler layout e mods novos. O `ctrl-shift-l` só alterna entre layouts, não recarrega.
 
 - **Layout `traycer`:** clone do `main` com abas extras na barra lateral esquerda.
   - `agenttrail`: aba `Agenttrail` na pilha `left-tabs` da barra lateral esquerda, ao lado de `Projetos` e `Arquivos`.

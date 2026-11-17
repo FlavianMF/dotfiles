@@ -61,6 +61,14 @@ if [[ -d "$keys_src" && -f "$dest/keys.json" ]] && command -v jq >/dev/null 2>&1
     done
 fi
 
+# WSL: o hook e o hub do cockpit chamam `herdr-app`, e o Windows só tem herdr-app.exe. O wrapper vai, por cópia, para ~/.local/bin.
+# Sem ele o hook grava pane: null e a lista Agents do sidebar fica vazia.
+if command -v herdr-app.exe >/dev/null 2>&1; then
+    wrapper="$HOME/.local/bin/herdr-app"
+    [[ -L "$wrapper" ]] && { echo "troca:   $wrapper (link vira cópia)"; (( dry )) || rm -f "$wrapper"; }
+    copy_file "$(dirname "$src")/bin/herdr-app" "$wrapper"
+fi
+
 echo "destino: $dest"
 (( dry )) && echo "(dry-run: nada foi alterado)"
 exit 0
