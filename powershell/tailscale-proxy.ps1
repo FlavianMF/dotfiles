@@ -34,7 +34,9 @@ switch ($Action) {
     }
     "browser" {
         $Exe = if ($Browser -eq "msedge") { "msedge.exe" } else { "chrome.exe" }
+        $ProfileDir = Join-Path $env:TEMP "$Browser-proxy"
         Start-Process $Exe -ArgumentList @(
+            "--user-data-dir=$ProfileDir",
             "--proxy-server=socks5://$ProxyAddr",
             "--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1"
         )
