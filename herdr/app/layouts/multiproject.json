@@ -395,81 +395,59 @@
                   "resizable": false,
                   "children": [
                     {
-                      "id": "panel-top",
-                      "type": "row",
-                      "size": {
-                        "weight": 2
-                      },
-                      "padding": 0,
-                      "gap": 0,
+                      "id": "panel-body",
+                      "type": "stack",
+                      "active": "show",
                       "children": [
                         {
-                          "id": "panel-body",
-                          "type": "stack",
-                          "active": "show",
-                          "children": [
-                            {
-                              "id": "show",
-                              "type": "block",
-                              "content": {
-                                "mod": "cockpit",
-                                "props": {
-                                  "app": "show"
-                                }
-                              }
-                            },
-                            {
-                              "id": "review",
-                              "type": "block",
-                              "content": {
-                                "mod": "cockpit",
-                                "props": {
-                                  "app": "review"
-                                }
-                              }
-                            },
-                            {
-                              "id": "runbook-panel",
-                              "type": "block",
-                              "content": {
-                                "mod": "cockpit",
-                                "props": {
-                                  "app": "runbook",
-                                  "scope": "focused"
-                                }
-                              }
-                            },
-                            {
-                              "id": "files",
-                              "type": "block",
-                              "content": {
-                                "mod": "files"
-                              }
-                            },
-                            {
-                              "id": "changes",
-                              "type": "block",
-                              "content": {
-                                "mod": "changes"
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "id": "activity",
+                          "id": "show",
                           "type": "block",
-                          "size": {
-                            "px": 44
-                          },
                           "content": {
                             "mod": "cockpit",
                             "props": {
-                              "app": "activity",
-                              "stack": "panel-body"
+                              "app": "show"
                             }
                           }
+                        },
+                        {
+                          "id": "review",
+                          "type": "block",
+                          "content": {
+                            "mod": "cockpit",
+                            "props": {
+                              "app": "review"
+                            }
+                          }
+                        },
+                        {
+                          "id": "runbook-panel",
+                          "type": "block",
+                          "content": {
+                            "mod": "cockpit",
+                            "props": {
+                              "app": "runbook",
+                              "scope": "focused"
+                            }
+                          }
+                        },
+                        {
+                          "id": "files",
+                          "type": "block",
+                          "content": {
+                            "mod": "files"
+                          }
+                        },
+                        {
+                          "id": "changes",
+                          "type": "block",
+                          "content": {
+                            "mod": "changes"
+                          }
                         }
-                      ]
+                      ],
+                      "size": {
+                        "weight": 2
+                      }
                     },
                     {
                       "id": "panel-over9k",
@@ -520,6 +498,20 @@
                     }
                   ],
                   "shadow": "sm"
+                },
+                {
+                  "id": "activity",
+                  "type": "block",
+                  "size": {
+                    "px": 44
+                  },
+                  "content": {
+                    "mod": "cockpit",
+                    "props": {
+                      "app": "activity",
+                      "stack": "panel-body"
+                    }
+                  }
                 }
               ]
             },
