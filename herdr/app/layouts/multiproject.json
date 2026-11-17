@@ -64,12 +64,19 @@
             {
               "id": "left-tabs",
               "type": "stack",
-              "active": "cockpit-agents",
+              "active": "over9k",
               "size": {
                 "weight": 2
               },
               "min": 160,
               "children": [
+                {
+                  "id": "over9k",
+                  "type": "block",
+                  "content": {
+                    "mod": "over9k"
+                  }
+                },
                 {
                   "id": "cockpit-agents",
                   "type": "block",
@@ -78,13 +85,6 @@
                     "props": {
                       "app": "sidebar"
                     }
-                  }
-                },
-                {
-                  "id": "over9k",
-                  "type": "block",
-                  "content": {
-                    "mod": "over9k"
                   }
                 },
                 {
@@ -125,12 +125,12 @@
                     "bg": "chrome",
                     "tabs": [
                       [
-                        "cockpit-agents",
-                        "Agentes"
-                      ],
-                      [
                         "over9k",
                         "Projetos"
+                      ],
+                      [
+                        "cockpit-agents",
+                        "Agentes"
                       ],
                       [
                         "filetree",

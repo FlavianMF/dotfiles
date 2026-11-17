@@ -80,7 +80,8 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
 - **Layout `multiproject`:** base do layout `cockpit`, com as abas do `traycer`. O `traycer` continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
   - Parte do `cockpit.json` porque o mod `cockpit` exige o stack `center` (vistas `home`, `work`, `inbox`, `todo` e outras), a sidebar, o sino e a barra de status. Como aba solta num layout derivado do `traycer`, ele falha com "don't have a center stack named home".
-  - A sidebar esquerda tem as abas `Agentes` (cockpit), `Projetos` (over9k, todos os spaces), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`.
+  - A sidebar esquerda tem as abas `Projetos` (over9k, todos os spaces, ativa por padrão), `Agentes` (cockpit), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`.
+  - **Switcher:** o `ctrl-tab` só funciona com a aba `Projetos` ativa. O comando `over9k.switcher` vive na instância do mod `over9k`, e o app não carrega o mod de uma aba inativa. Com `Agentes` ativa, o comando não existe. Volte para `Projetos` para usar o `ctrl-tab`.
   - A barra `over9k-usage` fica acima da barra de status do cockpit.
   - Use um space por projeto e um agente por pane. A vista `home` do cockpit mostra PRs e CI. O `To-do` do cockpit e o `todo` do Herdr são listas diferentes.
   - Teclas: `keys/multiproject.json` junta as teclas do cockpit (`ctrl-alt-*`) com `ctrl-tab` (Switcher) e `ctrl-shift-w` (fecha a aba).
