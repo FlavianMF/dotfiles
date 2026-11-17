@@ -6,9 +6,5 @@
   "layout:traycer": {
     "ctrl-tab": "over9k.switcher",
     "ctrl-shift-w": "over9k.close-tab"
-  },
-  "layout:multiproject": {
-    "ctrl-tab": "over9k.switcher",
-    "ctrl-shift-w": "over9k.close-tab"
   }
 }

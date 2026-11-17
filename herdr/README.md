@@ -78,12 +78,13 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Integração com o over9k: `over9k-tabs` no lugar de `tabs` (botões To-do e Timeline, botões de janela), `over9k-todos` e `over9k-prompts` no painel direito, `over9k-footer` no rodapé da sidebar e `terminal_menu: over9k-menu` (lançar, retomar e fechar agentes).
   - Teclas (`keys/over9k.json`, seções `layout:traycer` e `layout:over9k`): `ctrl-tab` abre o Switcher e `ctrl-shift-w` fecha a aba com confirmação. O `ctrl-shift-x` continua como `pane.close`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
-- **Layout `multiproject`:** derivado do `traycer`, que continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
-  - Use um space por projeto e um agente por pane. A aba `Projetos` lista os agentes de todos os spaces.
-  - O layout não inclui o mod `cockpit`. Ele exige um stack `center` com as vistas `home`, `work` e `inbox`, que só o layout `cockpit` tem. Para PRs e CI, troque para o layout `cockpit` com `ctrl-shift-l`.
-  - O painel direito abre no `To-do`, porque cada projeto tem a própria lista.
-  - `ctrl-tab` abre o Switcher entre os agentes de todos os spaces. As teclas vêm da seção `layout:multiproject` de `keys/over9k.json`.
-  - O layout não inclui o painel `skillshare` nem o botão dele. Use o `traycer` para isso.
+- **Layout `multiproject`:** base do layout `cockpit`, com as abas do `traycer`. O `traycer` continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
+  - Parte do `cockpit.json` porque o mod `cockpit` exige o stack `center` (vistas `home`, `work`, `inbox`, `todo` e outras), a sidebar, o sino e a barra de status. Como aba solta num layout derivado do `traycer`, ele falha com "don't have a center stack named home".
+  - A sidebar esquerda tem as abas `Agentes` (cockpit), `Projetos` (over9k, todos os spaces), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`.
+  - A barra `over9k-usage` fica acima da barra de status do cockpit.
+  - Use um space por projeto e um agente por pane. A vista `home` do cockpit mostra PRs e CI. O `To-do` do cockpit e o `todo` do Herdr são listas diferentes.
+  - Teclas: `keys/multiproject.json` junta as teclas do cockpit (`ctrl-alt-*`) com `ctrl-tab` (Switcher) e `ctrl-shift-w` (fecha a aba).
+  - Não inclui o painel `skillshare`. O binário `cockpit` roda no WSL, como no layout `cockpit`.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
 
