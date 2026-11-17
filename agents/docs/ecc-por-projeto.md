@@ -1,14 +1,20 @@
 # ECC por projeto
 
-O plugin `ecc@ecc` custa ~45 mil tokens por sessão; fica desligado no escopo de usuário. Política permanente do
-usuário (2026-10-15): o ECC é ligado **automaticamente** em projetos web, C e backend Node pelo wrapper `claude` do zsh
-(`zsh/ecc-auto.zsh` chama `claude/ecc-project.sh auto` antes de abrir a sessão). A linha `ECC ligado|desligado (...)` no
+O plugin `ecc@ecc` custa ~45 mil tokens por sessão e fica desligado no escopo de usuário.
+Política permanente do usuário (2026-10-15): o wrapper `claude` do zsh liga o ECC
+**automaticamente** em projetos web, C e backend Node (`zsh/ecc-auto.zsh` chama
+`claude/ecc-project.sh auto` antes de abrir a sessão). A linha `ECC ligado|desligado (...)` no
 início da sessão informa o estado.
 
-- O agente nunca roda `make ecc-on|ecc-off|ecc-auto` nem `ecc-project.sh` por conta própria; quem liga é o wrapper ou o usuário.
-- ECC desligado num projeto web/C/Node (sessão aberta fora do wrapper, ou `.claude/ecc.off`): informe e sugira
-  `make ecc-on DIR=...` só se a tarefa se beneficiar; respeite o `ecc.off`. Fora desses tipos, sugira ligar apenas para revisão
-  Go/Java/Kotlin, `orch-review` ou `review-pr`, e desligar no resto.
-- Com o ECC desligado, não invoque agentes `ecc:*` nem skills do plugin; use os `cavecrew-*`, o `Explore` ou a sessão principal.
-- Com o ECC ligado, o teto de 3 agentes por rodada e o contrato de delegação valem acima de qualquer "PROACTIVELY" de agente `ecc:*`.
-- Mudança de estado só vale numa sessão nova (`/reload-plugins` não dispara o SessionStart).
+- **Quem liga:** só o usuário ou o wrapper rodam `make ecc-on|ecc-off|ecc-auto` e
+  `ecc-project.sh`. Peça ao usuário.
+- **Desligado num projeto web, C ou Node** (sessão aberta fora do wrapper, ou
+  `.claude/ecc.off`): informe e sugira `make ecc-on DIR=...` quando a tarefa justificar ~45k
+  tokens. Respeite o `ecc.off`.
+- **Fora desses tipos:** sugira ligar só para revisão Go, Java ou Kotlin, `orch-review` ou
+  `review-pr`. Sugira desligar no resto.
+- **Desligado:** use os `cavecrew-*`, o `Explore` ou a sessão principal.
+- **Ligado:** delegue no máximo 3 agentes por rodada, mesmo que um agente `ecc:*` diga
+  "PROACTIVELY".
+- **Mudança de estado:** vale só numa sessão nova (`/reload-plugins` não dispara o
+  SessionStart).

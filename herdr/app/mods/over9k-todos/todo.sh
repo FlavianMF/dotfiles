@@ -29,22 +29,21 @@ if [ "${1:-}" = --rule ]; then
       tmp="$f.over9k.$$"
       sed '/<!-- over9k:todo -->/,/<!-- \/over9k:todo -->/d' "$f" | awk 'NF { for (; n > 0; n--) print ""; print; next } { n++ }' > "$tmp" && mv "$tmp" "$f"
     fi
-    [ "${2:-}" = on ] && { [ -s "$f" ] && printf '\n'; cat <<'EOF'
+    # ADAPTADO para dotfiles: um arquivo que importa o AGENTS.md (`@...AGENTS.md`) já recebe
+    # a regra por ele. Só a cópia do AGENTS.md é gravada, para não carregar a regra duas vezes.
+    [ "${2:-}" = on ] && ! grep -qE '^@.*AGENTS\.md' "$f" 2>/dev/null && { [ -s "$f" ] && printf '\n'; cat <<'EOF'
 <!-- over9k:todo -->
 ## Project to-do lists (Herdr)
 
-Each project has a to-do list the user sees in Herdr's To-do panel and edits there
-too. Use the `todo` command (it picks the project from the git repo you run it in):
-`todo` lists it, `todo add <text>` adds, `todo done <n>` ticks, `todo rm <n>` deletes,
-`todo all` shows every project's. While request logging is on
-for that project
-(`todo log` says; in Claude Code a note on each message says so), add each thing
-the user asks for in a project (a change, a fix, a feature), even mid-task, as soon
-as you read it, and tick it once it's done and checked; leave it open if it's only
-partly done, and say so. When they change, narrow or drop a request, correct its
-item instead of adding another: `todo edit <n> <new text>` rewords it, `todo rm <n>`
-removes it. When they say to stop or start logging, run `todo log off` / `todo log on` (that project only). Also add an item when the user asks you to note something for later, or
-when you leave follow-up work undone. Keep items short, one line each.
+Each project has a to-do list the user also edits in Herdr's To-do panel. Run `todo --help`
+for the commands; `todo` picks the project from the git repo you run it in.
+While request logging is on for the project (`todo log` says; in Claude Code a note on each
+message says so), add each request as soon as you read it, even mid-task. Tick an item only
+when it is done and checked. Leave it open, and say so, if it is partly done.
+When a request changes, narrows or drops, run `todo edit <n> <new text>` or `todo rm <n>`.
+When the user says to stop or start logging, run `todo log off` or `todo log on` (that project only).
+Also add an item when the user asks you to note something for later, or when you leave
+follow-up work undone. One line per item.
 <!-- /over9k:todo -->
 EOF
     } >> "$f"
