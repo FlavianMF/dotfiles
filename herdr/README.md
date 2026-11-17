@@ -73,14 +73,14 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - `agenttrail`: aba `Agenttrail` na pilha `left-tabs` da barra lateral esquerda, ao lado de `Projetos` e `Arquivos`.
   - `filetree`: árvore de arquivos na barra lateral esquerda, abaixo de `spaces` e `agents`.
   - `cache-hit`: contador de cache dos agentes, abaixo de `filetree` na barra lateral esquerda.
-  - `usage`: barra do `over9k-usage` acima da barra de status.
+  - `usage-limits`: limites do Claude, Codex e agy na linha da barra de status, à direita do status do cockpit.
   - `usage-limits`: limites do Claude/Codex na linha da barra de status, ao lado do `workspace-status`.
   - Integração com o over9k: `over9k-tabs` no lugar de `tabs` (botões To-do e Timeline, botões de janela), `over9k-todos` e `over9k-prompts` no painel direito, `over9k-footer` no rodapé da sidebar e `terminal_menu: over9k-menu` (lançar, retomar e fechar agentes).
   - Teclas (`keys/over9k.json`, seções `layout:traycer` e `layout:over9k`): `ctrl-tab` abre o Switcher e `ctrl-shift-w` fecha a aba com confirmação. O `ctrl-shift-x` continua como `pane.close`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
 - **Layout `multiproject`:** base do layout `cockpit`, com abas e o To-do do over9k. O `traycer` continua igual e é o padrão. O `multiproject` serve aos dias com vários projetos.
   - Parte do `cockpit.json` porque o mod `cockpit` exige o stack `center` (vistas `home`, `work`, `inbox`, `todo` e outras), a sidebar, o sino e a barra de status. Como aba solta num layout derivado do `traycer`, ele falha com "don't have a center stack named home".
-  - **Sidebar esquerda:** abas `Agentes` (cockpit, ativa), `Projetos` (over9k, todos os spaces), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`. A barra `over9k-usage` fica acima da barra de status.
+  - **Sidebar esquerda:** abas `Agentes` (cockpit, ativa), `Projetos` (over9k, todos os spaces), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`. Os limites de uso ficam na barra inferior (`usage-limits`).
   - **Faixa de ícones sempre visível:** a faixa `activity` do cockpit é irmã do `panel` no nó `work`, então continua na tela com o painel fechado. Ela tem 7 botões: `Documents`, `Review`, `Runbook`, `Files`, `Changes`, `To-do` e `Prompts`, mais o botão que fecha o painel. Clicar num botão abre o painel naquela aba. Clicar no botão da aba ativa fecha o painel. `ctrl-alt-b` esconde e mostra.
   - **Painéis direitos separados** (fechados por padrão): `panel` traz o cockpit (`show`, `review`, `runbook`, `files`, `changes`). `panel-todo` traz só o over9k, com `To-do` e `Prompts` (`panel-over9k`). Os botões do cockpit abrem só o `panel`, e `To-do`/`Prompts` abrem só o `panel-todo`. Os dois nunca ficam abertos juntos. O botão de fechar da faixa esconde os dois. `ctrl-alt-b` alterna só o `panel` do cockpit.
   - **Patch no mod vendorizado:** `app/mods/cockpit/activity.js` ganhou os dois botões (`ADAPTADO para dotfiles`) e o clique que abre o painel. O `cockpit update-apps` ou uma atualização do upstream sobrescreve o arquivo: refaça o patch.

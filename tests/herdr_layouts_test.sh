@@ -14,7 +14,7 @@ for f in "$ROOT"/herdr/app/layouts/*.json; do
   bad="$(jq -r '[.. | objects | select(.type? == "stack" and .active? != null) | select(.active as $a | ([.children[]?.id] | index($a)) == null) | "\(.id)->\(.active)"] | join(", ")' "$f")"
   [[ -z "$bad" ]] || { echo "FALHA: $n tem stack com active inexistente: $bad"; fail=1; }
 done
-for id in panel panel-todo; do
+for id in panel panel-todo usage-limits; do
   jq -e --arg i "$id" '[.. | objects | select(.id? == $i)] | length == 1' "$ROOT/herdr/app/layouts/multiproject.json" >/dev/null || { echo "FALHA: multiproject.json sem o nó $id"; fail=1; }
 done
 ((fail)) && exit 1

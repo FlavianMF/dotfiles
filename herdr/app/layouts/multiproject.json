@@ -655,27 +655,37 @@
           "padding": 8
         },
         {
-          "id": "usage",
-          "type": "block",
-          "content": {
-            "mod": "over9k-usage"
-          },
-          "size": {
-            "px": 30
-          }
-        },
-        {
-          "id": "status",
-          "type": "block",
+          "id": "statusbar",
+          "type": "row",
           "size": {
             "px": 34
           },
-          "content": {
-            "mod": "cockpit",
-            "props": {
-              "app": "status"
+          "children": [
+            {
+              "id": "status",
+              "type": "block",
+              "size": {
+                "weight": 1
+              },
+              "content": {
+                "mod": "cockpit",
+                "props": {
+                  "app": "status"
+                }
+              }
+            },
+            {
+              "id": "usage-limits",
+              "type": "block",
+              "content": {
+                "mod": "usage-limits"
+              },
+              "size": {
+                "weight": 2.2
+              },
+              "min": 130
             }
-          }
+          ]
         }
       ]
     }
