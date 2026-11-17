@@ -16,6 +16,7 @@
     "ctrl-alt-shift-3": "cockpit.panel:runbook",
     "ctrl-alt-shift-4": "cockpit.panel:files",
     "ctrl-alt-shift-5": "cockpit.panel:changes",
+    "ctrl-tab": "cockpit.next-waiting",
     "ctrl-alt-j": "cockpit.next-waiting",
     "ctrl-alt-shift-j": "cockpit.next:blocked",
     "ctrl-alt-shift-u": "cockpit.next:done",
