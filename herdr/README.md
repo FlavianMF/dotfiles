@@ -100,6 +100,12 @@ Mods rodam como o seu usuário, sem sandbox. Eu li o código dos commits abaixo 
 
 O `keys.json` ganhou 4 chaves (`ctrl-b` virou `ctrl-space`). O backup está em `keys.json.bak.*` na mesma pasta.
 
+### Ferramentas de terceiros fora do app
+
+| Ferramenta | Versão | Observação |
+| :--- | :--- | :--- |
+| `memex` ([nicosuave/memex](https://github.com/nicosuave/memex), MIT) | `0.34.0` (Homebrew, `brew pin memex`) | Busca e retomada de sessões de Claude, Codex e outros. Instalado com `brew install memex`, sem `curl \| sh`. A config fica em `memex/config.toml`, linkada em `~/.memex/config.toml`: sem embeddings, sem MCP, sem web UI, sem `dream`, e com `[redaction]` ligado. O índice (`~/.memex`, 227 MB) é local. Não instalei o plugin herdr do `memex`, nem a skill, nem o serviço (`brew services`). Use `memex --no-update-check --non-interactive search "<termos>"`. Camada separada do vault (`sb search`): ver a seção "Second brain" do `agents/AGENTS.md`. |
+
 ## Agent Integrations & CLI Control
 
 From a terminal or script:
