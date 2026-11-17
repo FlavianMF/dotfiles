@@ -1,0 +1,43 @@
+diff --git a/hooks/sidebar.ts b/hooks/sidebar.ts
+--- a/hooks/sidebar.ts
++++ b/hooks/sidebar.ts
+@@ -4,7 +4,7 @@ import type { EngineInterface, SessionMeasureInput } from 'claude-code'
+ import { clashWith } from './activity'
+ import { ciMark, notify, readCi } from './ci'
+ import { cacheDir, home, loadConfig } from './config'
+-import { reportFacts } from './facts'
++import { reportFacts, transcriptPath } from './facts'
+ import { appDo, appSpaces, browsersBeside, findTerminal, herdr, hereSoon, inboxSpace, placeHere, placeOf } from './herdr'
+ import type { Here } from './herdr'
+ import { isDeploying, isFailing, isOldReview, ticketKey } from './match'
+@@ -214,6 +214,21 @@ export async function reportSide($: $) {
+   if ((await herdr($, tokenArgs(['pane', 'report-metadata', here.pane, '--source', 'cockpit'], tokens))).exitCode === 0) lastRow = key
+ }
+ 
++// ADAPTADO para dotfiles: o título da própria sessão (/rename vence o título automático), para duas sessões na mesma
++// aba terem cada uma o seu nome na lista Agents. Lido do transcript a cada 10 s no máximo.
++let titleRead = { at: 0, value: null as string | null }
++async function sessionTitle($: $): Promise<string | null> {
++  if (Date.now() - titleRead.at < 10_000) return titleRead.value
++  titleRead = { ...titleRead, at: Date.now() }
++  const cwd = await $.session.cwd()
++  if (!cwd) return titleRead.value
++  const file = transcriptPath(await home($), cwd, await $.session.id())
++  const script = `for k in customTitle aiTitle; do t=$(grep -o "\\"$k\\":\\"[^\\"]*\\"" "$1" 2>/dev/null | tail -1 | cut -d'"' -f4); [ -n "$t" ] && { printf '%s' "$t"; exit 0; }; done`
++  const found = await $.process.run(['sh', '-c', script, 'sh', file], { timeoutMs: 5_000 }).catch(() => undefined)
++  titleRead = { at: Date.now(), value: found?.exitCode === 0 && found.stdout.trim() ? found.stdout.trim() : null }
++  return titleRead.value
++}
++
+ // The app draws the agent's row from the hub's facts: the page beside it and its views.
+ async function reportAppSide($: $, here: Here) {
+   const tabs = (await browsersBeside($, here)).flatMap(b => b.tabs ?? [])
+@@ -221,7 +236,7 @@ async function reportAppSide($: $, here: Here) {
+   const shown = page ? { url: page.url, title: page.title ?? '' } : null
+   if (JSON.stringify(shown) !== JSON.stringify(await read($, sidePage))) await update($, sidePage, () => shown)
+   const open = (await read($, views)).map(v => ({ name: v.name, open: v.isOpen }))
+-  await reportFacts($, here, { page: shown?.url ?? null, pageTitle: shown?.title || null, views: open })
++  await reportFacts($, here, { task: await sessionTitle($), page: shown?.url ?? null, pageTitle: shown?.title || null, views: open })
+ }
+ 
+ let seenAt = Date.now()
