@@ -130,6 +130,7 @@ Dois layouts vendorizados de terceiros, ao lado do `traycer`. O `ctrl-shift-l` c
 | `cockpit` | `COCKPIT_VERSION` (quaresc/cockpit, MIT) | Painel de agentes com PRs, CI, inbox e runbook |
 
 - **over9k:** usa os mods `over9k*` já forkados aqui, mais `over9k-footer`, `over9k-tabs`, `over9k-todos` e `over9k-prompts` do upstream. O `over9k/mod.json` local mantém `place: left` e `size: 268`. As teclas do upstream não entram, porque colidem com o `ctrl-tab` e o `ctrl-shift-w` do `keys.json`.
+- **over9k-todos (adaptado para WSL):** o botão "Let agents keep these lists" checa e grava a regra, o comando `todo` e o hook no WSL (`exec` com `on: "wsl"`), não no Windows. O `setup.sh` vem do `over9k-options` e roda com `sh -c`. O `todo.sh --rule` segue o symlink de `~/.claude/CLAUDE.md` e `~/.codex/AGENTS.md`, para o `mv` não o trocar por arquivo comum. O hook e o wrapper apontam para `/mnt/c/.../herdr-app/mods`, então dependem do Windows montado.
 - **cockpit:** o app roda no Windows e o binário `cockpit` roda no WSL2 (modo "remote desk" do upstream, em preview). O `app/cockpit.json` aponta para a máquina `wsl` em `127.0.0.1`. Isso funciona porque o `.wslconfig` usa `networkingMode=mirrored`.
 - **Teclas do cockpit:** `keys/cockpit.json` troca `cmd` por `ctrl-alt` e entra só na seção `layout:cockpit`. O `install-app.sh` mescla esse arquivo no `keys.json` com backup. Exemplos: `ctrl-alt-p` paleta, `ctrl-alt-0` Home, `ctrl-alt-j` próximo agente em espera. Em teclado ABNT2, `ctrl-alt` é AltGr: se uma tecla digitar caractere, mude-a em `keys/cockpit.json`.
 

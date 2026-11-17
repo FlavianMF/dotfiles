@@ -23,6 +23,8 @@ set -e
 if [ "${1:-}" = --rule ]; then
   for f in "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" "$HOME/.pi/agent/AGENTS.md"; do
     [ -d "$(dirname "$f")" ] || continue
+    # ADAPTADO para dotfiles: segue o symlink, para o mv não trocá-lo por arquivo comum.
+    [ -L "$f" ] && f=$(readlink -f "$f")
     if [ -f "$f" ]; then
       tmp="$f.over9k.$$"
       sed '/<!-- over9k:todo -->/,/<!-- \/over9k:todo -->/d' "$f" | awk 'NF { for (; n > 0; n--) print ""; print; next } { n++ }' > "$tmp" && mv "$tmp" "$f"
