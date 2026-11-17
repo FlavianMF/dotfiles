@@ -59,6 +59,8 @@ const CROSS = () => `${appHome()}/mods/over9k-todos/todo-cross.py`;
 const HERE = { folder: null, machine: null };
 const mOf = (folder) => (folder && folder === HERE.folder ? HERE.machine : null);
 const onM = (m) => (m ? { on: m } : {});
+// ADAPTADO para WSL: a máquina onde os agentes rodam (regra, comando `todo`, hook).
+const AGENT_MACHINE = "wsl";
 // A list there is keyed "@<machine>:<slug>"; this computer's by its slug alone.
 const keyOf = (folder) => (mOf(folder) ? `@${mOf(folder)}:${slugOf(folder)}` : slugOf(folder));
 const machineOf = (key) => (key.startsWith("@") ? key.slice(1, key.indexOf(":")) : null);
@@ -513,23 +515,28 @@ export default class Todos extends View {
   }
 
   // Whether agents know about the lists: the rule in Claude Code's CLAUDE.md.
+  // ADAPTADO para WSL: a regra é checada na máquina dos agentes (WSL), com `on`.
   checkRule(cx) {
-    readTextFile(`${home()}/.claude/CLAUDE.md`).then((text) => {
-      const ok = (text ?? "").includes("<!-- over9k:todo -->");
+    exec("sh", ["-c", 'grep -q "<!-- over9k:todo -->" "$HOME/.claude/CLAUDE.md"'], onM(AGENT_MACHINE)).then((r) => {
+      const ok = r?.code === 0;
       if (ok !== this.ruleOk) { this.ruleOk = ok; cx.notify(); }
     }).catch(() => { if (this.ruleOk) { this.ruleOk = false; cx.notify(); } });
   }
 
+  // ADAPTADO para WSL: setup.sh roda no WSL (sh e jq de lá), lido daqui e passado
+  // com -c, como cross(). O `mods` vira o caminho /mnt/<drive>/... da cópia do app.
   // Sets agents up: the rule, the `todo` command and Claude Code's hook
   // (setup.sh: this mod's own copy, else Over9k Options').
   setUpAgents(cx) {
-    const mods = `${appHome().replace(/\\/g, "/")}/mods`;
+    const win = appHome().replace(/\\/g, "/");
+    const mods = `${win.replace(/^([A-Za-z]):/, (_m, d) => `/mnt/${d.toLowerCase()}`)}/mods`;
     cx.spawn(async (cx) => {
-      let r = await exec("sh", [`${mods}/over9k-todos/setup.sh`, "todo", "on", mods]).catch(() => null);
-      if (r?.code === 127 || r == null || /No such file|can't open/i.test(r?.stderr ?? "")) r = await exec("sh", [`${mods}/over9k-options/setup.sh`, "todo", "on", mods]).catch(() => null);
+      const text = (await readTextFile(`${win}/mods/over9k-todos/setup.sh`).catch(() => null))
+        ?? (await readTextFile(`${win}/mods/over9k-options/setup.sh`).catch(() => null));
+      const r = text ? await exec("sh", ["-c", text, "sh", "todo", "on", mods], onM(AGENT_MACHINE)).catch(() => null) : null;
       notify(r?.code === 0
         ? { title: "Agents can use the to-do lists", body: "New agents get the rule and the todo command (~/.local/bin).", level: "info" }
-        : { title: "Couldn't set up agents", body: (r?.stderr ?? "").trim() || "Needs sh (Git Bash on Windows).", level: "warning" });
+        : { title: "Couldn't set up agents", body: (r?.stderr ?? "").trim() || "Needs sh and jq in WSL.", level: "warning" });
       this.checkRule(cx);
     });
   }
