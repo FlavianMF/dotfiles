@@ -80,7 +80,7 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
 - **Layout `multiproject`:** derivado do `traycer`, que continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
   - Use um space por projeto e um agente por pane. A aba `Projetos` lista os agentes de todos os spaces.
-  - A aba `Cockpit` na barra lateral esquerda mostra PRs, CI e inbox dos repositórios. O mod usa o binário `cockpit` do WSL, como o layout `cockpit`.
+  - O layout não inclui o mod `cockpit`. Ele exige um stack `center` com as vistas `home`, `work` e `inbox`, que só o layout `cockpit` tem. Para PRs e CI, troque para o layout `cockpit` com `ctrl-shift-l`.
   - O painel direito abre no `To-do`, porque cada projeto tem a própria lista.
   - `ctrl-tab` abre o Switcher entre os agentes de todos os spaces. As teclas vêm da seção `layout:multiproject` de `keys/over9k.json`.
   - O layout não inclui o painel `skillshare` nem o botão dele. Use o `traycer` para isso.

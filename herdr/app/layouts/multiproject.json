@@ -65,16 +65,6 @@
                       "sessionHome": "\\\\wsl.localhost\\Ubuntu\\home\\flv"
                     }
                   }
-                },
-                {
-                  "id": "cockpit-side",
-                  "type": "block",
-                  "content": {
-                    "mod": "cockpit",
-                    "props": {
-                      "app": "sidebar"
-                    }
-                  }
                 }
               ],
               "header": {
@@ -99,10 +89,6 @@
                       [
                         "insights",
                         "Insights"
-                      ],
-                      [
-                        "cockpit-side",
-                        "Cockpit"
                       ]
                     ]
                   }
