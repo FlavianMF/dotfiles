@@ -14,6 +14,9 @@ const ITEMS = [
   { name: "runbook", icon: "book", label: "Runbook", key: "⌃⌘3" },
   { name: "files", icon: "folder", label: "Files", key: "⌃⌘4" },
   { name: "changes", icon: "git-commit", label: "Changes", key: "⌃⌘5" },
+  // ADAPTADO para dotfiles (layout multiproject): To-do e Prompts do over9k, no stack `panel-over9k`.
+  { name: "todos", icon: "list-todo", label: "To-do", key: "", stack: "panel-over9k", child: "todos", panel: "panel-todo" },
+  { name: "prompts", icon: "sparkles", label: "Prompts", key: "", stack: "panel-over9k", child: "prompts", panel: "panel-todo" },
 ];
 
 export default class Activity {
@@ -34,10 +37,14 @@ export default class Activity {
 
   render() {
     const k = tokens();
-    const active = findNode(layout(), "panel-body")?.active;
-    const button = (item) => {
-      const child = PANELS[item.name];
-      const on = active === child;
+      const button = (item) => {
+      const stack = item.stack ?? "panel-body";
+      const child = item.child ?? PANELS[item.name];
+      // ADAPTADO: a faixa fica fora do `panel`; o botão ativo é o do stack dele, e só vale com o painel aberto.
+      const target = item.panel ?? "panel";
+      const other = target === "panel" ? "panel-todo" : "panel";
+      const open = !findNode(layout(), target)?.hidden;
+      const on = open && findNode(layout(), stack)?.active === child;
       const badge = shared(`badge.${item.name}`);
       const tone = badge?.tone ? k[badge.tone] ?? badge.tone : k.ring;
       return h_flex()
@@ -50,8 +57,14 @@ export default class Activity {
         .cursor_pointer()
         .text_color(on ? k.foreground : k.mutedFg)
         .hover((s) => s.text_color(k.foreground))
-        .tooltip(`${item.label}  ${item.key}`)
-        .on_click(() => run("layout.select", { stack: "panel-body", child }))
+        .tooltip(item.key ? `${item.label}  ${item.key}` : item.label)
+        // ADAPTADO: o clique abre o painel; no botão já ativo, fecha (a faixa continua visível).
+        .on_click(() => {
+          if (on) return run("layout.hide", { id: target });
+          run("layout.hide", { id: other });
+          run("layout.select", { stack, child });
+          run("layout.show", { id: target });
+        })
         .when(on, (e) => e.child(div().absolute().left(0).top(10).bottom(10).w(2).rounded(1).bg(k.ring)))
         .child(h_flex().size(30).items_center().justify_center().rounded(RADIUS.md).when(on, (e) => e.bg(k.selected)).child(Icon(item.icon, { size: 17 })))
         .when(Boolean(badge?.count), (e) => e.child(CornerCount(badge.count, { tone, top: 4, right: 4 })));
@@ -77,7 +90,10 @@ export default class Activity {
           .text_color(k.mutedFg)
           .hover((s) => s.text_color(k.foreground))
           .tooltip("Close the panel  ⌘⌥B")
-          .on_click(() => run("layout.hide", { id: "panel" }))
+          .on_click(() => {
+            run("layout.hide", { id: "panel" });
+            run("layout.hide", { id: "panel-todo" });
+          })
           .child(Icon("panel-right", { size: 16 })),
       );
   }

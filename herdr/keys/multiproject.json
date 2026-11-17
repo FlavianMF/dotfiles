@@ -1,0 +1,28 @@
+{
+  "layout:multiproject": {
+    "ctrl-alt-p": "cockpit.palette",
+    "ctrl-alt-0": "cockpit.home",
+    "ctrl-alt-1": "cockpit.go:inbox",
+    "ctrl-alt-2": "cockpit.go:runbook",
+    "ctrl-alt-3": "cockpit.go:todo",
+    "ctrl-alt-4": "cockpit.go:meetings",
+    "ctrl-alt-5": "cockpit.go:monitor",
+    "ctrl-alt-6": "cockpit.go:routines",
+    "ctrl-alt-7": "cockpit.go:mail",
+    "ctrl-alt-a": "cockpit.agent-view",
+    "ctrl-alt-b": "cockpit.panel",
+    "ctrl-alt-shift-1": "cockpit.panel:show",
+    "ctrl-alt-shift-2": "cockpit.panel:review",
+    "ctrl-alt-shift-3": "cockpit.panel:runbook",
+    "ctrl-alt-shift-4": "cockpit.panel:files",
+    "ctrl-alt-shift-5": "cockpit.panel:changes",
+    "ctrl-alt-j": "cockpit.next-waiting",
+    "ctrl-alt-shift-j": "cockpit.next:blocked",
+    "ctrl-alt-shift-u": "cockpit.next:done",
+    "ctrl-alt-q": "cockpit.queue",
+    "ctrl-alt-r": "cockpit.resume",
+    "ctrl-alt-shift-r": "cockpit.recap",
+    "ctrl-alt-g": "cockpit.pr",
+    "ctrl-alt-l": "cockpit.ticket"
+  }
+}

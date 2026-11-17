@@ -70,7 +70,9 @@ const THERE_DIR = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/over9k/todos"';
 const THERE_READ = `${THERE_DIR}; cat "$d/$1.md" 2>/dev/null`;
 const THERE_WRITE = `${THERE_DIR}; f="$d/$1.md"; mkdir -p "$d" || exit 1
 if [ -e "$f" ]; then [ "$(cat "$f")" = "$(printf %s "$3")" ] || exit 3; elif [ -n "$4" ]; then exit 3; fi
-printf %s "$2" > "$f.tmp" && mv "$f.tmp" "$f"`;
+printf %s "$2" > "$f.tmp" && mv "$f.tmp" "$f"
+# ADAPTADO: espelha no to-do do cockpit.
+[ -x "$HOME/.local/bin/todo" ] && "$HOME/.local/bin/todo" mirror >/dev/null 2>&1 || true`;
 // todo-cross.py on the computer the folder is on (there: its text, run with -c).
 let crossText = null;
 const cross = async (folder, ...args) => {

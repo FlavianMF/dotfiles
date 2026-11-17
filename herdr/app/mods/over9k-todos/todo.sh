@@ -99,8 +99,35 @@ edit() {
   sed "${line}$2" "$file" > "$file.tmp" && mv "$file.tmp" "$file"
 }
 
+# ADAPTADO para dotfiles: espelha as listas no to-do do cockpit (~/.config/cockpit/todo.md), de uma via.
+# O over9k é a fonte. Itens abertos (com o prazo como @data) e os feitos hoje, com o projeto no fim da linha.
+# COCKPIT_TODO_MIRROR=off desliga. Um todo.md que não é do espelho vai para todo.md.bak.<data>.
+mirror() {
+  [ "${COCKPIT_TODO_MIRROR:-on}" = off ] && return 0
+  out="${COCKPIT_TODO_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/cockpit/todo.md}"
+  mark='<!-- over9k-mirror: edite no painel To-do do over9k ou com `todo`; este arquivo é sobrescrito -->'
+  mkdir -p "$(dirname "$out")" 2>/dev/null || return 0
+  new="$out.over9k.$$"
+  { printf '%s\n' "$mark"
+    for f in "$dir"/*.md; do
+      [ -f "$f" ] || continue
+      proj=$(sed -n 's/^<!-- folder: \(.*\) -->$/\1/p' "$f" | head -n 1); proj=${proj##*/}
+      awk -v p="$proj" -v today="$(date +%F)" '
+        /^- \[ \] / {
+          due = ""
+          if (match($0, /<!-- due: [^>]*-->/)) { due = substr($0, RSTART + 9, RLENGTH - 13); gsub(/^ +| +$/, "", due) }
+          sub(/ *<!--.*-->/, "")
+          print $0 (due != "" ? " @" due : "") " · " p; next }
+        /^- \[x\] / { if (index($0, "done: " today)) { sub(/ *<!--.*-->/, ""); print $0 " · " p } }' "$f"
+    done; } > "$new" 2>/dev/null || { rm -f "$new"; return 0; }
+  if [ -f "$out" ] && cmp -s "$new" "$out"; then rm -f "$new"; return 0; fi
+  if [ -f "$out" ] && ! grep -q 'over9k-mirror:' "$out" 2>/dev/null; then cp -p "$out" "$out.bak.$(date +%Y%m%d-%H%M%S)"; fi
+  mv "$new" "$out"
+}
 cmd=${1:-list}; [ $# -gt 0 ] && shift
+case "$cmd" in add|done|check|undo|uncheck|_done|edit|rm|clear|mirror) trap mirror EXIT ;; esac
 case "$cmd" in
+  mirror) : ;;
   list|ls) [ -n "$(items "$file")" ] && show "$file" || echo "No to-dos for $folder" ;;
   all)
     for f in "$dir"/*.md; do

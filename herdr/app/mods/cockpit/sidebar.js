@@ -267,9 +267,7 @@ export default class Sidebar {
             .child(Kbd("⌘⇧P")),
         ),
       )
-      .when(!rail && Boolean(model.value?.quota?.length), (e) =>
-        e.child(div().id("quota-box").mb(8).px(4).cursor_pointer().on_click(() => this.openRecap("time")).child(QuotaBars(model.value.quota, { compact: true }))),
-      )
+      // ADAPTADO para dotfiles (layout multiproject): as barras de limite saem da sidebar; o `usage-limits` as mostra na barra inferior.
       .when(rail, (e) =>
         e
           .child(navItem("home", "Home", "layout-dashboard", counts.unread || null, "⌘⌥0", counts.needs_you ? k.blocked : null))
