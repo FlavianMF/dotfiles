@@ -1,8 +1,6 @@
-diff --git a/mods/cockpit/sidebar.js b/mods/cockpit/sidebar.js
-index 877b0f5..ae60996 100644
---- a/mods/cockpit/sidebar.js
-+++ b/mods/cockpit/sidebar.js
-@@ -267,9 +267,7 @@ export default class Sidebar {
+--- a/mods/cockpit/sidebar.js	2026-11-17 17:16:27.760409969 -0300
++++ b/mods/cockpit/sidebar.js	2026-11-17 17:16:27.797271938 -0300
+@@ -267,9 +267,7 @@
              .child(Kbd("⌘⇧P")),
          ),
        )
@@ -13,3 +11,15 @@ index 877b0f5..ae60996 100644
        .when(rail, (e) =>
          e
            .child(navItem("home", "Home", "layout-dashboard", counts.unread || null, "⌘⌥0", counts.needs_you ? k.blocked : null))
+@@ -503,8 +501,9 @@
+ 
+   /** Sub-agents an agent started (`hc run`), under it with tree lines; a click peeks. */
+   subRows(k, r) {
+-    if (r.remote) return [];
+-    const kids = (terminals() ?? []).filter((t) => t.parent === r.address && t.state === "live");
++    // ADAPTADO para dotfiles: agentes remotos (WSL) também mostram os filhos; o parent vem com ou sem o prefixo da máquina.
++    const bare = String(r.address).replace(/^[^/]+\//, "");
++    const kids = (terminals() ?? []).filter((t) => t.state === "live" && t.parent && String(t.parent).replace(/^[^/]+\//, "") === bare && (t.parent === r.address || !r.remote || String(t.address).split("/")[0] === String(r.address).split("/")[0]));
+     return kids.map((t, i) =>
+       h_flex()
+         .id(`sub-${t.address}`)
