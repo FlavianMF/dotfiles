@@ -78,6 +78,12 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Integração com o over9k: `over9k-tabs` no lugar de `tabs` (botões To-do e Timeline, botões de janela), `over9k-todos` e `over9k-prompts` no painel direito, `over9k-footer` no rodapé da sidebar e `terminal_menu: over9k-menu` (lançar, retomar e fechar agentes).
   - Teclas (`keys/over9k.json`, seções `layout:traycer` e `layout:over9k`): `ctrl-tab` abre o Switcher e `ctrl-shift-w` fecha a aba com confirmação. O `ctrl-shift-x` continua como `pane.close`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
+- **Layout `multiproject`:** derivado do `traycer`, que continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
+  - Use um space por projeto e um agente por pane. A aba `Projetos` lista os agentes de todos os spaces.
+  - A aba `Cockpit` na barra lateral esquerda mostra PRs, CI e inbox dos repositórios. O mod usa o binário `cockpit` do WSL, como o layout `cockpit`.
+  - O painel direito abre no `To-do`, porque cada projeto tem a própria lista.
+  - `ctrl-tab` abre o Switcher entre os agentes de todos os spaces. As teclas vêm da seção `layout:multiproject` de `keys/over9k.json`.
+  - O layout não inclui o painel `skillshare` nem o botão dele. Use o `traycer` para isso.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
 
