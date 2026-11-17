@@ -36,5 +36,14 @@ run off; ok "exit do off" 0 $?
 ok "off remove a regra" 0 "$(rule "$tmp/real/CLAUDE.md")"
 ok "off remove o wrapper" 0 "$([[ -e "$tmp/home/.local/bin/todo" ]] && echo 1 || echo 0)"
 
+# CLAUDE.md que importa o AGENTS.md (`@...AGENTS.md`): só o AGENTS.md recebe a regra.
+printf '@%s\n# base\n' "$tmp/real/AGENTS.md" >"$tmp/real/CLAUDE.md"
+run on; ok "import: exit do on" 0 $?
+ok "import: CLAUDE.md sem a regra" 0 "$(rule "$tmp/real/CLAUDE.md")"
+ok "import: AGENTS.md com a regra" 1 "$(rule "$tmp/real/AGENTS.md")"
+HOME="$tmp/home" sh -c 'grep -q "<!-- over9k:todo -->" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" 2>/dev/null'; ok "import: checkRule vê a regra" 0 $?
+run off
+ok "import: off remove a regra do AGENTS.md" 0 "$(rule "$tmp/real/AGENTS.md")"
+
 ((fail)) && exit 1
 echo "ok: over9k_todos_setup_test"

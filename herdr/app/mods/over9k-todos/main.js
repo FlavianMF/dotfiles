@@ -517,7 +517,7 @@ export default class Todos extends View {
   // Whether agents know about the lists: the rule in Claude Code's CLAUDE.md.
   // ADAPTADO para WSL: a regra é checada na máquina dos agentes (WSL), com `on`.
   checkRule(cx) {
-    exec("sh", ["-c", 'grep -q "<!-- over9k:todo -->" "$HOME/.claude/CLAUDE.md"'], onM(AGENT_MACHINE)).then((r) => {
+    exec("sh", ["-c", 'grep -q "<!-- over9k:todo -->" "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" 2>/dev/null'], onM(AGENT_MACHINE)).then((r) => {
       const ok = r?.code === 0;
       if (ok !== this.ruleOk) { this.ruleOk = ok; cx.notify(); }
     }).catch(() => { if (this.ruleOk) { this.ruleOk = false; cx.notify(); } });

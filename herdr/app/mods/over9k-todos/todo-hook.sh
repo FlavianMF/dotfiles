@@ -4,7 +4,8 @@
 # message to put what it asks for on its to-do list. Says nothing outside a git
 # repo, when logging is off there, or when the To-do rule isn't installed
 # (Options › To-do off).
-grep -q '<!-- over9k:todo -->' "$HOME/.claude/CLAUDE.md" 2>/dev/null || exit 0
+# ADAPTADO para dotfiles: a regra pode vir pelo AGENTS.md importado (~/.codex/AGENTS.md).
+grep -q '<!-- over9k:todo -->' "$HOME/.claude/CLAUDE.md" "$HOME/.codex/AGENTS.md" 2>/dev/null || exit 0
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
 # todo.sh sits next to this file (the hook runs it by its full path).
 t="$(dirname "$0")/todo.sh"
