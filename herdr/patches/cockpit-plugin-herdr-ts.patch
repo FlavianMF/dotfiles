@@ -1,0 +1,23 @@
+diff --git a/hooks/herdr.ts b/hooks/herdr.ts
+index 28fa283..6bf7608 100644
+--- a/hooks/herdr.ts
++++ b/hooks/herdr.ts
+@@ -90,10 +90,14 @@ async function appStatus($: $) {
+ 
+ // The terminal, its pane, tab and space in the app's listing.
+ export function findTerminal(spaces: AppSpace[], terminal: string) {
+-  for (const space of spaces) {
+-    for (const tab of space.tabs) {
+-      const found = tab.terminals.find(t => t.terminal === terminal)
+-      if (found) return { space, tab, terminal: found }
++  // ADAPTADO para dotfiles: numa janela remota o app lista os terminais do WSL como "wsl/t12", e HC_TERMINAL_ID vale "t12".
++  // O id com prefixo de máquina vence, para um "t1" do Windows não roubar o "wsl/t1".
++  for (const remote of [true, false]) {
++    for (const space of spaces) {
++      for (const tab of space.tabs) {
++        const found = tab.terminals.find(t => (remote ? Boolean(space.machine) && t.terminal === `${space.machine}/${terminal}` : t.terminal === terminal))
++        if (found) return { space, tab, terminal: found }
++      }
+     }
+   }
+   return undefined

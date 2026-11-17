@@ -86,7 +86,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$HOME/dotfiles/herdr/scripts/cockpit-patch.sh\" --quiet",
+            "command": "bash \"$HOME/dotfiles/herdr/scripts/cockpit-patch.sh\" --quiet; bash \"$HOME/dotfiles/herdr/scripts/cockpit-plugin-patch.sh\" --quiet",
             "timeout": 10
           }
         ]
