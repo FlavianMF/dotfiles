@@ -23,6 +23,8 @@ const RUNNER_ACTS = {
   review: new Set(["send", "walkthrough", "stop_walkthrough"]),
   runbook: new Set(["done", "set", "add", "undo", "run_step"]),
 };
+// ADAPTADO para dotfiles: o hub do runner já aceita estas ações de uma janela remota; só o gate do mod dava "read-only".
+const REMOTE_ACTS = { home: new Set(["resume", "dismiss"]) };
 /** The app behind a pinned space's name, as `cockpit focus space:<name>` gives it. */
 const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail" };
 
@@ -208,7 +210,7 @@ export async function request(op, fields = {}) {
   if (machine) {
     if (op === "go") return localFocus(fields.target);
     if (op === "act" && RUNNER_ACTS[fields.app]?.has(fields.action)) return runnerAct(machine, fields.app, fields.action, fields.args ?? [], fields.armed);
-    if (!REMOTE_READS.has(op)) throw new Error(READ_ONLY);
+    if (!REMOTE_READS.has(op) && !(op === "act" && REMOTE_ACTS[fields.app]?.has(fields.action))) throw new Error(READ_ONLY);
   }
   const { socket, token, lines, remote } = await connect();
   try {

@@ -1,0 +1,3 @@
+#!/bin/sh
+# WSL: o plugin e o hub do cockpit chamam `herdr-app`; no Windows o binário é herdr-app.exe.
+exec herdr-app.exe "$@"

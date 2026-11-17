@@ -45,6 +45,16 @@ Three hooks port the Claude ones. A fourth script, `second-brain-observe.sh`, st
   writes (default 5) and no sync. It prints `{"decision":"continue","reason":...}`, so `agy` answers
   the reminder before it stops. It deletes state files older than 7 days.
 
+## Cockpit title hook
+
+`cockpit-title.sh` (`SessionStart` and `Stop`) gives the agent its conversation title in the cockpit's
+`Agents` list, in the Herdr app. The cockpit names only what a plugin reports, and `agy` has none. The
+hook reads the title from `~/.gemini/antigravity-cli/conversation_summaries.db` (read-only) and writes it as
+`task` into the hub's `agents` document with `cockpit store patch agents`, under `app:<machine>/<terminal>`
+(`HC_TERMINAL_ID` plus the machine `herdr-app ls` reports). The title appears after the first answer, so a
+new conversation shows its number until the first `Stop`. The hook prints `{}` and always exits 0.
+`COCKPIT_AGY_NAMES=0` turns it off.
+
 The hooks run by default, because `agy` has no `env` block in its settings. Set
 `SECOND_BRAIN_HOOKS=0` in your shell to turn all of them off.
 

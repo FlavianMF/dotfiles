@@ -190,6 +190,7 @@ herdr-app-install:
 cockpit-update:
 	cockpit update
 	./herdr/scripts/cockpit-patch.sh
+	./herdr/scripts/cockpit-plugin-patch.sh
 
 harness2-install:
 	./harness2/install.sh
