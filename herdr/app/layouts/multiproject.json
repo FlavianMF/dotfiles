@@ -380,7 +380,7 @@
                 {
                   "id": "panel",
                   "type": "column",
-                  "hidden": false,
+                  "hidden": true,
                   "size": {
                     "px": 420
                   },
@@ -446,9 +446,29 @@
                         }
                       ],
                       "size": {
-                        "weight": 2
+                        "weight": 1
                       }
-                    },
+                    }
+                  ],
+                  "shadow": "sm"
+                },
+                {
+                  "id": "panel-todo",
+                  "type": "column",
+                  "hidden": true,
+                  "size": {
+                    "px": 420
+                  },
+                  "min": 280,
+                  "max": 900,
+                  "radius": 10,
+                  "border": {
+                    "width": 1,
+                    "color": "border"
+                  },
+                  "background": "background",
+                  "resizable": false,
+                  "children": [
                     {
                       "id": "panel-over9k",
                       "type": "stack",
