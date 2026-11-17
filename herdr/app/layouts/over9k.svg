@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="#0b0f14"/>
+  <!-- sidebar: projects, agents, usage -->
+  <rect width="78" height="200" fill="#11161d"/>
+  <rect x="8" y="10" width="34" height="5" rx="2" fill="#e6e8eb"/>
+  <rect x="8" y="26" width="22" height="7" rx="3" fill="#252c36"/>
+  <rect x="34" y="27" width="22" height="5" rx="2" fill="#6b7480"/>
+  <rect x="6" y="42" width="66" height="10" rx="3" fill="#1d242d"/>
+  <rect x="10" y="45" width="30" height="4" rx="2" fill="#3fae6a"/>
+  <circle cx="13" cy="61" r="2.5" fill="#e3b34f"/>
+  <rect x="19" y="59" width="40" height="4" rx="2" fill="#c9cdd2"/>
+  <rect x="19" y="68" width="32" height="4" rx="2" fill="#6b7480"/>
+  <rect x="10" y="80" width="28" height="4" rx="2" fill="#5b8def"/>
+  <circle cx="13" cy="92" r="2.5" fill="#3fae6a"/>
+  <rect x="19" y="90" width="44" height="4" rx="2" fill="#c9cdd2"/>
+  <rect x="10" y="106" width="34" height="4" rx="2" fill="#6b7480"/>
+  <rect x="10" y="115" width="26" height="4" rx="2" fill="#6b7480"/>
+  <rect x="0" y="150" width="78" height="1" fill="#232a33"/>
+  <rect x="8" y="158" width="20" height="4" rx="2" fill="#9aa1aa"/><rect x="58" y="158" width="12" height="4" rx="2" fill="#e05d5d"/>
+  <rect x="8" y="168" width="20" height="4" rx="2" fill="#9aa1aa"/><rect x="58" y="168" width="12" height="4" rx="2" fill="#e3b34f"/>
+  <rect x="8" y="178" width="20" height="4" rx="2" fill="#9aa1aa"/><rect x="58" y="178" width="12" height="4" rx="2" fill="#3fae6a"/>
+  <!-- tabs -->
+  <rect x="78" y="0" width="242" height="18" fill="#11161d"/>
+  <rect x="84" y="4" width="46" height="10" rx="3" fill="#1d242d"/>
+  <rect x="134" y="6" width="34" height="5" rx="2" fill="#6b7480"/>
+  <rect x="258" y="5" width="26" height="7" rx="3" fill="#252c36"/>
+  <rect x="288" y="6" width="26" height="5" rx="2" fill="#6b7480"/>
+  <!-- the agent -->
+  <rect x="84" y="24" width="150" height="170" rx="6" fill="#0f141a" stroke="#5b8def" stroke-width="1"/>
+  <rect x="92" y="34" width="90" height="4" rx="2" fill="#c9cdd2"/>
+  <rect x="92" y="44" width="120" height="4" rx="2" fill="#6b7480"/>
+  <rect x="92" y="52" width="104" height="4" rx="2" fill="#6b7480"/>
+  <rect x="92" y="64" width="70" height="4" rx="2" fill="#3fae6a"/>
+  <rect x="92" y="72" width="110" height="4" rx="2" fill="#6b7480"/>
+  <rect x="92" y="172" width="134" height="12" rx="3" fill="#1d242d"/>
+  <!-- the To-do panel -->
+  <rect x="240" y="24" width="74" height="170" rx="6" fill="#0f141a" stroke="#232a33" stroke-width="1"/>
+  <rect x="246" y="32" width="22" height="5" rx="2" fill="#e6e8eb"/>
+  <rect x="246" y="44" width="30" height="7" rx="3" fill="#1d242d"/>
+  <rect x="246" y="56" width="62" height="10" rx="3" fill="#1d242d"/>
+  <circle cx="250" cy="76" r="3" fill="none" stroke="#3fae6a" stroke-width="1.2"/><rect x="257" y="74" width="44" height="4" rx="2" fill="#c9cdd2"/>
+  <circle cx="250" cy="88" r="3" fill="none" stroke="#3fae6a" stroke-width="1.2"/><rect x="257" y="86" width="36" height="4" rx="2" fill="#c9cdd2"/>
+  <rect x="246" y="100" width="20" height="4" rx="2" fill="#6b7480"/>
+  <circle cx="250" cy="112" r="3" fill="#3fae6a"/><rect x="257" y="110" width="40" height="4" rx="2" fill="#4a525c"/>
+</svg>
