@@ -380,7 +380,7 @@
                 {
                   "id": "panel",
                   "type": "column",
-                  "hidden": true,
+                  "hidden": false,
                   "size": {
                     "px": 420
                   },
