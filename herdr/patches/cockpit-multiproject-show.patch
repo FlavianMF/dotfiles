@@ -1,0 +1,25 @@
+--- a/mods/cockpit/show.js	2026-11-17 16:22:39.774228218 -0300
++++ b/mods/cockpit/show.js	2026-11-17 16:22:39.817258439 -0300
+@@ -320,9 +320,11 @@
+     if (url) hub.openUrl(url).catch(() => {});
+   }
+ 
+-  hide() {
++  // ADAPTADO para dotfiles: `only` (o comando show:hide:<nome>) fecha só pelo id guardado. Sem id, não faz nada:
++  // `pane.close` sem alvo fecha o pane em foco, que pode ser o do agente.
++  hide(only = false) {
+     if (this.pane) run("pane.close", { pane: this.pane });
+-    else run("pane.close");
++    else if (!only) run("pane.close");
+   }
+ 
+   copyCsv(cx, b) {
+@@ -355,7 +357,7 @@
+     const [scope, action, ...rest] = c.split(":");
+     if (scope !== "show") return;
+     const arg = rest.join(":");
+-    if (action === "hide" && arg === this.name) this.hide();
++    if (action === "hide" && arg === this.name) this.hide(true);
+     else if (action === "go") this.goTo(arg, cx);
+     else if (action === "copy") {
+       const b = this.view()?.blocks?.[Number(arg)];
