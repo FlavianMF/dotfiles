@@ -55,6 +55,16 @@
                       ]
                     }
                   }
+                },
+                {
+                  "id": "insights",
+                  "type": "block",
+                  "content": {
+                    "mod": "insights",
+                    "props": {
+                      "sessionHome": "\\\\wsl.localhost\\Ubuntu\\home\\flv"
+                    }
+                  }
                 }
               ],
               "header": {
@@ -75,6 +85,10 @@
                       [
                         "agenttrail",
                         "Agenttrail"
+                      ],
+                      [
+                        "insights",
+                        "Insights"
                       ]
                     ]
                   }
