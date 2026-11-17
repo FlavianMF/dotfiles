@@ -1,4 +1,4 @@
-.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install codex-drift audit lint version
+.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status tailscale-proxy-on tailscale-proxy-off update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install codex-drift audit lint version
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -56,6 +56,8 @@ help:
 	@echo "  make ha-mcp-config [DRY_RUN=1] - Configura ha-mcp nas CLIs de IA locais (Claude, Gemini, OpenCode, Cursor)"
 	@echo "  make tailscale-install - Instala o cliente Tailscale no Linux/WSL2"
 	@echo "  make tailscale-status  - Exibe o status e IP da rede Tailscale"
+	@echo "  make tailscale-proxy-on [VPS=vps] [PORT=1080] - Abre túnel SOCKS5 via SSH e configura tailscaled para usar o proxy"
+	@echo "  make tailscale-proxy-off [VPS=vps] [PORT=1080] - Remove o proxy do tailscaled e encerra o túnel SSH"
 
 install:
 	chmod +x install.sh
@@ -256,6 +258,29 @@ tailscale-install:
 
 tailscale-status:
 	@tailscale status || echo "Tailscale não está em execução ou não conectado. Rode sudo tailscale up."
+
+VPS ?= vps
+PORT ?= 1080
+
+tailscale-proxy-on:
+	@if ! ss -ltn | grep -q ":$(PORT) "; then \
+		echo "Iniciando túnel SSH SOCKS5 em 127.0.0.1:$(PORT) via $(VPS)..."; \
+		ssh -f -N -D $(PORT) $(VPS); \
+	else \
+		echo "Túnel na porta $(PORT) já está ativo."; \
+	fi
+	@sudo mkdir -p /etc/systemd/system/tailscaled.service.d
+	@printf '[Service]\nEnvironment="ALL_PROXY=socks5://127.0.0.1:$(PORT)"\n' | sudo tee /etc/systemd/system/tailscaled.service.d/proxy.conf >/dev/null
+	@sudo systemctl daemon-reload
+	@sudo systemctl restart tailscaled
+	@echo "✓ tailscaled configurado com ALL_PROXY=socks5://127.0.0.1:$(PORT)"
+
+tailscale-proxy-off:
+	@sudo rm -f /etc/systemd/system/tailscaled.service.d/proxy.conf
+	@sudo systemctl daemon-reload
+	@sudo systemctl restart tailscaled
+	@pkill -f "ssh -f -N -D $(PORT) $(VPS)" 2>/dev/null || true
+	@echo "✓ Proxy do tailscaled removido"
 
 ha-mcp-check:
 	@./homeassistant/setup-mcp.sh check
