@@ -108,3 +108,26 @@ herdr server stop                     # Gracefully stop the Herdr background ser
 ```
 
 When running *inside* a Herdr pane (`HERDR_ENV=1`), agents can interact with the Herdr CLI directly without opening nested client loops.
+
+## Herdr app: layouts `over9k` e `cockpit`
+
+Dois layouts vendorizados de terceiros, ao lado do `traycer`. O `ctrl-shift-l` cicla entre todos. O `ctrl-alt-shift-escape` volta ao `main`. Instale com `make herdr-app-install`.
+
+| Layout | Fonte (commit fixado) | Foco |
+| :--- | :--- | :--- |
+| `over9k` | `OVER9K_VERSION` (herunan/herdr-over9k, MIT) | Sidebar de projetos e agentes, abas To-do/Timeline, rodapé de uso |
+| `cockpit` | `COCKPIT_VERSION` (quaresc/cockpit, MIT) | Painel de agentes com PRs, CI, inbox e runbook |
+
+- **over9k:** usa os mods `over9k*` já forkados aqui, mais `over9k-footer`, `over9k-tabs`, `over9k-todos` e `over9k-prompts` do upstream. O `over9k/mod.json` local mantém `place: left` e `size: 268`. As teclas do upstream não entram, porque colidem com o `ctrl-tab` e o `ctrl-shift-w` do `keys.json`.
+- **cockpit:** o app roda no Windows e o binário `cockpit` roda no WSL2 (modo "remote desk" do upstream, em preview). O `app/cockpit.json` aponta para a máquina `wsl` em `127.0.0.1`. Isso funciona porque o `.wslconfig` usa `networkingMode=mirrored`.
+- **Teclas do cockpit:** `keys/cockpit.json` troca `cmd` por `ctrl-alt` e entra só na seção `layout:cockpit`. O `install-app.sh` mescla esse arquivo no `keys.json` com backup. Exemplos: `ctrl-alt-p` paleta, `ctrl-alt-0` Home, `ctrl-alt-j` próximo agente em espera. Em teclado ABNT2, `ctrl-alt` é AltGr: se uma tecla digitar caractere, mude-a em `keys/cockpit.json`.
+
+Instalar o binário do cockpit no WSL2 (uma vez, sem `curl | sh`):
+
+```bash
+git clone https://github.com/quaresc/cockpit /tmp/cockpit-up
+COCKPIT_NO_SETUP=1 COCKPIT_VERSION=0.40.4 sh /tmp/cockpit-up/install.sh   # confira o release em COCKPIT_VERSION
+cockpit hub start                                                        # o mod também inicia o hub sozinho
+```
+
+Limites do cockpit em modo runner (preview upstream): as ações de escrita são parciais, e o contador "Agents" da Home pode mostrar 0 mesmo com agentes na sidebar. Sem MCPs de Linear, Jira ou Datadog: a Home usa só `gh` e os agentes. Se precisar de mais, siga a etapa de fork do mod, como em `cache-hit` (`patches/cache-hit-wsl-claude-session.patch`).
