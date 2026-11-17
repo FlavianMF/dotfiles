@@ -41,6 +41,26 @@ while IFS= read -r -d '' f; do
     copy_file "$f" "$dest/${f#"$src"/}"
 done < <(find "$src" -type f -print0)
 
+# Teclas por layout: herdr/keys/*.json são mesclados em keys.json (as seções do arquivo entram ou substituem;
+# o resto do keys.json fica como está). O app relê o keys.json sozinho.
+keys_src="$(dirname "$src")/keys"
+if [[ -d "$keys_src" && -f "$dest/keys.json" ]] && command -v jq >/dev/null 2>&1; then
+    for k in "$keys_src"/*.json; do
+        [[ -f "$k" ]] || continue
+        merged="$(jq --slurpfile new "$k" '. * $new[0]' "$dest/keys.json")"
+        if [[ "$(jq -c . "$dest/keys.json")" == "$(printf '%s' "$merged" | jq -c .)" ]]; then
+            echo "igual:   $dest/keys.json ($(basename "$k"))"
+            continue
+        fi
+        echo "backup:  $dest/keys.json -> $dest/keys.json.bak.$stamp"
+        echo "mescla:  $dest/keys.json ($(basename "$k"))"
+        if (( ! dry )); then
+            cp -p "$dest/keys.json" "$dest/keys.json.bak.$stamp"
+            printf '%s\n' "$merged" > "$dest/keys.json.tmp" && mv "$dest/keys.json.tmp" "$dest/keys.json"
+        fi
+    done
+fi
+
 echo "destino: $dest"
 (( dry )) && echo "(dry-run: nada foi alterado)"
 exit 0

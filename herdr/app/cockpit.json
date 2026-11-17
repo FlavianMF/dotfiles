@@ -1,0 +1,7 @@
+{
+  "machine": "wsl",
+  "host": "127.0.0.1",
+  "bin": "/home/flv/.local/bin/cockpit",
+  "home": "/home/flv",
+  "cache": "/home/flv/.cache/cockpit"
+}
