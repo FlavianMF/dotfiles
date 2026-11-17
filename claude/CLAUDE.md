@@ -2,19 +2,15 @@
 
 # Exclusivo do Claude Code
 
-- Subagentes rodam em `sonnet` por padrão (`CLAUDE_CODE_SUBAGENT_MODEL`); passe `model`
+- **Subagentes** rodam em `sonnet` por padrão (`CLAUDE_CODE_SUBAGENT_MODEL`). Passe `model`
   explícito só quando a tarefa exigir julgamento de `opus`.
-- Skills de plugin aparecem com prefixo (`impeccable:impeccable`,
-  `mattpocock-skills:tdd`, `caveman:caveman`); as regras acima valem pelo nome base.
-- O hook `suggest-compact` avisa quando a sessão passa de ~50 tool calls: trate como
-  sinal para compactar na próxima fronteira de fase, não no meio da edição.
-- Hooks do second brain (`SECOND_BRAIN_HOOKS=1`): o SessionStart injeta notas do vault
-  relacionadas ao repo; o Stop lembra de enfileirar candidatos (`sb.py candidate add`) depois de várias edições (arquivos e Bash de escrita).
-  O comando `/review-web` (ou `/sb-review`) inicia a interface web FastAPI (`sb review web`) para triagem ágil dos candidatos pelo navegador.
-  Desligue por projeto com `"env": {"SECOND_BRAIN_HOOKS": "0"}` em
-  `.claude/settings.local.json`.
-- Hook `jev-e` (UserPromptSubmit, modo sombra): grava num log local qual skill o Jev sugeriria
-  e **não escreve nada no contexto**; ignore-o. Desligue por projeto com
-  `"env": {"JEV_TOOL_E": "0"}` em `.claude/settings.local.json`.
-- Format/typecheck no Stop é opt-in por projeto: `"env": {"CLAUDE_FORMAT_TYPECHECK": "1"}`
-  (e opcionalmente `CLAUDE_FORMAT_TYPECHECK_CMD`) em `.claude/settings.local.json`.
+- **Skills de plugin** aparecem com prefixo (`impeccable:impeccable`,
+  `mattpocock-skills:tdd`, `caveman:caveman`). As regras valem pelo nome base.
+- **`suggest-compact`:** quando o hook avisar, aplique a regra de fronteira de fase.
+- **`git-ops`:** commit, merge, push, status e rebase mecânicos vão para o agente `git-ops`
+  (haiku). Se a sessão já tem o contexto, faça um commit simples direto.
+- **Hooks:** antes de mudar, silenciar ou depurar um hook (second brain, `jev-e`,
+  format/typecheck), leia `~/dotfiles/agents/docs/claude-hooks.md`.
+- **ECC** (plugin `ecc@ecc`): antes de invocar um agente ou skill `ecc:*`, ou quando o usuário
+  citar ECC, leia `~/dotfiles/agents/docs/ecc-por-projeto.md`. Só o usuário ou o wrapper
+  `claude` do zsh liga e desliga o ECC, então peça ao usuário.
