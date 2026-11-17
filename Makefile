@@ -1,4 +1,4 @@
-.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status tailscale-proxy-on tailscale-proxy-off tailscale-exit-on tailscale-exit-off update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install codex-drift audit lint version
+.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status tailscale-proxy-on tailscale-proxy-off tailscale-exit-on tailscale-exit-off update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install cockpit-update codex-drift audit lint version
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -43,6 +43,7 @@ help:
 	@echo "  make herdr-update [VERSION=x.y.z] - Fixa a release do Herdr em herdr/VERSION + SHA256"
 	@echo "  make herdr-ssh-setup  - Configura SSH no WSL2 (porta 2222) e importa chaves para o Herdr Desktop"
 	@echo "  make herdr-app-install - Copia o layout traycer e os mods para o Herdr app (GUI)"
+	@echo "  make cockpit-update   - Atualiza o cockpit e reaplica os patches do layout multiproject"
 	@echo "  make codex-drift      - Diferença entre ~/.codex/config.toml e codex/config.base.toml"
 	@echo "  make audit            - AgentShield (ecc-agentshield@$(AGENTSHIELD_VERSION)) no repo"
 	@echo "  make lint             - bash -n + shellcheck + validação de JSON/TOML"
@@ -185,6 +186,10 @@ herdr-ssh-setup:
 
 herdr-app-install:
 	./herdr/install-app.sh
+
+cockpit-update:
+	cockpit update
+	./herdr/scripts/cockpit-patch.sh
 
 harness2-install:
 	./harness2/install.sh
