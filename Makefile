@@ -1,4 +1,4 @@
-.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status tailscale-proxy-on tailscale-proxy-off update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install codex-drift audit lint version
+.PHONY: agenttrail-map flow-validate flow-test flow-serve flow-run install help clean sb-install sb-projects-timer sb-web-token sb-web-install pc-ctl-install pc-ctl-test ha-vps-pack ha-vps-deploy tailscale-install tailscale-status tailscale-proxy-on tailscale-proxy-off tailscale-exit-on tailscale-exit-off update backup harness harness-dry-run plugins-freeze plugins-update ecc-on ecc-off ecc-status ecc-auto plugins-auto plugins-status ecc-observer-config ecc-rules test ccr-install ccr-update traycer-install traycer-update obsidian-install obsidian-update antigravity-install antigravity-config herdr-install herdr-update herdr-ssh-setup herdr-app-install codex-drift audit lint version
 
 AGENTSHIELD_VERSION := 1.6.0
 AUDIT_PATH ?= $(CURDIR)
@@ -58,6 +58,8 @@ help:
 	@echo "  make tailscale-status  - Exibe o status e IP da rede Tailscale"
 	@echo "  make tailscale-proxy-on [VPS=vps] [PORT=1080] - Abre túnel SOCKS5 via SSH e configura tailscaled para usar o proxy"
 	@echo "  make tailscale-proxy-off [VPS=vps] [PORT=1080] - Remove o proxy do tailscaled e encerra o túnel SSH"
+	@echo "  make tailscale-exit-on [VPS=vps] [EXIT_NODE=100.105.143.75] - Fixa rota da VPS no gateway local e ativa exit-node"
+	@echo "  make tailscale-exit-off [VPS=vps] - Desativa exit-node e remove rota estática da VPS"
 
 install:
 	chmod +x install.sh
@@ -281,6 +283,27 @@ tailscale-proxy-off:
 	@sudo systemctl restart tailscaled
 	@pkill -f "ssh -f -N -D $(PORT) $(VPS)" 2>/dev/null || true
 	@echo "✓ Proxy do tailscaled removido"
+
+EXIT_NODE ?= 100.105.143.75
+
+tailscale-exit-on:
+	@VPS_HOST=$$(ssh -G $(VPS) | awk '/^hostname / {print $$2; exit}'); \
+	VPS_IP=$$(getent ahostsv4 "$$VPS_HOST" | awk '{print $$1; exit}'); \
+	GW=$$(ip route show default | awk '/default/ {print $$3; exit}'); \
+	if [ -z "$$VPS_IP" ] || [ -z "$$GW" ]; then \
+		echo "Erro: não foi possível resolver VPS_IP ($$VPS_IP) ou gateway ($$GW)" >&2; \
+		exit 1; \
+	fi; \
+	sudo ip route replace "$$VPS_IP/32" via "$$GW"; \
+	sudo tailscale set --exit-node=$(EXIT_NODE); \
+	echo "✓ Rota $$VPS_IP/32 via $$GW fixada e exit-node $(EXIT_NODE) ativado"
+
+tailscale-exit-off:
+	@sudo tailscale set --exit-node=
+	@VPS_HOST=$$(ssh -G $(VPS) | awk '/^hostname / {print $$2; exit}'); \
+	VPS_IP=$$(getent ahostsv4 "$$VPS_HOST" | awk '{print $$1; exit}'); \
+	if [ -n "$$VPS_IP" ]; then sudo ip route del "$$VPS_IP/32" 2>/dev/null || true; fi
+	@echo "✓ Exit-node desativado e rota estática removida"
 
 ha-mcp-check:
 	@./homeassistant/setup-mcp.sh check
