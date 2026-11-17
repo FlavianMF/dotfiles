@@ -1,0 +1,24 @@
+# memex: busca e retomada de sessões de agentes (Homebrew, versão fixada com `brew pin memex`).
+# Linkado em ~/.memex/config.toml. Só local: sem embeddings remotos, sem SSH, sem MCP, sem web UI, sem dream.
+# Camada episódica (sessões brutas). O conhecimento destilado fica no vault: `sb search`.
+
+embeddings = false          # sem modelo baixado e sem envio de texto a API
+token_usage = false         # custo/tokens ficam com o mod `insights`
+include_reasoning = false
+auto_index_on_search = true
+
+# Sessões abertas dentro do vault não entram no índice (o vault tem o `sb search`).
+exclude_paths = ["~/.claude/projects/-home-flv-obsidian_vault*"]
+
+index_service_web_ui = false
+index_service_mcp = false
+
+herdr_resume = "tab"
+
+[redaction]
+enabled = true              # redige credenciais ao indexar (padrão é false)
+egress = true
+
+[dream]
+enabled = false             # `dream` enviaria trechos das sessões ao CLI claude/codex
+auto = false

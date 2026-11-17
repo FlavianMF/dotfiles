@@ -99,6 +99,11 @@ Rode `sb search --json "<termos>"` com termos em português e inglês. Leia com 
 antes de usá-las, pois o título do hint não basta. Cite o caminho de cada nota usada. Se nenhuma
 nota servir, diga "o vault não cobre X" e siga.
 
+Para recuperar uma conversa passada (sessões brutas de Claude, Codex e outros), rode
+`memex --no-update-check --non-interactive search "<termos>"`. O `memex` é só CLI local, sem MCP.
+O vault guarda conhecimento destilado e o `memex` guarda o histórico. Se achar algo reutilizável
+no `memex`, acrescente um candidato com `sb candidate add`, sem copiar a conversa.
+
 Carregue a skill `second-brain-sync` só para destilar padrões, decisões e armadilhas ao fim de
 uma tarefa de dev, ou para o bootstrap de projeto.
 
