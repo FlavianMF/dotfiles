@@ -1,0 +1,25 @@
+--- a/mods/cockpit/status.js	2026-11-17 16:20:19.981373355 -0300
++++ b/mods/cockpit/status.js	2026-11-17 16:20:20.021032824 -0300
+@@ -95,7 +95,12 @@
+       run("layout.select", { stack: "view", child: on ? "main" : "agent" });
+       setShared("cockpit.view", on ? "main" : "agent");
+       if ((shared("cockpit.app") ?? "home") !== "work") show("work");
+-    } else if (c === "panel") togglePanel(null);
++    } else if (c === "panel") {
++      // ADAPTADO para dotfiles: fechar o painel também fecha os documentos que o agente abriu ao lado dele.
++      const panel = findNode(layout(), "panel");
++      if (panel && !panel.hidden) for (const d of me?.row?.documents ?? []) run(`cockpit.show:hide:${d.name}`);
++      togglePanel(null);
++    }
+     else if (c.startsWith("panel:")) togglePanel(c.slice(6));
+     else if (c === "next-waiting" || c === "next:blocked" || c === "next:done") {
+       const a = this.next(list, c === "next:done" ? "done" : c === "next:blocked" ? "needs" : null) ?? (c === "next-waiting" ? this.next(list, "done") : null);
+@@ -105,6 +110,8 @@
+     else if (c === "resume") cx.spawn(async () => hub.act("home", "resume", []));
+     else if (c.startsWith("link:")) cx.spawn(async () => hub.openUrl(c.slice(5)));
+     else if (c.startsWith("doc:")) {
++      // ADAPTADO para dotfiles: o documento passa ao painel e o painel duplicado ao lado do agente fecha.
++      run(`cockpit.show:hide:${c.slice(4)}`);
+       openPanel("show");
+       run("cockpit.show:go:" + c.slice(4));
+     }

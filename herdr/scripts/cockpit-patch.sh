@@ -27,7 +27,7 @@ status=0
 work="$(mktemp -d)"
 trap 'find "$work" -mindepth 1 -delete 2>/dev/null; rmdir "$work" 2>/dev/null || true' EXIT
 
-for f in activity sidebar hub fleet; do
+for f in activity sidebar hub fleet status show; do
     file="$mod/$f.js"
     patch_file="$here/patches/cockpit-multiproject-$f.patch"
     [[ -f "$file" ]] || continue
