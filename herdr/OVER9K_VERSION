@@ -1,0 +1,5 @@
+repo=https://github.com/herunan/herdr-over9k
+commit=a53c200addf068adfc7cc131cbad32f8fd8fd747
+license=MIT
+# Vendorizado em herdr/app: layouts/over9k.{json,svg}, mods over9k-{footer,tabs,todos,prompts}, over9k/antigravity.
+# Os demais mods over9k* são fork local (idênticos ao upstream, exceto over9k/mod.json: place=left, size=268).
