@@ -64,19 +64,12 @@
             {
               "id": "left-tabs",
               "type": "stack",
-              "active": "over9k",
+              "active": "cockpit-agents",
               "size": {
                 "weight": 2
               },
               "min": 160,
               "children": [
-                {
-                  "id": "over9k",
-                  "type": "block",
-                  "content": {
-                    "mod": "over9k"
-                  }
-                },
                 {
                   "id": "cockpit-agents",
                   "type": "block",
@@ -85,6 +78,13 @@
                     "props": {
                       "app": "sidebar"
                     }
+                  }
+                },
+                {
+                  "id": "over9k",
+                  "type": "block",
+                  "content": {
+                    "mod": "over9k"
                   }
                 },
                 {
@@ -125,12 +125,12 @@
                     "bg": "chrome",
                     "tabs": [
                       [
-                        "over9k",
-                        "Projetos"
-                      ],
-                      [
                         "cockpit-agents",
                         "Agentes"
+                      ],
+                      [
+                        "over9k",
+                        "Projetos"
                       ],
                       [
                         "filetree",
@@ -379,7 +379,7 @@
                 },
                 {
                   "id": "panel",
-                  "type": "row",
+                  "type": "column",
                   "hidden": true,
                   "size": {
                     "px": 420
@@ -395,69 +395,127 @@
                   "resizable": false,
                   "children": [
                     {
-                      "id": "panel-body",
-                      "type": "stack",
-                      "active": "show",
+                      "id": "panel-top",
+                      "type": "row",
+                      "size": {
+                        "weight": 2
+                      },
+                      "padding": 0,
+                      "gap": 0,
                       "children": [
                         {
-                          "id": "show",
+                          "id": "panel-body",
+                          "type": "stack",
+                          "active": "show",
+                          "children": [
+                            {
+                              "id": "show",
+                              "type": "block",
+                              "content": {
+                                "mod": "cockpit",
+                                "props": {
+                                  "app": "show"
+                                }
+                              }
+                            },
+                            {
+                              "id": "review",
+                              "type": "block",
+                              "content": {
+                                "mod": "cockpit",
+                                "props": {
+                                  "app": "review"
+                                }
+                              }
+                            },
+                            {
+                              "id": "runbook-panel",
+                              "type": "block",
+                              "content": {
+                                "mod": "cockpit",
+                                "props": {
+                                  "app": "runbook",
+                                  "scope": "focused"
+                                }
+                              }
+                            },
+                            {
+                              "id": "files",
+                              "type": "block",
+                              "content": {
+                                "mod": "files"
+                              }
+                            },
+                            {
+                              "id": "changes",
+                              "type": "block",
+                              "content": {
+                                "mod": "changes"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "id": "activity",
                           "type": "block",
+                          "size": {
+                            "px": 44
+                          },
                           "content": {
                             "mod": "cockpit",
                             "props": {
-                              "app": "show"
+                              "app": "activity",
+                              "stack": "panel-body"
                             }
-                          }
-                        },
-                        {
-                          "id": "review",
-                          "type": "block",
-                          "content": {
-                            "mod": "cockpit",
-                            "props": {
-                              "app": "review"
-                            }
-                          }
-                        },
-                        {
-                          "id": "runbook-panel",
-                          "type": "block",
-                          "content": {
-                            "mod": "cockpit",
-                            "props": {
-                              "app": "runbook",
-                              "scope": "focused"
-                            }
-                          }
-                        },
-                        {
-                          "id": "files",
-                          "type": "block",
-                          "content": {
-                            "mod": "files"
-                          }
-                        },
-                        {
-                          "id": "changes",
-                          "type": "block",
-                          "content": {
-                            "mod": "changes"
                           }
                         }
                       ]
                     },
                     {
-                      "id": "activity",
-                      "type": "block",
+                      "id": "panel-over9k",
+                      "type": "stack",
+                      "active": "todos",
                       "size": {
-                        "px": 44
+                        "weight": 1
                       },
-                      "content": {
-                        "mod": "cockpit",
-                        "props": {
-                          "app": "activity",
-                          "stack": "panel-body"
+                      "min": 160,
+                      "children": [
+                        {
+                          "id": "todos",
+                          "type": "block",
+                          "content": {
+                            "mod": "over9k-todos"
+                          }
+                        },
+                        {
+                          "id": "prompts",
+                          "type": "block",
+                          "content": {
+                            "mod": "over9k-prompts"
+                          }
                         }
+                      ],
+                      "header": {
+                        "content": {
+                          "mod": "lower-tabs",
+                          "props": {
+                            "stack": "panel-over9k",
+                            "bg": "chrome",
+                            "tabs": [
+                              [
+                                "todos",
+                                "To-do"
+                              ],
+                              [
+                                "prompts",
+                                "Prompts"
+                              ]
+                            ]
+                          }
+                        },
+                        "reveal": "always",
+                        "height": 30,
+                        "position": "top"
                       }
                     }
                   ],

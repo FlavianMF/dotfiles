@@ -100,7 +100,7 @@ edit() {
 }
 
 # ADAPTADO para dotfiles: espelha as listas no to-do do cockpit (~/.config/cockpit/todo.md), de uma via.
-# O over9k é a fonte. Itens abertos e os feitos hoje, com o projeto no fim da linha.
+# O over9k é a fonte. Itens abertos (com o prazo como @data) e os feitos hoje, com o projeto no fim da linha.
 # COCKPIT_TODO_MIRROR=off desliga. Um todo.md que não é do espelho vai para todo.md.bak.<data>.
 mirror() {
   [ "${COCKPIT_TODO_MIRROR:-on}" = off ] && return 0
@@ -113,7 +113,11 @@ mirror() {
       [ -f "$f" ] || continue
       proj=$(sed -n 's/^<!-- folder: \(.*\) -->$/\1/p' "$f" | head -n 1); proj=${proj##*/}
       awk -v p="$proj" -v today="$(date +%F)" '
-        /^- \[ \] / { sub(/ *<!--.*-->/, ""); print $0 " · " p; next }
+        /^- \[ \] / {
+          due = ""
+          if (match($0, /<!-- due: [^>]*-->/)) { due = substr($0, RSTART + 9, RLENGTH - 13); gsub(/^ +| +$/, "", due) }
+          sub(/ *<!--.*-->/, "")
+          print $0 (due != "" ? " @" due : "") " · " p; next }
         /^- \[x\] / { if (index($0, "done: " today)) { sub(/ *<!--.*-->/, ""); print $0 " · " p } }' "$f"
     done; } > "$new" 2>/dev/null || { rm -f "$new"; return 0; }
   if [ -f "$out" ] && cmp -s "$new" "$out"; then rm -f "$new"; return 0; fi

@@ -78,18 +78,16 @@ O script copia `herdr/app/` para a pasta do app e faz backup se o destino diferi
   - Integração com o over9k: `over9k-tabs` no lugar de `tabs` (botões To-do e Timeline, botões de janela), `over9k-todos` e `over9k-prompts` no painel direito, `over9k-footer` no rodapé da sidebar e `terminal_menu: over9k-menu` (lançar, retomar e fechar agentes).
   - Teclas (`keys/over9k.json`, seções `layout:traycer` e `layout:over9k`): `ctrl-tab` abre o Switcher e `ctrl-shift-w` fecha a aba com confirmação. O `ctrl-shift-x` continua como `pane.close`.
   - Se o agente em foco estiver na aba atual, o mesmo terminal aparece duas vezes. Isso é esperado.
-- **Layout `multiproject`:** base do layout `cockpit`, com as abas do `traycer`. O `traycer` continua igual. Serve ao trabalho em vários projetos ao mesmo tempo.
+- **Layout `multiproject`:** base do layout `cockpit`, com abas e o To-do do over9k. O `traycer` continua igual e é o padrão. O `multiproject` serve aos dias com vários projetos.
   - Parte do `cockpit.json` porque o mod `cockpit` exige o stack `center` (vistas `home`, `work`, `inbox`, `todo` e outras), a sidebar, o sino e a barra de status. Como aba solta num layout derivado do `traycer`, ele falha com "don't have a center stack named home".
-  - A sidebar esquerda tem as abas `Projetos` (over9k, todos os spaces, ativa por padrão), `Agentes` (cockpit), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`.
-  - **Switcher:** o `ctrl-tab` só funciona com a aba `Projetos` ativa. O comando `over9k.switcher` vive na instância do mod `over9k`, e o app não carrega o mod de uma aba inativa. Com `Agentes` ativa, o comando não existe. Volte para `Projetos` para usar o `ctrl-tab`.
-  - A barra `over9k-usage` fica acima da barra de status do cockpit.
-  - Use um space por projeto e um agente por pane. A vista `home` do cockpit mostra PRs e CI. O `To-do` do cockpit e o `todo` do Herdr são listas diferentes.
-  - Teclas: `keys/multiproject.json` junta as teclas do cockpit (`ctrl-alt-*`) com `ctrl-tab` (Switcher) e `ctrl-shift-w` (fecha a aba).
-  - Não inclui o painel `skillshare`. O binário `cockpit` roda no WSL, como no layout `cockpit`.
+  - **Sidebar esquerda:** abas `Agentes` (cockpit, ativa), `Projetos` (over9k, todos os spaces), `Arquivos`, `Agenttrail` e `Insights`, mais o `cache-hit`. A barra `over9k-usage` fica acima da barra de status.
+  - **Painel direito conjunto** (escondido; `ctrl-alt-b` abre): em cima o painel do cockpit (`show`, `review`, `runbook`, `files`, `changes`, com a faixa `activity`). Embaixo um stack do over9k com `To-do` e `Prompts`. O nó `panel` é uma coluna com `panel-top` e `panel-over9k`.
   - **To-do integrado:** a vista `todo` do cockpit (`ctrl-alt-3` e o botão da sidebar) é o mod `over9k-todos`. O over9k é a fonte: todos os projetos, e o comando `todo` dos agentes.
-  - **Espelho para o cockpit:** o `todo.sh` ganhou o subcomando `todo mirror`, chamado ao sair de `add`, `done`, `undo`, `edit`, `rm` e `clear`. O mod também o chama depois de gravar uma lista no WSL. Ele grava os itens abertos e os feitos hoje em `~/.config/cockpit/todo.md`, com o projeto no fim da linha. A `home` e a paleta do cockpit leem esse arquivo.
-  - O espelho é de uma via: o `todo.md` é sobrescrito. Um `todo.md` que não é do espelho vai para `todo.md.bak.<data>`. Desligue com `COCKPIT_TODO_MIRROR=off`.
-  - O espelho perde o prazo (`due`) dos itens. Itens editados direto no `todo.md` não voltam ao over9k.
+  - **Espelho para o cockpit:** o `todo.sh` ganhou o subcomando `todo mirror`, chamado ao sair de `add`, `done`, `undo`, `edit`, `rm` e `clear`. O mod também o chama depois de gravar uma lista no WSL. Ele grava os itens abertos (com o prazo como ` @AAAA-MM-DD[ HH:MM]`) e os feitos hoje em `~/.config/cockpit/todo.md`, com o projeto no fim da linha. A `home` e a paleta do cockpit leem esse arquivo.
+  - O espelho é de uma via: o `todo.md` é sobrescrito. Um `todo.md` que não é do espelho vai para `todo.md.bak.<data>`. Desligue com `COCKPIT_TODO_MIRROR=off`. Itens editados direto no `todo.md` não voltam ao over9k.
+  - **Sem Switcher:** com `Agentes` ativa, o mod `over9k` não carrega e o comando `over9k.switcher` não existe. Use `ctrl-alt-j` (próximo agente que espera), `ctrl-alt-a` (visão de agentes) e `ctrl-alt-p` (paleta). Para o `ctrl-tab`, use o layout `traycer`.
+  - Teclas: `keys/multiproject.json` tem as teclas do cockpit (`ctrl-alt-*`). Não inclui o painel `skillshare`. O binário `cockpit` roda no WSL, como no layout `cockpit`.
+  - Testes: `tests/herdr_layouts_test.sh` valida ids únicos e `active` de cada stack. `tests/over9k_todos_mirror_test.sh` cobre o espelho.
 - **Validar:** `herdr-app.exe check 'C:\Users\<user>\.config\herdr-app\mods\cache-hit'` e `herdr-app.exe shot`.
 - **Escape:** `ctrl-alt-shift-escape` volta ao layout `main`.
 

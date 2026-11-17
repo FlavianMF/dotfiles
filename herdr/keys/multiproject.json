@@ -23,8 +23,6 @@
     "ctrl-alt-r": "cockpit.resume",
     "ctrl-alt-shift-r": "cockpit.recap",
     "ctrl-alt-g": "cockpit.pr",
-    "ctrl-alt-l": "cockpit.ticket",
-    "ctrl-tab": "over9k.switcher",
-    "ctrl-shift-w": "over9k.close-tab"
+    "ctrl-alt-l": "cockpit.ticket"
   }
 }
