@@ -1,0 +1,13 @@
+--- a/mods/cockpit/fleet.js	2026-11-17 16:07:10.570122305 -0300
++++ b/mods/cockpit/fleet.js	2026-11-17 16:07:10.614072682 -0300
+@@ -23,7 +23,9 @@
+   if (!value?.remote) return rows;
+   const status = deskStatus();
+   return rows.map((r) => {
+-    const address = `${value.remote}/${addressOf(r)}`;
++    // ADAPTADO para dotfiles: o hook já grava o id com a máquina (`app:wsl/t12`), então não soma o prefixo de novo.
++    const bare = addressOf(r);
++    const address = bare.startsWith(`${value.remote}/`) ? bare : `${value.remote}/${bare}`;
+     const desk = status.get(address);
+     const rests = r.stage === "done" && desk !== undefined && desk !== "done";
+     return { ...r, remote: value.remote, address, terminal: `app:${address}`, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && desk === "done" };
