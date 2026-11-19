@@ -5,7 +5,7 @@
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { run, notify } from "herdr";
+import { run, notify, layout } from "herdr";
 import * as hub from "./hub.js";
 import { sharing } from "./feed.js";
 import { fleet, counts } from "./fleet.js";
