@@ -5,7 +5,10 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UP="$HOME/.claude/plugins/marketplaces/cockpit/app/mods/cockpit"
-[[ -f "$UP/activity.js" && -f "$UP/sidebar.js" ]] || { echo "SKIP: upstream do cockpit ausente"; exit 0; }
+PATCHED=(activity sidebar hub fleet status show code editor agentsui recap home agent-head start ui commands chat-top)
+for f in "${PATCHED[@]}"; do
+  [[ -f "$UP/$f.js" ]] || { echo "SKIP: upstream $f.js ausente"; exit 0; }
+done
 command -v patch >/dev/null || { echo "SKIP: patch ausente"; exit 0; }
 fail=0
 ok() { echo "ok: $1"; }
@@ -15,12 +18,18 @@ tmp="$(mktemp -d)"
 trap 'find "$tmp" -mindepth 1 -delete 2>/dev/null; rmdir "$tmp" 2>/dev/null || true' EXIT
 export HERDR_APP_HOME="$tmp/app"
 mkdir -p "$HERDR_APP_HOME/mods/cockpit"
-cp "$UP/activity.js" "$UP/sidebar.js" "$HERDR_APP_HOME/mods/cockpit/"
+for f in "${PATCHED[@]}"; do
+  cp "$UP/$f.js" "$HERDR_APP_HOME/mods/cockpit/"
+done
 
 bash "$ROOT/herdr/scripts/cockpit-patch.sh" --quiet || bad "primeira execução saiu com erro"
-grep -q "ADAPTADO para dotfiles" "$HERDR_APP_HOME/mods/cockpit/activity.js" && ok "activity.js com o marcador" || bad "activity.js sem o marcador"
+for f in "${PATCHED[@]}"; do
+  grep -q "ADAPTADO para dotfiles" "$HERDR_APP_HOME/mods/cockpit/$f.js" || bad "$f.js sem o marcador"
+  cmp -s "$HERDR_APP_HOME/mods/cockpit/$f.js" "$ROOT/herdr/app/mods/cockpit/$f.js" || bad "$f.js difere do repo"
+done
+ok "todos os ${#PATCHED[@]} patches aplicam e batem com o repo"
 grep -q "quota-box" "$HERDR_APP_HOME/mods/cockpit/sidebar.js" && bad "sidebar.js ainda tem o quota-box" || ok "sidebar.js sem o quota-box"
-cmp -s "$HERDR_APP_HOME/mods/cockpit/activity.js" "$ROOT/herdr/app/mods/cockpit/activity.js" && ok "activity.js igual ao do repo" || bad "activity.js difere do repo"
+grep -q "isLoopbackHost" "$HERDR_APP_HOME/mods/cockpit/hub.js" && ok "hub.js libera loopback" || bad "hub.js sem isLoopbackHost"
 
 before="$(cksum "$HERDR_APP_HOME"/mods/cockpit/*.js | sort)"
 n_bak="$(find "$HERDR_APP_HOME/mods/cockpit" -name '*.bak.*' | wc -l)"

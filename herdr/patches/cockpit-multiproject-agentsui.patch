@@ -1,0 +1,69 @@
+--- a/mods/cockpit/agentsui.js
++++ b/mods/cockpit/agentsui.js
+@@ -45,7 +45,8 @@
+ };
+ 
+ /** Whether the person can dismiss this row's card: it asks or stopped with an error, here and not yet set aside. */
+-export const dismissable = (row) => Boolean(row) && !row.herdr && !row.remote && !row.dismissed && (row.stage === "needs_you" || row.stage === "failed");
++// ADAPTADO para dotfiles: ações em máquina loopback usam readOnly separado de remote.
++export const dismissable = (row) => Boolean(row) && !row.herdr && !row.readOnly && !row.dismissed && (row.stage === "needs_you" || row.stage === "failed");
+ 
+ /** The colour of an agent's status (`agentStatus`'s words): failed is the destructive one. */
+ export function statusColor(k, status) {
+@@ -271,7 +272,7 @@
+    * dismissed row comes back instead. The person's own act: a click, a real key or a menu's keyed command.
+    */
+   dismiss(cx, row, back = Boolean(row?.dismissed), from = "card") {
+-    if (!row || row.herdr || row.remote) return;
++    if (!row || row.herdr || row.readOnly) return;
+     const title = row.title || row.tab?.name || row.address;
+     this.busy.set(row.terminal, back ? "bringing it back" : "dismissing");
+     cx.notify();
+@@ -370,7 +371,7 @@
+     run("agent.focus", { terminal: row.address });
+     showWork();
+     // A runner's hub takes no writes from a remote desk.
+-    if (person && !row.herdr && !row.remote) this.act(cx, "seen", { terminal: row.terminal });
++    if (person && !row.herdr && !row.readOnly) this.act(cx, "seen", { terminal: row.terminal });
+   }
+ 
+   /** The right-click menu of an agent; its items come back as `cockpit.agents|<what>|<terminal>|<arg>`. */
+@@ -386,7 +387,7 @@
+       return openMenu(
+         [
+           { label: "Read in Cockpit Chat", icon: "message-square", kbd: kbd("⏎"), command: c("read") },
+-          !row.remote && { label: "Open in a terminal", icon: "terminal", command: c("handover") },
++          !row.readOnly && { label: "Open in a terminal", icon: "terminal", command: c("handover") },
+           { label: row.recap?.text ? "Recap again" : "Recap", icon: "sparkles", kbd: kbd("r"), command: c("recap") },
+           "separator",
+           dismissable(row) && { label: "Dismiss until it asks again", icon: "x", command: c("dismiss", row.wait ?? "") },
+@@ -406,9 +407,9 @@
+         !row.snoozed && { label: "Snooze until 18:00", icon: "clock", command: c("snooze", "18:00") },
+         !row.snoozed && { label: "Snooze until tomorrow", icon: "calendar", command: c("snooze", "tomorrow") },
+         !row.snoozed && { label: "Snooze till it changes", icon: "hourglass", command: c("snooze", "done") },
+-        row.unread && !row.remote && { label: "Mark as seen", icon: "check", command: c("seen") },
++        row.unread && !row.readOnly && { label: "Mark as seen", icon: "check", command: c("seen") },
+         dismissable(row) && { label: "Dismiss until it asks again", icon: "x", command: c("dismiss", row.wait ?? "") },
+-        row.dismissed && !row.remote && { label: "Bring back to Needs you", icon: "undo", command: c("restore") },
++        row.dismissed && !row.readOnly && { label: "Bring back to Needs you", icon: "undo", command: c("restore") },
+         "separator",
+         { label: "Fork to a new tab", icon: "git-fork", command: c("fork", "tab") },
+         { label: "Fork to the right", icon: "square-split", command: c("fork", "right") },
+@@ -582,7 +583,7 @@
+     Button(`${id}-go`, { label: "Go to agent", icon: "corner-down-left", variant: "outline", size: "sm", tooltip: "Answer it in its terminal", onClick: (_e, cx) => model.go(cx, row) }),
+     Button(`${id}-snooze`, { icon: "alarm-clock", variant: "ghost", size: "icon-sm", tooltip: "Snooze…", onClick: () => model.menu(row) }),
+   ];
+-  const aside = !dismiss ? null : dismissable(row) ? DismissButton(id, row, model) : row.dismissed && !row.remote ? RestoreButton(id, row, model) : null;
++  const aside = !dismiss ? null : dismissable(row) ? DismissButton(id, row, model) : row.dismissed && !row.readOnly ? RestoreButton(id, row, model) : null;
+   return v_flex()
+     .id(id)
+     .w_full()
+@@ -733,7 +734,7 @@
+     Button(`${id}-go`, { icon: "corner-down-left", variant: "outline", size: "icon-sm", tooltip: "Go to the agent", onClick: (_e, cx) => model.go(cx, row) }),
+     Button(`${id}-snooze`, { icon: "alarm-clock", variant: "ghost", size: "icon-sm", tooltip: "Snooze…", onClick: () => model.menu(row) }),
+   ].filter(Boolean);
+-  const aside = !dismiss ? null : dismissable(row) ? DismissButton(id, row, model) : row.dismissed && !row.remote ? RestoreButton(id, row, model) : null;
++  const aside = !dismiss ? null : dismissable(row) ? DismissButton(id, row, model) : row.dismissed && !row.readOnly ? RestoreButton(id, row, model) : null;
+   const held = Boolean(focus?.is_focused?.());
+   return v_flex()
+     .id(id)

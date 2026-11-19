@@ -1,0 +1,48 @@
+--- a/mods/cockpit/home.js
++++ b/mods/cockpit/home.js
+@@ -177,7 +177,8 @@
+     const settled = new Set(spaces().flatMap((s) => s.tabs.filter((t) => t.settled).map((t) => t.id)));
+     const branches = new Set(agents.filter((a) => a.branch).map((a) => `${a.repo ?? ""}/${a.branch}`));
+     const covered = (pr) => branches.has(`${pr.repo}/${pr.branch}`) || agents.some((a) => a.branch && a.branch === pr.branch);
+-    const agentCard = (a) => ({ kind: "agent", key: `a:${a.address}`, stage: a.stage, project: a.repo ?? a.space_name, agent: a, archived: !a.remote && settled.has(a.tab) });
++    // ADAPTADO para dotfiles: ações e arquivamento em loopback usam readOnly separado de remote.
++    const agentCard = (a) => ({ kind: "agent", key: `a:${a.address}`, stage: a.stage, project: a.repo ?? a.space_name, agent: a, archived: !a.readOnly && settled.has(a.tab) });
+     const prCard = (pr, stage) => ({ kind: "pr", key: `p:${pr.url}`, stage, project: pr.repo, pr, agent: agents.find((a) => a.branch && a.branch === pr.branch) ?? null });
+     const all = [
+       ...agents.map(agentCard),
+@@ -380,7 +381,7 @@
+       a && "separator",
+       a && a.status === "blocked" && { label: "Snooze for an hour", icon: "moon", kbd: "s", command: `home:snooze:${id}` },
+       a && dismissable(a.row) && { label: "Dismiss until it asks again", icon: "x", kbd: "x", command: `home:dismiss:${id}` },
+-      a && a.dismissed && !a.remote && { label: "Bring back to Needs you", icon: "undo", kbd: "x", command: `home:restore:${id}` },
++      a && a.dismissed && !a.readOnly && { label: "Bring back to Needs you", icon: "undo", kbd: "x", command: `home:restore:${id}` },
+       a && { label: pinsNow().includes(a.handle) ? "Unpin" : "Pin to the top", icon: pinsNow().includes(a.handle) ? "pin-off" : "pin", kbd: "p", command: `home:pin:${id}` },
+       a && { label: "Mark as seen", icon: "eye", command: `home:seen:${id}` },
+       a && { label: "Fork to a new tab", icon: "git-fork", command: `home:fork:${id}` },
+@@ -421,10 +422,10 @@
+     else if (action === "snooze" && a) cx.spawn(async (cx) => this.act(cx, card.key, "Snoozing…", () => agentAct("snooze", { terminal: a.handle, until: "1h" })));
+     else if (action === "seen" && a) cx.spawn(async (cx) => this.act(cx, card.key, "…", () => agentAct("seen", { terminal: a.handle })));
+     // Each names what it does: a command that comes late never undoes what the person saw.
+-    else if (action === "dismiss" && a && !a.remote) this.dismiss(cx, card, false);
+-    else if (action === "restore" && a && !a.remote) this.dismiss(cx, card, true);
++    else if (action === "dismiss" && a && !a.readOnly) this.dismiss(cx, card, false);
++    else if (action === "restore" && a && !a.readOnly) this.dismiss(cx, card, true);
+     else if (action === "fork" && a) cx.spawn(async (cx) => this.act(cx, card.key, "Forking…", () => agentAct("fork", { terminal: a.handle, place: "tab" })));
+-    else if (action === "stop" && a?.row?.stoppable && !a.remote && !this.busy.has(card.key)) cx.spawn(async (cx) => this.act(cx, card.key, "Stopping…", () => agentAct("interrupt", { terminal: a.handle }), `Stopping ${a.title}…`));
++    else if (action === "stop" && a?.row?.stoppable && !a.readOnly && !this.busy.has(card.key)) cx.spawn(async (cx) => this.act(cx, card.key, "Stopping…", () => agentAct("interrupt", { terminal: a.handle }), `Stopping ${a.title}…`));
+     else if (action === "queue" && a && !available(layoutName(), "queue")) goToAgent(a);
+     else if (action === "queue" && a) {
+       setShared("cockpit.queue.for", a.address);
+@@ -1224,10 +1225,10 @@
+       if (a) actions.push(Button(`${card.key}-go`, { label: "Go to agent", variant: "ghost", size: "sm", onClick: () => goToAgent(a) }));
+     } else if (showing && isAgentCard) {
+       actions.push(Button(`${card.key}-go`, { label: "Go to agent", variant: "outline", size: "sm", onClick: () => goToAgent(a) }));
+-      if (a.dismissed && !a.remote) actions.push(Button(`${card.key}-restore`, { label: "Bring back", icon: "undo", variant: "ghost", size: "sm", kbd: "x", tooltip: "Back to Needs you", onClick: (_e, cx) => (cx.stop_propagation(), this.run("restore", card, cx)) }));
++      if (a.dismissed && !a.readOnly) actions.push(Button(`${card.key}-restore`, { label: "Bring back", icon: "undo", variant: "ghost", size: "sm", kbd: "x", tooltip: "Back to Needs you", onClick: (_e, cx) => (cx.stop_propagation(), this.run("restore", card, cx)) }));
+       if (card.stage === "done") actions.push(Button(`${card.key}-archive`, { label: "Archive", icon: "archive", variant: "ghost", size: "sm", kbd: "a", onClick: (_e, cx) => this.archive(cx, a) }));
+       if (card.stage === "working") actions.push(Button(`${card.key}-queue`, { label: "Queue a prompt", icon: "list-ordered", variant: "ghost", size: "sm", onClick: (_e, cx) => this.run("queue", card, cx) }));
+-      if (card.stage === "working" && a.row?.stoppable && !a.remote) actions.push(Button(`${card.key}-stop`, { label: "Stop", icon: "square", variant: "ghost", size: "sm", kbd: "x", onClick: (_e, cx) => this.run("stop", card, cx) }));
++      if (card.stage === "working" && a.row?.stoppable && !a.readOnly) actions.push(Button(`${card.key}-stop`, { label: "Stop", icon: "square", variant: "ghost", size: "sm", kbd: "x", onClick: (_e, cx) => this.run("stop", card, cx) }));
+     }
+ 
+     if (isAgentCard && showing && !busy) {

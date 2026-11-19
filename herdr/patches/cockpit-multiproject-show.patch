@@ -1,6 +1,19 @@
---- a/mods/cockpit/show.js	2026-11-17 16:22:39.774228218 -0300
-+++ b/mods/cockpit/show.js	2026-11-17 16:22:39.817258439 -0300
-@@ -320,9 +320,11 @@
+--- a/mods/cockpit/show.js
++++ b/mods/cockpit/show.js
+@@ -261,7 +261,11 @@
+     const script = `mkdir -p "$(dirname "$1")" && { [ -s "$1" ] || ${fetch}; } && ${size}`;
+     cx.spawn(async (cx) => {
+       try {
+-        const r = await exec("sh", ["-c", script, "sh", `${appHome()}/${rel}`, pic.src]);
++        // ADAPTADO para dotfiles: no Windows com máquina remota (WSL), converte appHome() para /mnt/<drive>/... e executa no WSL.
++        const onWin = win()?.platform === "windows";
++        const machine = onWin ? hub.remoteMachine() : null;
++        const dest = machine ? appHome().replace(/\\/g, "/").replace(/^([A-Za-z]):\//, (_, d) => `/mnt/${d.toLowerCase()}/`) + `/${rel}` : `${appHome()}/${rel}`;
++        const r = await exec("sh", ["-c", script, "sh", dest, pic.src], machine ? { on: machine } : undefined);
+         const dims = [...r.stdout.matchAll(/(\d+) ?x ?(\d+)/g)].pop();
+         const w = Number(/pixelWidth: (\d+)/.exec(r.stdout)?.[1] ?? dims?.[1]), h = Number(/pixelHeight: (\d+)/.exec(r.stdout)?.[1] ?? dims?.[2]);
+         this.images.set(pic.key, r.code === 0 ? { state: "ready", rel, w: w || 800, h: h || 500 } : { state: "failed", error: r.stderr.trim() || "could not read the picture" });
+@@ -340,9 +344,11 @@
      if (url) hub.openUrl(url).catch(() => {});
    }
  
@@ -14,12 +27,12 @@
    }
  
    copyCsv(cx, b) {
-@@ -355,7 +357,7 @@
+@@ -378,7 +384,7 @@
      const [scope, action, ...rest] = c.split(":");
      if (scope !== "show") return;
      const arg = rest.join(":");
 -    if (action === "hide" && arg === this.name) this.hide();
 +    if (action === "hide" && arg === this.name) this.hide(true);
-     else if (action === "go") this.goTo(arg, cx);
+     else if (action === "go") this.goTo(arg, cx, take(c, key));
      else if (action === "copy") {
        const b = this.view()?.blocks?.[Number(arg)];

@@ -1,0 +1,12 @@
+--- a/mods/cockpit/chat-top.js
++++ b/mods/cockpit/chat-top.js
+@@ -359,7 +359,8 @@
+ 
+   /** The hub's dot: its state without colour, and on this machine a way to start it when it is down. */
+   hubButton(k) {
+-    const dot = hubDot(this.hub, { remote: Boolean(hub.remoteMachine()) });
++    // ADAPTADO para dotfiles: loopback WSL permite Start it no indicador do hub.
++    const dot = hubDot(this.hub, { remote: hub.isReadOnly() });
+     const mark =
+       dot.kind === "live"
+         ? div().size(7).rounded(4).bg(k.mutedFg)

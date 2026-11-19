@@ -1,6 +1,6 @@
 repo=https://github.com/quaresc/cockpit
-commit=dc020812e7f90ad2da1f36507557b9988b57c3f1
-release=0.40.4
+commit=b0200c7d7d9b428c9f409c4d68e07b952ea09f1
+release=1.0.1
 license=MIT
 # Vendorizado em herdr/app: layouts/cockpit.{json,svg} e mods/cockpit.
 # app/cockpit.json usa o modo "remote desk" (docs/app.md do upstream): o app Windows lê o hub que roda no WSL2 (machine "wsl").

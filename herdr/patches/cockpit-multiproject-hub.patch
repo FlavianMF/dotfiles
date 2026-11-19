@@ -1,22 +1,46 @@
-diff --git a/mods/cockpit/hub.js b/mods/cockpit/hub.js
-index 1e77a2b..ece2e96 100644
 --- a/mods/cockpit/hub.js
 +++ b/mods/cockpit/hub.js
-@@ -23,6 +23,8 @@ const RUNNER_ACTS = {
-   review: new Set(["send", "walkthrough", "stop_walkthrough"]),
-   runbook: new Set(["done", "set", "add", "undo", "run_step"]),
- };
-+// ADAPTADO para dotfiles: o hub do runner já aceita estas ações de uma janela remota; só o gate do mod dava "read-only".
-+const REMOTE_ACTS = { home: new Set(["resume", "dismiss"]) };
- /** The app behind a pinned space's name, as `cockpit focus space:<name>` gives it. */
- const SPACES = { inbox: "inbox", runbook: "runbook", "to-do": "todo", todo: "todo", meetings: "meetings", monitor: "monitor", routines: "routines", mail: "mail" };
+@@ -119,6 +119,9 @@
  
-@@ -208,7 +210,7 @@ export async function request(op, fields = {}) {
+ /** The machine of a remote desk, as the last read of the install says; null on this machine or before any read. */
+ export const remoteMachine = () => installed?.value?.machine ?? null;
++// ADAPTADO para dotfiles: loopback (WSL no mesmo PC) aceita escrita no hub; só host não-loopback fica somente leitura.
++export const isLoopbackHost = (host) => /^(?:127(?:\.\d{1,3}){3}|localhost|::1|\[::1\])$/i.test(String(host ?? "").trim());
++export const isReadOnly = () => Boolean(installed?.value?.machine && !isLoopbackHost(installed?.value?.host));
+ export async function install() {
+   if (installed && Date.now() - installed.at < 3000) return installed.value;
+   const text = await readTextFile(`${appHome()}/cockpit.json`);
+@@ -391,7 +394,7 @@
+       return { code: 0, stdout: "", stderr: "" };
+     }
+     const runner = args[1] === "act" && (args.length === 5 || args.length === 6) && RUNNER_ACTS[args[2]]?.has(args[3]);
+-    if (args[0] !== "hub" || !(["start", "ping", "shown"].includes(args[1]) || runner)) throw new Error(READ_ONLY);
++    if (!isLoopbackHost(host) && (args[0] !== "hub" || !(["start", "ping", "shown"].includes(args[1]) || runner))) throw new Error(READ_ONLY);
+     return exec("env", [...vars, `HOME=${home}`, `COCKPIT_HUB_LISTEN=${host}`, "COCKPIT_FRONTEND=app", bin, ...args], { on: machine });
+   }
+   return exec("env", [`HOME=${home}`, `HERDR_APP_HOME=${appHome()}`, "COCKPIT_FRONTEND=app", ...vars, bin, ...args]);
+@@ -409,11 +412,12 @@
+     return r.code === 0 ? { note: `opened ${url}`, pending: {}, refreshing: {} } : { error: r.stderr.trim() || `could not open ${url}`, pending: {} };
+   }
+   sign();
+-  const { machine } = await install();
++  const { machine, host } = await install();
++  const readOnly = Boolean(machine && !isLoopbackHost(host));
    if (machine) {
      if (op === "go") return localFocus(fields.target);
-     if (op === "act" && RUNNER_ACTS[fields.app]?.has(fields.action)) return runnerAct(machine, fields.app, fields.action, fields.args ?? [], fields.armed);
+-    if (op === "act" && RUNNER_ACTS[fields.app]?.has(fields.action)) return runnerAct(machine, fields.app, fields.action, fields.args ?? [], fields.armed);
 -    if (!REMOTE_READS.has(op)) throw new Error(READ_ONLY);
-+    if (!REMOTE_READS.has(op) && !(op === "act" && REMOTE_ACTS[fields.app]?.has(fields.action))) throw new Error(READ_ONLY);
++    if (readOnly && op === "act" && RUNNER_ACTS[fields.app]?.has(fields.action)) return runnerAct(machine, fields.app, fields.action, fields.args ?? [], fields.armed);
++    if (readOnly && !REMOTE_READS.has(op)) throw new Error(READ_ONLY);
    }
-   const { socket, token, lines, remote } = await connect();
-   try {
+   const connecting = connect(null, cx);
+   let connection;
+@@ -434,7 +438,7 @@
+     if (line === null) throw new Error("the cockpit hub closed the connection");
+     const answer = JSON.parse(line);
+     if (answer.error && answer.note === undefined) throw Object.assign(new Error(answer.error), { answered: true });
+-    if (remote && op === "view" && fields.name === "agents") answer.value = { ...answer.value, remote };
++    if (remote && op === "view" && fields.name === "agents") answer.value = { ...answer.value, remote, readOnly };
+     return answer;
+   } catch (e) {
+     // Sent and never answered: it may have been done, so it is not said to have failed.

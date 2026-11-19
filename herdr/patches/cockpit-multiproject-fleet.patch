@@ -1,13 +1,48 @@
---- a/mods/cockpit/fleet.js	2026-11-17 16:07:10.570122305 -0300
-+++ b/mods/cockpit/fleet.js	2026-11-17 16:07:10.614072682 -0300
-@@ -23,7 +23,9 @@
+--- a/mods/cockpit/fleet.js
++++ b/mods/cockpit/fleet.js
+@@ -36,11 +36,17 @@
+   const rows = Array.isArray(value) ? value : value?.agents ?? value?.rows ?? [];
    if (!value?.remote) return rows;
    const status = deskStatus();
++  const readOnly = value.readOnly ?? hub.isReadOnly();
++  const prefix = (id) => (!id || String(id).startsWith(`${value.remote}/`) ? id : `${value.remote}/${id}`);
    return rows.map((r) => {
 -    const address = `${value.remote}/${addressOf(r)}`;
-+    // ADAPTADO para dotfiles: o hook já grava o id com a máquina (`app:wsl/t12`), então não soma o prefixo de novo.
++    // ADAPTADO para dotfiles: evita prefixo duplicado, normaliza tab/space e separa readOnly de remote (loopback aceita escrita).
 +    const bare = addressOf(r);
-+    const address = bare.startsWith(`${value.remote}/`) ? bare : `${value.remote}/${bare}`;
++    const address = prefix(bare);
      const desk = status.get(address);
      const rests = r.stage === "done" && desk !== undefined && desk !== "done";
-     return { ...r, remote: value.remote, address, terminal: `app:${address}`, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && desk === "done" };
+-    return { ...r, remote: value.remote, address, terminal: `app:${address}`, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && desk === "done" };
++    const tab = r.tab?.id ? { ...r.tab, id: prefix(r.tab.id) } : r.tab;
++    const space = r.space?.id ? { ...r.space, id: prefix(r.space.id) } : r.space;
++    return { ...r, remote: value.remote, readOnly, address, terminal: `app:${address}`, tab, space, stage: rests ? "idle" : r.stage, unread: Boolean(r.unread) && desk === "done" };
+   });
+ }
+ 
+@@ -109,7 +115,7 @@
+ export function fleet(rows, home) {
+   const byAddress = new Map(rowsOf(rows).map((r) => [addressOf(r), r]));
+   const tabs = new Map();
+-  if (!rows?.remote) for (const s of spaces()) for (const t of s.tabs) tabs.set(t.id, { tab: t, space: s });
++  if (!rows?.remote || !hub.isReadOnly()) for (const s of spaces()) for (const t of s.tabs) tabs.set(t.id, { tab: t, space: s });
+   const merged = new Set((home?.merged ?? []).map((m) => `${m.repo}/${m.branch}`));
+   // Herdr's list, plus the agents only the hub sees (a Claude session attached from the background, the demo's).
+   const live = rows?.remote ? [] : agents();
+@@ -128,6 +134,7 @@
+     const landed = Boolean(branch && repo && merged.has(`${repo}/${branch}`)) || pr?.state === "MERGED" || pr?.merged === true;
+     const agent = {
+       remote: r.remote,
++      readOnly: Boolean(r.readOnly),
+       address: a.address,
+       // A session cockpit drives is its own handle; a Herdr terminal's is its address.
+       handle: r.driven ? r.terminal : `app:${a.address}`,
+@@ -215,7 +222,7 @@
+ 
+ /** Explains why a remote row cannot run tab commands: its tab ids belong to the runner, not this desktop. */
+ export function refuseRemoteAgent(agent) {
+-  if (!agent?.remote) return false;
++  if (!agent?.readOnly) return false;
+   notify({ title: "Read-only remote desk", body: "Archiving a runner's agent needs a local cockpit installation.", level: "info" });
+   return true;
+ }

@@ -142,6 +142,13 @@ export PATH="$HOME/.local/bin:$PATH"
 export PATH="$PATH:$HOME/.cargo/bin"
 [[ -d /usr/lib/wsl/lib ]] && export PATH="/usr/lib/wsl/lib:$PATH"
 [[ -d /usr/local/cuda/bin ]] && export PATH="/usr/local/cuda/bin:$PATH"
+if [[ -z "${HERDR_APP_HOME:-}" ]]; then
+  for _herdr_app_dir in /mnt/c/Users/*/.config/herdr-app(N/); do
+    export HERDR_APP_HOME="$_herdr_app_dir"
+    break
+  done
+  unset _herdr_app_dir
+fi
 
 # Local secrets (gitignored, per-machine — see dotfiles/secrets/)
 for _secret_env in "$HOME/dotfiles/secrets/"*.env(N); do

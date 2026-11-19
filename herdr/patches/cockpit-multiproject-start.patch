@@ -1,0 +1,13 @@
+--- a/mods/cockpit/start.js
++++ b/mods/cockpit/start.js
+@@ -79,8 +79,8 @@
+     cx.spawn(async (cx) => {
+       const install = await hub.install().catch(() => ({}));
+       this.home = install?.home ?? "";
+-      // A remote desk reads another machine's hub, which plans and runs nothing for it.
+-      this.remote = install?.machine ?? null;
++      // ADAPTADO para dotfiles: loopback (WSL no mesmo PC) aceita Start work; só host não-loopback fica somente leitura.
++      this.remote = hub.isReadOnly() ? (install?.machine ?? null) : null;
+       cx.notify();
+     });
+     if (this.started) this.follow(cx);
