@@ -290,7 +290,7 @@ index 00ff4f6..7ddc7da 100644
              Ok(())
          }
 diff --git a/herdr/tui/core/src/frontend.rs b/herdr/tui/core/src/frontend.rs
-index c680229..d5d022a 100644
+index c680229..c4d8981 100644
 --- a/herdr/tui/core/src/frontend.rs
 +++ b/herdr/tui/core/src/frontend.rs
 @@ -108,7 +108,7 @@ pub fn detect() -> Frontend {
@@ -302,7 +302,7 @@ index c680229..d5d022a 100644
      let mut pid = std::process::id() as u64;
      for _ in 0..64 {
          if pid == shell {
-@@ -166,6 +166,102 @@ fn json_of(argv: &[String]) -> Option<Value> {
+@@ -166,6 +166,105 @@ fn json_of(argv: &[String]) -> Option<Value> {
  // ---------------------------------------------------------------------------------------------------------------------
  // The Herdr app
  
@@ -346,14 +346,17 @@ index c680229..d5d022a 100644
 +    None
 +}
 +
++pub(crate) fn on_wsl() -> bool {
++    std::fs::read_to_string("/proc/sys/kernel/osrelease")
++        .or_else(|_| std::fs::read_to_string("/proc/version"))
++        .is_ok_and(|s| {
++            let low = s.to_ascii_lowercase();
++            low.contains("microsoft") || low.contains("wsl")
++        })
++}
++
 +fn running_on_wsl() -> bool {
-+    !app_home().join("herdr-app.sock").exists()
-+        && std::fs::read_to_string("/proc/sys/kernel/osrelease")
-+            .or_else(|_| std::fs::read_to_string("/proc/version"))
-+            .is_ok_and(|s| {
-+                let low = s.to_ascii_lowercase();
-+                low.contains("microsoft") || low.contains("wsl")
-+            })
++    !app_home().join("herdr-app.sock").exists() && on_wsl()
 +}
 +
 +/// Machine name used by `herdr-app` for spaces on this host (`Some("wsl")` on WSL, `None` when `herdr-app` is local).
@@ -405,7 +408,7 @@ index c680229..d5d022a 100644
  /// `herdr-app do <command> <args>`: what the command made, None when it failed.
  pub fn app_do(command: &str, args: &Value) -> Option<Value> {
      json_of(&[program("herdr-app", "HERDR_APP_BIN"), "do".into(), command.into(), args.to_string()])
-@@ -196,9 +292,20 @@ pub fn app_spaces() -> Vec<Value> {
+@@ -196,9 +295,20 @@ pub fn app_spaces() -> Vec<Value> {
  
  /// The space and tab a terminal shows in, by its address.
  pub fn app_place(terminal: &str) -> Option<(String, String)> {
@@ -427,7 +430,7 @@ index c680229..d5d022a 100644
                  return Some((space["id"].as_str()?.to_string(), tab["id"].as_str()?.to_string()));
              }
          }
-@@ -208,7 +315,11 @@ pub fn app_place(terminal: &str) -> Option<(String, String)> {
+@@ -208,7 +318,11 @@ pub fn app_place(terminal: &str) -> Option<(String, String)> {
  
  /// The id of the app space with this name, if open.
  pub fn app_space_named(name: &str) -> Option<String> {
@@ -440,7 +443,7 @@ index c680229..d5d022a 100644
  }
  
  /// The cockpit layouts: each name, and the stack that holds its screens.
-@@ -345,7 +456,7 @@ pub fn show_app(app: &str, space: &str) -> bool {
+@@ -345,7 +459,7 @@ pub fn show_app(app: &str, space: &str) -> bool {
  pub fn new_space(cwd: &str, label: &str) -> Option<String> {
      match current() {
          Frontend::App => {
@@ -449,7 +452,7 @@ index c680229..d5d022a 100644
              app_show_work();
              app_handle(&made)
          }
-@@ -374,7 +485,11 @@ pub fn actions_tab(pinned: &[String], cwd: &str, label: &str) -> Option<String>
+@@ -374,7 +488,11 @@ pub fn actions_tab(pinned: &[String], cwd: &str, label: &str) -> Option<String>
      match current() {
          Frontend::App => {
              let name = std::path::Path::new(cwd).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| label.to_string());
@@ -462,7 +465,7 @@ index c680229..d5d022a 100644
              let found = spaces.iter().find(|s| s["folder"].as_str() == Some(cwd)).or_else(|| spaces.iter().find(|s| s["name"].as_str() == Some(name.as_str())));
              let space = match found.and_then(|s| s["id"].as_str()) {
                  Some(id) => id.to_string(),
-@@ -402,9 +517,10 @@ pub fn actions_tab(pinned: &[String], cwd: &str, label: &str) -> Option<String>
+@@ -402,9 +520,10 @@ pub fn actions_tab(pinned: &[String], cwd: &str, label: &str) -> Option<String>
  pub fn new_tab(space: &str, cwd: &str, label: &str) -> Option<String> {
      match space.strip_prefix(APP) {
          Some(id) => {
@@ -475,7 +478,7 @@ index c680229..d5d022a 100644
              app_handle(&made)
          }
          None => root_pane(&herdr(&["tab", "create", "--workspace", space, "--cwd", cwd, "--label", label, "--focus"])?),
-@@ -438,7 +554,7 @@ fn hc_send(terminal: &str, text: &str, force: bool) -> Vec<String> {
+@@ -438,7 +557,7 @@ fn hc_send(terminal: &str, text: &str, force: bool) -> Vec<String> {
  pub fn run_in(handle: &str, line: &str) -> bool {
      match handle.strip_prefix(APP) {
          Some(terminal) => {
@@ -484,7 +487,7 @@ index c680229..d5d022a 100644
              // Sent from a terminal, hc tags the text with its sender: a shell would run the tag.
              Command::new(&argv[0])
                  .args(&argv[1..])
-@@ -461,7 +577,7 @@ pub fn app_type(terminal: &str, text: &str) -> bool {
+@@ -461,7 +580,7 @@ pub fn app_type(terminal: &str, text: &str) -> bool {
          return false;
      }
      app_show_work();
@@ -493,7 +496,7 @@ index c680229..d5d022a 100644
      if let Some(before) = before {
          std::thread::sleep(Duration::from_millis(800));
          files::copy(&String::from_utf8_lossy(&before));
-@@ -479,7 +595,7 @@ fn clipboard() -> Option<Vec<u8>> {
+@@ -479,7 +598,7 @@ fn clipboard() -> Option<Vec<u8>> {
  
  /// Sends text to an app terminal's agent as its next prompt.
  pub fn app_prompt(terminal: &str, text: &str) -> bool {
@@ -502,7 +505,7 @@ index c680229..d5d022a 100644
      Command::new(&argv[0])
          .args(&argv[1..])
          .env_remove("HC_TERMINAL_ID")
-@@ -493,12 +609,15 @@ pub fn app_prompt(terminal: &str, text: &str) -> bool {
+@@ -493,12 +612,15 @@ pub fn app_prompt(terminal: &str, text: &str) -> bool {
  /// Whether the handle's terminal still runs an agent: herdr's pane, or the app's live terminal, says which agent.
  pub fn alive(handle: &str) -> bool {
      match handle.strip_prefix(APP) {
@@ -520,7 +523,7 @@ index c680229..d5d022a 100644
  fn runs_agent(listed: &Value, terminal: &str) -> bool {
      listed["terminals"].as_array().into_iter().flatten().any(|t| t["address"] == terminal && t["state"] == "live" && truthy(&t["agent"]))
  }
-@@ -506,7 +625,10 @@ fn runs_agent(listed: &Value, terminal: &str) -> bool {
+@@ -506,7 +628,10 @@ fn runs_agent(listed: &Value, terminal: &str) -> bool {
  /// Whether the handle's pane or terminal still exists.
  pub fn exists(handle: &str) -> bool {
      match handle.strip_prefix(APP) {
@@ -532,7 +535,7 @@ index c680229..d5d022a 100644
          None => herdr(&["pane", "get", handle]).is_some_and(|f| truthy(&f)),
      }
  }
-@@ -516,7 +638,7 @@ pub fn focus(handle: &str) -> bool {
+@@ -516,7 +641,7 @@ pub fn focus(handle: &str) -> bool {
      match handle.strip_prefix(APP) {
          Some(terminal) => {
              app_show_work();
@@ -541,7 +544,7 @@ index c680229..d5d022a 100644
          }
          None => {
              let Some(found) = herdr(&["pane", "get", handle]).filter(truthy) else { return false };
-@@ -549,7 +671,7 @@ pub fn promote(handle: &str, label: &str) -> bool {
+@@ -549,7 +674,7 @@ pub fn promote(handle: &str, label: &str) -> bool {
  /// Closes a tab by its id: `app:<tab id>` in the app, a herdr tab id in the TUI.
  pub fn close_tab(tab: &str) -> bool {
      match tab.strip_prefix(APP) {
@@ -550,7 +553,7 @@ index c680229..d5d022a 100644
          None => herdr(&["tab", "close", tab]).is_some(),
      }
  }
-@@ -557,7 +679,7 @@ pub fn close_tab(tab: &str) -> bool {
+@@ -557,7 +682,7 @@ pub fn close_tab(tab: &str) -> bool {
  /// Closes a space by its id: `app:<space id>` in the app, a herdr workspace id in the TUI.
  pub fn close_space(space: &str) -> bool {
      match space.strip_prefix(APP) {
@@ -559,7 +562,7 @@ index c680229..d5d022a 100644
          None => herdr(&["workspace", "close", space]).is_some(),
      }
  }
-@@ -629,4 +751,18 @@ mod tests {
+@@ -629,4 +754,18 @@ mod tests {
          assert!(!runs_agent(&listed, "t42"), "a bare shell would run a prompt as commands");
          assert!(!runs_agent(&listed, "t43") && !runs_agent(&listed, "t9"));
      }
@@ -578,6 +581,147 @@ index c680229..d5d022a 100644
 +        assert_eq!(machine_in(&spaces, Some("t1"), &[], false), None);
 +    }
  }
+diff --git a/herdr/tui/core/src/peer.rs b/herdr/tui/core/src/peer.rs
+index e422068..fa4a751 100644
+--- a/herdr/tui/core/src/peer.rs
++++ b/herdr/tui/core/src/peer.rs
+@@ -101,9 +101,17 @@ pub fn current() -> Sender {
+         Some(Peer::Unix(Some(pid))) => Sender::Process(pid),
+         Some(Peer::Unix(None)) => Sender::Unknown,
+         Some(Peer::Tcp { port, hub }) => {
+-            let found = tcp_pid(port, hub);
+-            PEER.with(|p| *p.borrow_mut() = Some(Peer::Unix(found)));
+-            found.map_or(Sender::Unknown, Sender::Process)
++            if let Some(found) = tcp_pid(port, hub) {
++                PEER.with(|p| *p.borrow_mut() = Some(Peer::Unix(Some(found))));
++                Sender::Process(found)
++            } else if is_wsl_host_tcp(port, hub) {
++                let sender = Sender::Placed(Who::Person);
++                PEER.with(|p| *p.borrow_mut() = Some(Peer::Resolved(sender.clone())));
++                sender
++            } else {
++                PEER.with(|p| *p.borrow_mut() = Some(Peer::Unix(None)));
++                Sender::Unknown
++            }
+         }
+     }
+ }
+@@ -209,13 +217,112 @@ pub fn lsof(args: &[&str]) -> Option<String> {
+ }
+ 
+ /// /proc/net/tcp names the socket's inode by its two ports; the process is the one with that socket among its files.
++fn is_wsl_host_tcp(port: u16, hub: u16) -> bool {
++    #[cfg(target_os = "linux")]
++    {
++        if cfg!(test) || !crate::frontend::on_wsl() {
++            return false;
++        }
++        let tables = proc_net_tables();
++        let refs: Vec<&str> = tables.iter().map(String::as_str).collect();
++        wsl_host_tcp_in(&refs, port, hub)
++    }
++    #[cfg(not(target_os = "linux"))]
++    {
++        let _ = (port, hub);
++        false
++    }
++}
++
++#[cfg(target_os = "linux")]
++fn proc_net_tables() -> Vec<String> {
++    ["/proc/net/tcp", "/proc/net/tcp6"].iter().filter_map(|f| std::fs::read_to_string(f).ok()).collect()
++}
++
++#[cfg(target_os = "linux")]
++fn parse_proc_net_addr(addr: &str) -> Option<(&str, u16)> {
++    let (ip, hex_port) = addr.rsplit_once(':')?;
++    let port = u16::from_str_radix(hex_port, 16).ok()?;
++    Some((ip, port))
++}
++
++#[cfg(target_os = "linux")]
++fn is_loopback_hex(ip: &str) -> bool {
++    match ip.len() {
++        8 => u32::from_str_radix(ip, 16).is_ok_and(|w| std::net::Ipv4Addr::from(w.to_ne_bytes()).is_loopback()),
++        32 => {
++            let mut bytes = [0u8; 16];
++            for (i, slot) in bytes.chunks_exact_mut(4).enumerate() {
++                let Ok(w) = u32::from_str_radix(&ip[i * 8..(i + 1) * 8], 16) else {
++                    return false;
++                };
++                slot.copy_from_slice(&w.to_ne_bytes());
++            }
++            let v6 = std::net::Ipv6Addr::from(bytes);
++            v6.is_loopback() || v6.to_ipv4_mapped().is_some_and(|v4| v4.is_loopback())
++        }
++        _ => false,
++    }
++}
++
++/// Detect a mirrored WSL2 Windows-host loopback connection: the hub has an
++/// established loopback socket `(local = hub, rem = port, st = 01)` while no
++/// Linux-side client socket `(local = port, rem = hub)` exists in `/proc/net/tcp*`.
++#[cfg(target_os = "linux")]
++fn wsl_host_tcp_in(tables: &[&str], port: u16, hub: u16) -> bool {
++    let mut has_server = false;
++    for text in tables {
++        for line in text.lines().skip(1) {
++            let w: Vec<&str> = line.split_whitespace().collect();
++            if w.len() <= 3 {
++                continue;
++            }
++            let Some((lip, lport)) = parse_proc_net_addr(w[1]) else { continue };
++            let Some((rip, rport)) = parse_proc_net_addr(w[2]) else { continue };
++            if lport == port && rport == hub {
++                return false;
++            }
++            if w[3] == "01" && lport == hub && rport == port && is_loopback_hex(lip) && is_loopback_hex(rip) {
++                has_server = true;
++            }
++        }
++    }
++    has_server
++}
++
++#[cfg(all(test, target_os = "linux"))]
++mod wsl_tests {
++    use super::wsl_host_tcp_in;
++
++    #[test]
++    fn wsl_host_tcp_distinguishes_windows_host_from_local_linux_client() {
++        let header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode";
++        let server_only = format!(
++            "{header}\n   0: 0100007F:B1E7 0100007F:EA61 01 00000000:00000000 00:00000000 00000000  1000        0 999 1 0000000000000000 20 4 30 10 -1"
++        );
++        assert!(wsl_host_tcp_in(&[&server_only], 0xEA61, 0xB1E7));
++
++        let with_linux_client = format!(
++            "{server_only}\n   1: 0100007F:EA61 0100007F:B1E7 01 00000000:00000000 00:00000000 00000000  1000        0 888 1 0000000000000000 20 4 30 10 -1"
++        );
++        assert!(!wsl_host_tcp_in(&[&with_linux_client], 0xEA61, 0xB1E7));
++
++        let non_loopback = format!(
++            "{header}\n   0: C0A80102:B1E7 C0A80103:EA61 01 00000000:00000000 00:00000000 00000000  1000        0 999 1 0000000000000000 20 4 30 10 -1"
++        );
++        assert!(!wsl_host_tcp_in(&[&non_loopback], 0xEA61, 0xB1E7));
++    }
++}
++
+ #[cfg(target_os = "linux")]
+ fn linux_tcp_pid(port: u16, hub: u16) -> Option<u32> {
+-    let port_of = |addr: &str| addr.rsplit(':').next().and_then(|p| u16::from_str_radix(p, 16).ok());
+-    let inode = ["/proc/net/tcp", "/proc/net/tcp6"].iter().filter_map(|f| std::fs::read_to_string(f).ok()).find_map(|text| {
++    let inode = proc_net_tables().into_iter().find_map(|text| {
+         text.lines().skip(1).find_map(|l| {
+             let w: Vec<&str> = l.split_whitespace().collect();
+-            (w.len() > 9 && port_of(w[1]) == Some(port) && port_of(w[2]) == Some(hub)).then(|| w[9].to_string())
++            (w.len() > 9
++                && parse_proc_net_addr(w[1]).is_some_and(|(_, p)| p == port)
++                && parse_proc_net_addr(w[2]).is_some_and(|(_, p)| p == hub))
++            .then(|| w[9].to_string())
+         })
+     })?;
+     let wanted = format!("socket:[{inode}]");
 diff --git a/herdr/tui/hub/src/act/start.rs b/herdr/tui/hub/src/act/start.rs
 index 3adb16b..ff4bf2b 100644
 --- a/herdr/tui/hub/src/act/start.rs
