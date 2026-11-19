@@ -1,25 +1,29 @@
---- a/mods/cockpit/status.js	2026-11-17 16:20:19.981373355 -0300
-+++ b/mods/cockpit/status.js	2026-11-17 16:20:20.021032824 -0300
-@@ -95,7 +95,12 @@
-       run("layout.select", { stack: "view", child: on ? "main" : "agent" });
-       setShared("cockpit.view", on ? "main" : "agent");
-       if ((shared("cockpit.app") ?? "home") !== "work") show("work");
--    } else if (c === "panel") togglePanel(null);
-+    } else if (c === "panel") {
-+      // ADAPTADO para dotfiles: fechar o painel também fecha os documentos que o agente abriu ao lado dele.
+--- a/mods/cockpit/status.js
++++ b/mods/cockpit/status.js
+@@ -76,6 +76,17 @@
+   }
+ 
+   command(c, cx, key = null) {
++    // ADAPTADO para dotfiles: fechar o painel também fecha documentos ao lado do agente e oculta `panel-todo` ao abrir `panel`.
++    if (c === "panel") {
 +      const panel = findNode(layout(), "panel");
-+      if (panel && !panel.hidden) for (const d of me?.row?.documents ?? []) run(`cockpit.show:hide:${d.name}`);
-+      togglePanel(null);
-+    }
-     else if (c.startsWith("panel:")) togglePanel(c.slice(6));
-     else if (c === "next-waiting" || c === "next:blocked" || c === "next:done") {
-       const a = this.next(list, c === "next:done" ? "done" : c === "next:blocked" ? "needs" : null) ?? (c === "next-waiting" ? this.next(list, "done") : null);
-@@ -105,6 +110,8 @@
-     else if (c === "resume") cx.spawn(async () => hub.act("home", "resume", []));
-     else if (c.startsWith("link:")) cx.spawn(async () => hub.openUrl(c.slice(5)));
-     else if (c.startsWith("doc:")) {
-+      // ADAPTADO para dotfiles: o documento passa ao painel e o painel duplicado ao lado do agente fecha.
++      if (panel && !panel.hidden) {
++        const me = this.current(fleet(this.rows, this.home));
++        for (const d of me?.row?.documents ?? []) run(`cockpit.show:hide:${d.name}`);
++      } else run("layout.hide", { id: "panel-todo" });
++    } else if (c.startsWith("doc:")) {
 +      run(`cockpit.show:hide:${c.slice(4)}`);
-       openPanel("show");
-       run("cockpit.show:go:" + c.slice(4));
-     }
++      run("layout.hide", { id: "panel-todo" });
++    }
+     runCommand(c, cx, "cockpit", { rows: this.rows, home: this.home, key });
+     cx.notify();
+   }
+@@ -151,7 +162,7 @@
+     if (lost) right.push(item("st-lost", [Icon("rotate-ccw", { size: 14, color: k.info }), div().text_color(k.info).child(`${lost} to resume`)], { tooltip: hint("Agents a restart stopped: resume them", "cockpit.resume"), onClick: (_e, cx) => this.command("resume", cx) }));
+     // The hub shows only when it does not answer; down on this machine, a click starts it.
+     const stopped = hub.isStoppedOnPurpose(this.state);
+-    const startable = String(this.state).startsWith("error") && !hub.isNotInstalled(this.state) && !hub.remoteMachine();
++    const startable = String(this.state).startsWith("error") && !hub.isNotInstalled(this.state) && !hub.isReadOnly();
+     if (this.state !== "live") {
+       const label = this.state === "connecting" ? "connecting" : `${hub.downWords(this.state, true)}${stopped || startable ? " · Start it" : ""}`;
+       const start = startable ? (_e, cx) => cx.spawn(async () => hub.startHub({ explicit: true, cx }).catch((e) => notify({ title: "The hub did not start", body: String(e?.message ?? e), level: "warning" }))) : undefined;

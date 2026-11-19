@@ -23,6 +23,7 @@
     "ctrl-alt-r": "cockpit.resume",
     "ctrl-alt-shift-r": "cockpit.recap",
     "ctrl-alt-g": "cockpit.pr",
-    "ctrl-alt-l": "cockpit.ticket"
+    "ctrl-alt-l": "cockpit.ticket",
+    "ctrl-alt-/": "cockpit.keys"
   }
 }

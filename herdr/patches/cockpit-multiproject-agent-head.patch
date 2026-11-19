@@ -1,0 +1,12 @@
+--- a/mods/cockpit/agent-head.js
++++ b/mods/cockpit/agent-head.js
+@@ -151,7 +151,8 @@
+           }),
+         ),
+       )
+-      .when(a.status === "working" && Boolean(a.row?.stoppable) && !a.remote, (e) =>
++      // ADAPTADO para dotfiles: usa readOnly separado de remote para permitir Stop em loopback.
++      .when(a.status === "working" && Boolean(a.row?.stoppable) && !a.readOnly, (e) =>
+         e.child(stopButton(a, interrupt)),
+       )
+       .child(Button("head-recap", { icon: "sparkles", variant: "ghost", size: "icon-sm", tooltip: "Recap", onClick: (_e, cx) => cx.spawn(async () => agentAct("recap", { terminal: a.handle })) }))

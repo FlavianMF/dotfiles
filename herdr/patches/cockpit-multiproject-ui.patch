@@ -1,0 +1,30 @@
+--- a/mods/cockpit/ui.js
++++ b/mods/cockpit/ui.js
+@@ -579,7 +579,8 @@
+   const chat = shared("layout") === "cockpit-chat";
+   if (!SEEN.has(sources)) SEEN.set(sources, Date.now());
+   const now = fresh.nowOf(sources, SEEN.get(sources), Date.now());
+-  const all = fresh.chips(sources, now, { readOnly: Boolean(hub.remoteMachine()) });
++  // ADAPTADO para dotfiles: loopback WSL permite ações nos chips e botão Start it.
++  const all = fresh.chips(sources, now, { readOnly: hub.isReadOnly() });
+   // Narrow, the loudest chip alone (it shortens with the header) and how many more; nothing when all is well.
+   if (narrow && all.every((c) => c.tone === "quiet")) return null;
+   const shown = narrow ? fresh.narrow(all).slice(0, 1) : all;
+@@ -640,7 +641,7 @@
+  */
+ export function sourceKey(e, sources, cx, view, { refresh = false } = {}) {
+   // A remote desk's chips say, they do not act: nor do its keys.
+-  if (hub.remoteMachine()) return false;
++  if (hub.isReadOnly()) return false;
+   const c =
+     e.keystroke === "shift-l" ? fresh.signIn(sources, Date.now())
+     : e.keystroke === "shift-r" && refresh && sources?.length ? { id: sources[0].source, action: { kind: "refresh", label: "Reading it again" } }
+@@ -1690,7 +1691,7 @@
+   };
+   // Not installed is a setup to finish, not a hub to start; a runner's hub is started on the runner.
+   const missing = hub.isNotInstalled(why);
+-  const startable = !missing && !hub.remoteMachine();
++  const startable = !missing && !hub.isReadOnly();
+   const words = missing ? "Cockpit isn't set up in this Herdr: run cockpit app install" : owner.starting ? "Starting the cockpit hub…" : hub.downWords(why);
+   return h_flex()
+     .id(id)

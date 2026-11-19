@@ -1,12 +1,14 @@
-// The side panel's activity bar: one icon per panel (Documents, Review, Runbook, Files, Changes), the shown one marked by
-// an accent edge, each with the badge its view publishes as shared `badge.<name>` = {count, tone}; a click switches the
-// panel, the last button closes it.
+// The side panel's activity bar: one icon per panel (Documents, Review, Runbook, Files, Changes, and in the reading
+// layout the file it opened there and the browser beside the agent), the shown one marked by an accent edge, each with the badge its view publishes as shared
+// `badge.<name>` = {count, tone}; a click switches the panel, the last button closes it.
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { run, layout, shared, setShared } from "herdr";
+import { run, layout, shared, setShared, panes, focused } from "herdr";
 import { tokens, RADIUS, Icon, CornerCount } from "./ui.js";
-import { findNode, PANELS } from "./status.js";
+import { findNode, PANELS, closePanel } from "./status.js";
+import { CODE_PANEL } from "./code.js";
+import { BROWSER, browserIn } from "./browser.js";
 
 const ITEMS = [
   { name: "show", icon: "layers", label: "Documents", key: "⌃⌘1" },
@@ -14,10 +16,20 @@ const ITEMS = [
   { name: "runbook", icon: "book", label: "Runbook", key: "⌃⌘3" },
   { name: "files", icon: "folder", label: "Files", key: "⌃⌘4" },
   { name: "changes", icon: "git-commit", label: "Changes", key: "⌃⌘5" },
+  { name: "code", icon: "file-text", label: "The file opened last" },
+  { name: BROWSER, icon: "globe", label: "The browser beside the agent" },
   // ADAPTADO para dotfiles (layout multiproject): To-do e Prompts do over9k, no stack `panel-over9k`.
   { name: "todos", icon: "list-todo", label: "To-do", key: "", stack: "panel-over9k", child: "todos", panel: "panel-todo" },
   { name: "prompts", icon: "sparkles", label: "Prompts", key: "", stack: "panel-over9k", child: "prompts", panel: "panel-todo" },
 ];
+
+/** Whether an item has something to show here: the file once one was opened, the browser while the tab has one. */
+function present(item, tree) {
+  if (item.panel) return Boolean(findNode(tree, item.panel));
+  if (item.name === "code") return Boolean(findNode(tree, "code") && shared(CODE_PANEL)?.file);
+  if (item.name === BROWSER) return Boolean(findNode(tree, BROWSER) && browserIn(panes(), focused()?.tab));
+  return true;
+}
 
 export default class Activity {
   init() {
@@ -37,9 +49,9 @@ export default class Activity {
 
   render() {
     const k = tokens();
-      const button = (item) => {
+    const button = (item) => {
       const stack = item.stack ?? "panel-body";
-      const child = item.child ?? PANELS[item.name];
+      const child = item.child ?? PANELS[item.name] ?? item.name;
       // ADAPTADO: a faixa fica fora do `panel`; o botão ativo é o do stack dele, e só vale com o painel aberto.
       const target = item.panel ?? "panel";
       const other = target === "panel" ? "panel-todo" : "panel";
@@ -77,7 +89,7 @@ export default class Activity {
       .border_l_1()
       .border_color(k.border)
       .bg(k.chrome)
-      .children(ITEMS.map(button))
+      .children(ITEMS.filter((i) => present(i, layout())).map(button))
       .child(div().flex_1())
       .child(
         h_flex()
@@ -91,7 +103,7 @@ export default class Activity {
           .hover((s) => s.text_color(k.foreground))
           .tooltip("Close the panel  ⌘⌥B")
           .on_click(() => {
-            run("layout.hide", { id: "panel" });
+            closePanel();
             run("layout.hide", { id: "panel-todo" });
           })
           .child(Icon("panel-right", { size: 16 })),

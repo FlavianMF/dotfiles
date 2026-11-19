@@ -6,14 +6,28 @@ import * as hub from "./hub.js";
 
 const APPS = { code: "Visual Studio Code", cursor: "Cursor", zed: "Zed", windsurf: "Windsurf", subl: "Sublime Text" };
 
-async function editor() {
-  try {
-    const { home } = await hub.install();
-    const text = await readTextFile(`${home}/.config/cockpit/config.json`);
-    const name = text ? JSON.parse(text).editor : null;
-    if (typeof name === "string" && name) return name;
-  } catch {}
+/**
+ * The config's `editor`, one command: from the resolved copy in the cache (plain JSON), else the file as written when it
+ * reads as plain JSON (one with comments has its copy); else VS Code's `code`.
+ */
+export async function editor() {
+  // ADAPTADO para dotfiles: lê config.json na máquina remota (WSL) via `{ on: machine }`.
+  const { home, cache, machine } = await hub.install().catch(() => ({}));
+  const opt = machine ? { on: machine } : undefined;
+  for (const path of [cache && `${cache}/config.json`, home && `${home}/.config/cockpit/config.json`].filter(Boolean)) {
+    try {
+      const name = JSON.parse((await readTextFile(path, opt)) ?? "null")?.editor;
+      if (typeof name === "string" && name.trim() && !name.trim().startsWith("-")) return name.trim();
+    } catch {}
+  }
   return "code";
+}
+
+/** Runs an editor CLI, retrying with `cmd /c` on Windows where `.cmd` wrappers (e.g. `code.cmd`) fail bare exec. */
+async function execEditor(name, args) {
+  const r = await exec(name, args).catch(() => null);
+  if (r?.code === 0 || win()?.platform !== "windows") return r;
+  return exec("cmd", ["/c", name, ...args]).catch(() => null);
 }
 
 /** The SSH host of a machine `hc machine ls` knows, else its name. */
@@ -35,15 +49,25 @@ export async function openInEditor(folder, machine = null) {
   const name = await editor();
   if (machine) {
     const uri = `vscode-remote://ssh-remote+${await hostOf(machine)}${folder}`;
-    const r = await exec(name, ["--folder-uri", uri]).catch(() => null);
+    const r = await execEditor(name, ["--folder-uri", uri]);
     return r?.code === 0 ? null : `${name} could not open ${machine}:${folder}`;
   }
-  const r = await exec(name, [folder]).catch(() => null);
+  const r = await execEditor(name, [folder]);
   if (r?.code === 0) return null;
   const app = APPS[name] ?? name;
   // An editor whose command isn't on the PATH still opens by its app name on macOS.
   const opened = win()?.platform === "macos" ? await exec("open", ["-a", app, folder]).catch(() => null) : null;
   return opened?.code === 0 ? null : `${app} is not installed (set "editor" in the cockpit config)`;
+}
+
+/** Opens a file (with optional 1-based line) in the editor, using Remote-SSH when `machine` is set. */
+export async function openFileInEditor(file, { line = null, machine = null } = {}) {
+  if (!file) return "no file to open";
+  const name = await editor();
+  const target = `${file}${line ? `:${line}` : ""}`;
+  const args = machine ? ["--remote", `ssh-remote+${await hostOf(machine)}`, "-g", target] : ["-g", target];
+  const r = await execEditor(name, args);
+  return r?.code === 0 ? null : `${name} could not open ${machine ? `${machine}:` : ""}${target}`;
 }
 
 /** The editor's name, for labels: "VS Code", "Cursor", ... */

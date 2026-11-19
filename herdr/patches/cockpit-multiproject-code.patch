@@ -1,0 +1,174 @@
+--- a/mods/cockpit/code.js
++++ b/mods/cockpit/code.js
+@@ -9,8 +9,9 @@
+ 
+ import { div } from "gpui-kit";
+ import { v_flex, h_flex, Editor, EditorState, InputState, TextView, h_resizable, resizable_panel } from "gpui-base";
+-import { exec, readTextFile, writeTextFile, watchFolder, theme, settings, props, run, panes, home, shared, setShared, appHome, focused, layout } from "herdr";
++import { exec, readTextFile, writeTextFile, watchFolder, theme, settings, props, run, panes, home, shared, setShared, appHome, focused, layout, window as win } from "herdr";
+ import * as hub from "./hub.js";
++import { openFileInEditor } from "./editor.js";
+ import { take } from "./person.js";
+ import { tokens, TEXT, Icon, Button, Kbd, TextField, Toaster } from "./ui.js";
+ import { layoutName, CHAT_SUBJECT } from "./screens.js";
+@@ -22,11 +23,55 @@
+ const MAX_EDIT = 400_000;
+ const MD_NEXT = { split: "preview", preview: "edit", edit: "split" };
+ 
+-const tilde = (p) => {
+-  const h = home();
++const tilde = (p, base = null) => {
++  const h = base || home();
+   return p?.startsWith(`${h}/`) ? `~${p.slice(h.length)}` : p;
+ };
+ 
++const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++
++/** Encodes UTF-8 string to base64 without depending on TextEncoder or Buffer (missing on Windows Herdr JS runtime). */
++function toBase64(text) {
++  const bytes = [];
++  const encoded = encodeURIComponent(text);
++  for (let i = 0; i < encoded.length; i++) {
++    if (encoded[i] === "%") {
++      bytes.push(parseInt(encoded.slice(i + 1, i + 3), 16));
++      i += 2;
++    } else bytes.push(encoded.charCodeAt(i));
++  }
++  let out = "";
++  for (let i = 0; i < bytes.length; i += 3) {
++    const a = bytes[i];
++    const b = bytes[i + 1] ?? 0;
++    const c = bytes[i + 2] ?? 0;
++    const n = (a << 16) | (b << 8) | c;
++    out += B64[(n >> 18) & 63] + B64[(n >> 12) & 63] + (i + 1 < bytes.length ? B64[(n >> 6) & 63] : "=") + (i + 2 < bytes.length ? B64[n & 63] : "=");
++  }
++  return out;
++}
++
++/** Atomically writes a file on a remote machine after confirming the on-disk text still matches `expected`. */
++async function writeRemoteTextFile(file, text, expected, machine) {
++  const current = await readTextFile(file, { on: machine }).catch(() => null);
++  if (current !== expected) throw new Error("changed on disk");
++  const b64 = toBase64(text);
++  const tmpRes = await exec("mktemp", [], { on: machine });
++  if (tmpRes.code !== 0) throw new Error(tmpRes.stderr.trim() || "mktemp failed");
++  const tmp = tmpRes.stdout.trim();
++  try {
++    for (let i = 0; i < b64.length || i === 0; i += 16_000) {
++      const chunk = b64.slice(i, i + 16_000);
++      const r = await exec("sh", ["-c", 'printf %s "$2" >> "$1"', "sh", tmp, chunk], { on: machine });
++      if (r.code !== 0) throw new Error(r.stderr.trim() || "write failed");
++    }
++    const mv = await exec("sh", ["-c", 'base64 -d "$1" > "$1.out" && { chmod --reference="$2" "$1.out" 2>/dev/null || true; } && mv -f "$1.out" "$2"', "sh", tmp, file], { on: machine });
++    if (mv.code !== 0) throw new Error(mv.stderr.trim() || "replace failed");
++  } finally {
++    await exec("rm", ["-f", tmp, `${tmp}.out`], { on: machine }).catch(() => {});
++  }
++}
++
+ /** Where the reading layout's side panel keeps the file it shows: {file, line, terminal, at, back}. */
+ export const CODE_PANEL = "cockpit.code.panel";
+ 
+@@ -51,8 +96,12 @@
+   const open = tab ? (shared(SHOWN) ?? {})[tab] : null;
+   if (open && all.some((p) => p.pane === open)) run("pane.close", { pane: open });
+   const args = { direction: "right", ...(beside ? { pane: beside.pane } : {}), mod: "cockpit", props: { app: "code", file, line, terminal: terminal ?? beside?.terminal, tab } };
+-  // Through herdr-app, which answers with the new pane: run() gives nothing back.
+-  const r = await exec("env", [`HERDR_APP_HOME=${appHome()}`, `${home()}/.local/bin/herdr-app`, "do", "pane.split", JSON.stringify(args)]).catch(() => null);
++  // ADAPTADO para dotfiles: no Windows chama herdr-app.exe diretamente sem `env`.
++  const r = await (
++    win()?.platform === "windows"
++      ? exec("herdr-app.exe", ["do", "pane.split", JSON.stringify(args)])
++      : exec("env", [`HERDR_APP_HOME=${appHome()}`, `${home()}/.local/bin/herdr-app`, "do", "pane.split", JSON.stringify(args)])
++  ).catch(() => null);
+   const made = r?.code === 0 ? JSON.parse(r.stdout || "{}").pane : null;
+   if (!made) run("pane.split", args);
+   else if (tab) setShared(SHOWN, { ...(shared(SHOWN) ?? {}), [tab]: made });
+@@ -86,7 +135,11 @@
+     this.loaded = true;
+     if (!this.file) return;
+     cx.spawn(async (cx) => {
+-      const text = await readTextFile(this.file).catch(() => null);
++      const info = await hub.install().catch(() => ({}));
++      this.machine = info.machine ?? null;
++      this.remoteHome = info.home ?? null;
++      const opt = this.machine ? { on: this.machine } : undefined;
++      const text = await readTextFile(this.file, opt).catch(() => null);
+       if (text === null) this.error = "This file can't be read as text, or is gone.";
+       else if (text.includes("\0")) this.error = "A binary file.";
+       else this.fill(text);
+@@ -124,14 +177,19 @@
+     if (this.watching === key) return;
+     this.watching = key;
+     const dir = this.file.replace(/\/[^/]*$/, "");
++    const machine = this.machine ?? hub.remoteMachine();
+     cx.spawn(async (cx) => {
+       try {
+         while (this.watching === key) {
+-          const changed = await watchFolder(dir);
+-          // macOS reports /tmp paths as /private/tmp: compare without it.
+-          const bare = (p) => p.replace(/^\/private(?=\/)/, "");
+-          if (this.watching !== key || !changed.some((p) => bare(p) === bare(this.file)) || this.saving) continue;
+-          const text = await readTextFile(this.file).catch(() => null);
++          if (machine) await hub.sleep(cx, 2000);
++          else {
++            const changed = await watchFolder(dir);
++            // macOS reports /tmp paths as /private/tmp: compare without it.
++            const bare = (p) => p.replace(/^\/private(?=\/)/, "");
++            if (!changed.some((p) => bare(p) === bare(this.file))) continue;
++          }
++          if (this.watching !== key || this.saving) continue;
++          const text = await readTextFile(this.file, machine ? { on: machine } : undefined).catch(() => null);
+           if (text === null || text === this.original) continue;
+           if (this.dirty) {
+             this.toasts.push(cx, "Changed on disk", { kind: "warning", description: "Save would be refused: reload to see the new version.", action: { label: "Reload", onClick: (_e, cx) => (this.fill(text), cx.notify()) } });
+@@ -148,9 +206,11 @@
+     if (!this.code || this.readonly || !this.dirty || this.saving) return;
+     const text = this.code.value();
+     this.saving = true;
++    const machine = this.machine ?? hub.remoteMachine();
+     cx.spawn(async (cx) => {
+       try {
+-        await writeTextFile(this.file, text, this.original);
++        if (machine) await writeRemoteTextFile(this.file, text, this.original, machine);
++        else await writeTextFile(this.file, text, this.original);
+         this.original = text;
+         this.dirty = false;
+         this.toasts.push(cx, "Saved", { kind: "success" });
+@@ -171,8 +231,9 @@
+     const [from, to, text] = m ? [Number(m[1]), Number(m[2] ?? m[1]), m[3]] : [this.line ?? 1, null, raw];
+     const lines = (this.code?.value() ?? "").split("\n");
+     const code = m ? lines.slice(from - 1, to).join("\n") : "";
++    const machine = this.machine ?? hub.remoteMachine();
+     cx.spawn(async (cx) => {
+-      const root = await exec("git", ["-C", this.file.replace(/\/[^/]*$/, ""), "rev-parse", "--show-toplevel"]).catch(() => null);
++      const root = await exec("git", ["-C", this.file.replace(/\/[^/]*$/, ""), "rev-parse", "--show-toplevel"], machine ? { on: machine } : undefined).catch(() => null);
+       const top = root?.code === 0 ? root.stdout.trim() : "";
+       const path = top && this.file.startsWith(`${top}/`) ? this.file.slice(top.length + 1) : this.file;
+       const to = await this.askTarget();
+@@ -195,8 +256,9 @@
+   async askTarget() {
+     const handle = (layoutName() === "cockpit-chat" ? shared(CHAT_SUBJECT) : null) ?? this.terminal ?? "";
+     const bare = String(handle).replace(/^app:/, "");
++    const plain = bare.replace(/^[^/]+\//, "");
+     const rows = lent()?.agents ?? (await hub.view("agents", { frontend: "app" }).catch(() => null))?.agents ?? [];
+-    const row = rows.find((r) => r.terminal === handle || r.address === bare || r.terminal === `app:${bare}`);
++    const row = rows.find((r) => r.terminal === handle || r.address === bare || r.address === plain || r.terminal === `app:${bare}` || r.terminal === `app:${plain}`);
+     return { handle, name: row?.title || row?.tab?.name || null };
+   }
+ 
+@@ -264,12 +326,12 @@
+       .child(Icon("file-text", { size: 14, color: k.mutedFg }))
+       .child(div().min_w(0).max_w(260).truncate().font_semibold().child(name))
+       .when(Boolean(this.dirty), (e) => e.child(div().size(8).rounded_full().bg(k.foreground).tooltip("Unsaved changes")))
+-      .child(div().flex_1().min_w(0).truncate().text_size(TEXT.xs).text_color(k.dim).child(`${tilde(this.file ?? "")}${this.readonly ? " · read-only" : ""}`))
++      .child(div().flex_1().min_w(0).truncate().text_size(TEXT.xs).text_color(k.dim).child(`${tilde(this.file ?? "", this.remoteHome)}${this.readonly ? " · read-only" : ""}`))
+       .when(Boolean(this.dirty), (e) => e.child(Button("code-save", { label: "Save", icon: "check", size: "sm", kbd: narrow ? undefined : "⌘S", tooltip: narrow ? "Save  ⌘S" : undefined, onClick: (_e, cx) => this.save(cx) })))
+       .when(md, (e) => e.child(Button("code-md", { icon: this.mdMode === "preview" ? "file-text" : "eye", variant: "ghost", size: "icon-sm", tooltip: `Preview: ${this.mdMode}  ⌘⇧V`, onClick: (_e, cx) => ((this.mdMode = MD_NEXT[this.mdMode]), cx.notify()) })))
+       // Narrow (a side panel), the buttons keep their icons and leave their words to the tooltips.
+       .child(Button("code-ask", { label: "Ask the agent", icon: "message-square", variant: this.asking ? "secondary" : "outline", size: narrow ? "icon-sm" : "sm", tooltip: narrow ? "Ask the agent: a note about this file, or lines of it" : "A note about this file, or lines of it, sent to the agent", onClick: (_e, cx) => ((this.asking = !this.asking), this.asking && this.ask.focus(), cx.notify()) }))
+-      .child(Button("code-vscode", { icon: "external", variant: "ghost", size: "icon-sm", tooltip: "Open in VS Code", onClick: () => exec("code", ["-g", `${this.file}${this.line ? `:${this.line}` : ""}`]).catch(() => {}) }))
++      .child(Button("code-vscode", { icon: "external", variant: "ghost", size: "icon-sm", tooltip: "Open in VS Code", onClick: (_e, cx) => cx.spawn(async () => openFileInEditor(this.file, { line: this.line, machine: this.machine ?? hub.remoteMachine() }).catch(() => {})) }))
+       .child(Button("code-close", { icon: "x", variant: "ghost", size: "icon-sm", tooltip: "Close", onClick: () => this.closePane() }));
+     let body;
+     if (!this.file) body = div().p(16).text_color(k.dim).child(this.panel ? "No file open yet." : "No file given.");

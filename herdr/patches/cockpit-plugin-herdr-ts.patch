@@ -1,7 +1,6 @@
-diff --git a/hooks/herdr.ts b/hooks/herdr.ts
 --- a/hooks/herdr.ts
 +++ b/hooks/herdr.ts
-@@ -90,10 +90,14 @@ async function appStatus($: $) {
+@@ -90,10 +90,14 @@
  
  // The terminal, its pane, tab and space in the app's listing.
  export function findTerminal(spaces: AppSpace[], terminal: string) {
@@ -20,7 +19,7 @@ diff --git a/hooks/herdr.ts b/hooks/herdr.ts
      }
    }
    return undefined
-@@ -116,7 +120,7 @@ export async function herdrHere($: $): Promise<Here | undefined> {
+@@ -116,7 +120,7 @@
  async function appHere($: $): Promise<Here | undefined> {
    const terminal = (await $.env.get('HC_TERMINAL_ID')) ?? ''
    const found = findTerminal(await appSpaces($), terminal)
@@ -28,4 +27,4 @@ diff --git a/hooks/herdr.ts b/hooks/herdr.ts
 +  return found && { pane: `app:${found.terminal.terminal}`, tab: found.tab.id, space: found.space.id, frontend: 'app', terminal: found.terminal.terminal, paneId: found.terminal.pane }
  }
  
- // herdrHere for every tool call would be one herdr call each: the answer is kept a minute.
+ // terminal-browser tells where it runs from herdr's variables, which the Herdr app does not give its terminals: without
