@@ -14,3 +14,11 @@
 - **ECC** (plugin `ecc@ecc`): antes de invocar um agente ou skill `ecc:*`, ou quando o usuário
   citar ECC, leia `~/dotfiles/agents/docs/ecc-por-projeto.md`. Só o usuário ou o wrapper
   `claude` do zsh liga e desliga o ECC, então peça ao usuário.
+- **Herdr no WSL (`HERDR_ENV` vazio):** o Herdr do usuário é o app de desktop do Windows, e o
+  servidor `herdr` do WSL fica parado. Não pare em "não estou no Herdr". Quando o usuário pedir
+  uma sessão ou um pane novo, use `herdr-app` (wrapper de `herdr-app.exe`), nunca o CLI `herdr`:
+  `herdr-app do space.new --name <nome> --machine wsl --folder <pasta> --argv '["claude"]'
+  --task "<primeira mensagem>"`. Rode `herdr-app ls` antes e `hc read <terminal>` depois, sem o
+  prefixo `wsl/`. Não rode `herdr-app` sem argumento e não pare o app nem o core. Passe o
+  contexto por um handoff em `~/.config/cockpit/handoff-<runbook>.md`. Detalhes em
+  `~/.claude/projects/-home-flv-outlet-promo/memory/reference-herdr-app-abrir-sessao-claude.md`.
