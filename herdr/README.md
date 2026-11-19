@@ -16,6 +16,7 @@ The executable is installed to `~/.local/bin/herdr` and the configuration is lin
 
 For running the native **Herdr Desktop GUI** on Windows with agents running inside **WSL2** over SSH:
 - See the complete guide in [installation.md](installation.md).
+- Mobile app access over Tailscale (iOS / Android) is documented in [installation.md — Mobile App Setup via Tailscale](installation.md#6-mobile-app-setup-via-tailscale-ios--android).
 - Quick setup:
   - In WSL: `make herdr-ssh-setup` (or `./herdr/setup-wsl-ssh.sh`)
   - In Windows PowerShell: `powershell -ExecutionPolicy Bypass -File .\herdr\setup-host.ps1`
