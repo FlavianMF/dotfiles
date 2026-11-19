@@ -287,7 +287,8 @@
     "ste80@ste80": true,
     "ecc@ecc": false,
     "effortless@effortless": true,
-    "humanizer@humanizer": true
+    "humanizer@humanizer": true,
+    "cockpit@cockpit": true
   },
   "extraKnownMarketplaces": {
     "caveman": {
@@ -343,6 +344,12 @@
         "source": "github",
         "repo": "blader/humanizer"
       }
+    },
+    "cockpit": {
+      "source": {
+        "source": "github",
+        "repo": "quaresc/cockpit"
+      }
     }
   },
   "effortLevel": "xhigh",
@@ -373,7 +380,7 @@
         "handoffAfter": "continue",
         "effortBias": "0",
         "effortFloor": "low",
-        "effortCeiling": "max",
+        "effortCeiling": "xhigh",
         "modelAuto": "on",
         "helpers": "off",
         "handoffButton": "advised",

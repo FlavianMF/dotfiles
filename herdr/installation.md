@@ -231,3 +231,57 @@ hc machine add --via "wsl.exe -e sh -c" --name wsl
 ### WSL IP / Localhost Mapping
 - By default, WSL2 forwards ports bound to `0.0.0.0` or `127.0.0.1` to Windows `localhost`.
 - If you use Mirrored networking (`networkingMode=mirrored` in `%USERPROFILE%\.wslconfig`), `localhost:2222` works directly and seamlessly.
+
+---
+
+## 6. Mobile App Setup via Tailscale (iOS / Android)
+
+The Herdr mobile app connects over SSH directly to `hc connect` (`herdr-core`) running inside WSL2 (not the `herdr` TUI).
+
+### Prerequisites
+
+1. **Tailscale active on both devices:**
+   - Install and connect Tailscale on your phone and inside WSL2 (`make tailscale-install && sudo tailscale up`, verify with `tailscale status`).
+   - Get your WSL2 Tailscale IP or MagicDNS name:
+     ```bash
+     tailscale ip -4
+     tailscale status
+     ```
+2. **Ensure `hc` is in `PATH` for non-interactive SSH (`zsh`):**
+   - `herdr/setup-wsl-ssh.sh` adds `~/.local/bin` to `~/.bashrc`, which `zsh` does not read on non-interactive SSH commands (`zsh -c "hc connect"`).
+   - If your login shell is `zsh`, add `~/.local/bin` to `~/.zshenv`:
+     ```bash
+     echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshenv
+     ```
+
+### Connection Options
+
+Pick **one** of the two SSH methods below:
+
+#### Option A: Existing WSL2 OpenSSH on Port `2222` (No Tailscale ACL changes)
+
+1. Ensure `sshd` is running in WSL2 (`make herdr-ssh-setup`, listening on port `2222`).
+2. In the **Herdr** mobile app, tap **Add Machine** and enter:
+   - **Host:** `<wsl-tailscale-ip>` or `<wsl-node>.<tailnet>.ts.net`
+   - **Port:** `2222`
+   - **User:** `<your-wsl-user>`
+3. Let the mobile app generate an SSH keypair and append its public key to `~/.ssh/authorized_keys` in WSL2 (`chmod 600 ~/.ssh/authorized_keys`).
+4. **Firewall note (`networkingMode=mirrored`):** If the connection times out from your phone, allow inbound TCP port `2222` in Windows Defender Firewall, or switch to Option B.
+
+#### Option B: Tailscale SSH on Port `22` (Zero-key setup)
+
+Because WSL2 `sshd` uses port `2222`, port `22` is free for `tailscaled` to serve Tailscale SSH directly on `tailscale0`:
+
+1. Enable Tailscale SSH in WSL2:
+   ```bash
+   sudo tailscale set --ssh
+   ```
+2. In the **Tailscale Admin Console** (Access Controls), ensure your ACL policy permits SSH from your mobile device to your WSL2 node.
+3. In the **Herdr** mobile app, tap **Add Machine** and enter:
+   - **Host:** `<wsl-tailscale-ip>` or `<wsl-node>.<tailnet>.ts.net`
+   - **Port:** `22`
+   - **User:** `<your-wsl-user>`
+   - Select Tailscale SSH / key-less authentication.
+
+> [!NOTE]
+> The Windows PC and WSL2 must remain awake (not sleeping) for the mobile app to reach `hc`. Keep Tailscale active in WSL2; `tailscale serve` is not needed because Herdr mobile uses SSH rather than HTTPS.

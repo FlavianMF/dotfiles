@@ -83,8 +83,9 @@ Isso enfileira um candidato e deixa o vault intacto. Só o usuário promove cand
 
 Quando o usuário pedir para enviar mensagens, delegar ou coordenar trabalho entre CLIs de
 agentes (`agy`, `claude`, `codex`) e `HERDR_ENV=1` estiver ativo, carregue a skill `herdr`
-antes de operar panes ou agentes. Com `HERDR_ENV != 1`, avise o usuário ou use uma chamada
-pontual de `claude -p` ou um arquivo compartilhado.
+antes de operar panes ou agentes. Com `HERDR_ENV != 1` no WSL, o Herdr do usuário é o app do
+Windows: use `herdr-app` (veja "Herdr no WSL" em `~/.claude/CLAUDE.md`). Se o `herdr-app` não
+responder, avise o usuário ou use uma chamada pontual de `claude -p` ou um arquivo compartilhado.
 
 <!-- over9k:todo -->
 ## Project to-do lists (Herdr)
