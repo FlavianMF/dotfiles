@@ -2,6 +2,36 @@
 
 Regras de projeto (`AGENTS.md` / `CLAUDE.md` do repo) vencem estas em caso de conflito.
 
+<!-- ste80:begin -->
+## Escrita: STE-80
+
+Regras completas: `~/.agents/skills/ste80/ste80.md`. A skill `ste80` traz o ciclo de medição e o CLI.
+
+Escreva toda a prosa com estas regras: respostas no chat, docs, commits, comentários, PRs e notas.
+
+1. Frase com no máximo 20 palavras em instrução e 25 em explicação. Código, comando, caminho, número com unidade e sigla contam como uma palavra.
+2. Uma instrução por frase, no imperativo: "Rode os testes."
+3. Condição antes do comando, com vírgula: "Se o teste falhar, leia o log."
+4. Voz ativa. Sem passiva: não "foi removido pelo script", não "remove-se o cache".
+5. Sem gerúndio e sem gerundismo. Use presente, pretérito perfeito, futuro simples e imperativo. Evite "seria", "poderia", "deveria".
+6. Verbo para ação, não substantivo: "verifique a configuração", não "realize a verificação da configuração".
+7. No máximo duas preposições "de" encadeadas num sintagma.
+8. Um tópico por frase. O parágrafo começa pela ideia principal e tem no máximo 6 frases.
+9. Texto complexo vira lista vertical. A linha antes da lista termina em dois-pontos.
+10. Um termo por coisa. Não alterne sinônimos para o mesmo conceito.
+11. Sem ponto e vírgula. Escreva duas frases.
+12. "deve" é obrigação, "pode" é capacidade. Diga uma incerteza real uma vez, sem empilhar ressalvas.
+13. Aviso de risco: palavra de risco, comando e consequência. Exemplo: "AVISO: não rode `git reset --hard`. As mudanças não salvas serão perdidas."
+14. Escreva frases completas, com artigos. Esta regra vence a skill caveman em artigos e fragmentos. A caveman continua valendo para cortar cerimônia.
+
+Mantenha literal: código, comandos, caminhos, nomes de produto, termos de domínio, mensagens de erro e citações. Não parafraseie um termo de domínio.
+Isento: blocos de código, saída de ferramenta, texto que o usuário pediu na voz dele e texto acadêmico.
+Escape: se uma regra apagar um fato, um nome ou uma ressalva, quebre a regra e mantenha o fato. O fato vence a regra.
+Estas regras valem em português e em inglês. O idioma da resposta segue o usuário.
+
+Não aplique as regras quando existir `.ste80.off` na raiz do projeto ou `STE80=0` no ambiente.
+<!-- ste80:end -->
+
 ## Performance e contexto
 
 - **Compacte na fronteira de fase.** Ao terminar pesquisa, plano ou uma etapa de
