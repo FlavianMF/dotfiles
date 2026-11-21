@@ -79,8 +79,10 @@ Stop hook counts through `second-brain-count.sh` and never parses `transcriptPat
 - **No agent files.** agy rejects markdown agents, so ECC agents are not linked.
 - **No Claude plugins.** agy gets the same skills Codex and OpenCode get.
 - **Deny list.** Native `permissions.deny` rules (`action(target)` grammar, deny beats ask beats
-  allow). Paths are absolute because the docs don't describe `~` expansion. `curl`/`wget` are
-  `ask` rules; the pipe-to-shell deny is a best-effort regex.
+  allow). Paths in `read_file`/`write_file` rules must be absolute (`@HOME@/...`) because the `agy`
+  terminal sandbox (`exebox`) rejects relative paths (`non-absolute file path`, e.g. `read_file(.env)`)
+  and globs (`globs not supported`), and already blocks `.env` inside the sandbox by default.
+  `curl`/`wget` are `ask` rules; the pipe-to-shell deny is a best-effort regex.
 - **Figma OAuth.** Authenticate under Customizations in `agy`.
 - **Rule size.** agy truncates each rules file at 24 KB. `agents/AGENTS.md` is about 7 KB.
 
