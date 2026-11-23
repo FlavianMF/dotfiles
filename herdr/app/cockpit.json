@@ -1,7 +1,9 @@
 {
   "machine": "wsl",
   "host": "127.0.0.1",
-  "bin": "/home/flv/.local/bin/cockpit",
+  "bin": "/home/flv/.config/cockpit/herdr/bin/cockpit",
   "home": "/home/flv",
-  "cache": "/home/flv/.cache/cockpit"
+  "cache": "/home/flv/.cache/cockpit",
+  "env": { "COCKPIT_HERDR_DIR": "/home/flv/.config/cockpit/herdr" },
+  "version": "1.5.2"
 }
