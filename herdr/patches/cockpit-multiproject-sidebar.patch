@@ -1,26 +1,26 @@
 --- a/mods/cockpit/sidebar.js
 +++ b/mods/cockpit/sidebar.js
-@@ -182,7 +182,7 @@
-     // Home and Needs answer them on their own cards: there the waiting agents stay in the list below. Without the hub
+@@ -201,7 +201,7 @@
      // nothing answers in place, so they stay in the list too.
      const band = active === "home" || active === "needs" || model.down ? [] : waiting;
+     if (!model.down) showBadge(needing(rows).length, option("dockBadge", true) !== false);
 -    setAgentOrder(order.filter(r => !r.remote).map((r) => r.address));
 +    setAgentOrder(order.filter((r) => !r.readOnly).map((r) => r.address));
  
      const navItem = (child, label, icon, count, command, tone) => {
        const on = active === child;
-@@ -278,9 +278,7 @@
+@@ -297,9 +297,7 @@
              .when(!chat && Boolean(paletteKey), (e) => e.child(Kbd(keyText(paletteKey ?? "")))),
          ),
        )
 -      .when(!rail && Boolean(model.value?.quota?.length || rows.length), (e) =>
 -        e.child(div().id("quota-box").mb(8).px(4).child(QuotaBars(model.value?.quota, { compact: true, rows }))),
 -      )
-+      // ADAPTADO para dotfiles (layout multiproject): as barras de limite saem da sidebar; o `usage-limits` as mostra na barra inferior.
++      // ADAPTADO para dotfiles (layout multiproject): barras de limite saem da sidebar; o `usage-limits` mostra na barra inferior.
        .when(rail, (e) =>
          e
            .children(lead.map((a) => navItem(a.child, a.label, a.icon, a.count, a.command, a.tone)))
-@@ -471,7 +469,7 @@
+@@ -490,7 +488,7 @@
              .gap(2)
              .flex_none()
              // A dismissed agent comes back from its own row.
@@ -29,7 +29,7 @@
              .child(Button(`${id}-pin`, { icon: pinned ? "pin-off" : "pin", variant: "ghost", size: "icon-sm", tooltip: pinned ? "Unpin" : "Pin to the top", onClick: (_e, cx) => (cx.stop_propagation(), this.agents.togglePin(r.terminal), cx.notify()) }))
              .child(Button(`${id}-more`, { icon: "more", variant: "ghost", size: "icon-sm", tooltip: r.driven ? "Read, open in a terminal, recap…" : "Snooze, recap, fork…", onClick: (_e, cx) => (cx.stop_propagation(), this.agents.menu(r)) })),
          ),
-@@ -494,8 +492,9 @@
+@@ -513,8 +511,9 @@
  
    /** Sub-agents an agent started (`hc run`), under it with tree lines; a click peeks. */
    subRows(k, r) {
@@ -41,7 +41,7 @@
      return kids.map((t, i) =>
        h_flex()
          .id(`sub-${t.address}`)
-@@ -532,7 +531,7 @@
+@@ -551,7 +550,7 @@
        const state = this.agents.state;
        // A hub that stopped, on purpose or not, can be started from here on this machine.
        const why = String(this.agents.lastError ?? "");

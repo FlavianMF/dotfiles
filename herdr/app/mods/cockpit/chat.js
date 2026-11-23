@@ -1,28 +1,31 @@
 // The conversation with the chat's subject (the agent in front, or the one `chat:open` named), read rather than watched:
 // what you said, one folded row for everything the agent did, the answer under a rule, and the box you answer in.
 
-import { div } from "gpui-kit";
+import { div, image } from "gpui-kit";
 import { h_flex, v_flex, Scrollbar, Input, InputState, TextView } from "gpui-base";
 import * as base from "gpui-base";
 
 // A Herdr older than 0.1.15 has no ScrollHandle: the conversation still draws, it just does not follow its own end.
 const ScrollHandle = base.ScrollHandle ?? null;
-import { focused, run, exec, notify, shared, setShared, window as win } from "herdr";
+import { focused, run, exec, notify, shared, setShared, appHome, home, window as win } from "herdr";
 import * as hub from "./hub.js";
 import { take, testKeys } from "./person.js";
 import { openUrl } from "./hub.js";
 import { openPanel } from "./status.js";
-import { AgentsModel, QuestionCard, UndoRow, oneTimeKey } from "./agentsui.js";
+import { AgentsModel, QuestionCard, UndoRow, oneTimeKey, pendView } from "./agentsui.js";
 import { inFront } from "./front.js";
 import { CHAT_SUBJECT, CHAT_PIN, CHAT_ASK, pinChat, frontAgent } from "./screens.js";
 import { followInReview } from "./review.js";
+import { showWhere } from "./projects.js";
 import { windowsWords } from "./usage.js";
 import { Started } from "./doctor.js";
 import { ChatStart } from "./chatstart.js";
 import { modelName, pickChips } from "./picks.js";
 import { statusMark } from "./chat-top.js";
 import { hint, keyText } from "./commands.js";
-import { pasteImage } from "./paste.js";
+import { pasteImage, thumbnail, IMAGE_LINE } from "./paste.js";
+import { linkify, imagesIn, pathOf, fileAndLine, expand } from "./textlinks.js";
+import { openCode } from "./code.js";
 import { TOOK, boxTakesBack } from "./browser.js";
 import { tokens, TEXT, RADIUS, Icon, Spinner, Chip, Empty, Card, Button, HubDown, openMenu, AgentLogo } from "./ui.js";
 import { NEXT_KEYS, NextSteps, nextKey, nextShown } from "./next-steps.js";
@@ -35,7 +38,7 @@ const MODES = {
   bypassPermissions: { label: "Full access", icon: "triangle-alert", loud: true, offered: true },
   manual: { label: "Asks first", icon: "shield-check", loud: false, offered: false },
   dontAsk: { label: "Never asks", icon: "triangle-alert", loud: true, offered: false },
-  auto: { label: "Auto", icon: "triangle-alert", loud: true, offered: false },
+  auto: { label: "Auto", icon: "zap", loud: true, offered: false },
 };
 
 /** The subject of a start box the palette opened: no agent, the box is Start work. */
@@ -46,6 +49,9 @@ const UNASKED = ["bypassPermissions", "auto"];
 
 /** The modes that let it do more without asking: set only from the mode menu the person opened, or a confirm. */
 const ASKS_LESS = ["acceptEdits", "bypassPermissions", "auto", "dontAsk"];
+
+/** The modes a terminal's menu offers: its ⇧⇥ goes through them, Auto only where the agent has it on. */
+const TERMINAL_MODES = ["default", "acceptEdits", "plan", "auto"];
 
 /** ⇧⇥'s cycle, as the session's own (`session::CYCLE`). */
 const CYCLE = ["default", "acceptEdits", "plan"];
@@ -192,21 +198,25 @@ const INTERRUPTED = /^\[Request interrupted by user\b[^\]]*\]$/;
 export function rowsOf(messages, { working = false, now = null, stopped = false, failed = false, error = null } = {}) {
   const rows = [];
   let turn = null;
-  const open = (at, first) => (turn ??= { calls: [], notes: [], from: at, to: at, first, ids: [] });
+  const open = (at, first) => (turn ??= { calls: [], notes: [], steps: [], from: at, to: at, first, ids: [] });
   const close = (live, cut = false) => {
     if (!turn) return;
     const answer = live || cut || !turn.notes.length ? null : turn.notes[turn.notes.length - 1];
     const aside = answer ? turn.notes.slice(0, -1) : turn.notes;
     if (turn.calls.length || aside.length) {
       const ids = answer ? turn.ids.filter((id) => id !== answer.mid) : turn.ids;
-      rows.push({ kind: "work", calls: turn.calls, notes: aside, done: !live, from: turn.from, to: turn.to, secs: secondsBetween(turn.from, live ? now : turn.to), ids, base: `work:${turn.from}:${hashOf(turn.first)}` });
+      // Everything it did and said on the way, in the order it came: the fold's list, its last one what it does now.
+      const steps = answer ? turn.steps.filter((s) => s.note !== answer) : turn.steps;
+      rows.push({ kind: "work", calls: turn.calls, notes: aside, steps, done: !live, from: turn.from, to: turn.to, secs: secondsBetween(turn.from, live ? now : turn.to), ids, base: `work:${turn.from}:${hashOf(turn.first)}` });
     }
     if (answer) rows.push({ kind: "answered", text: answer.text, at: answer.at, ids: [answer.mid], base: `answered:${answer.id ?? answer.at}:${hashOf(answer.text)}` });
     turn = null;
   };
   for (const m of messages ?? []) {
     if (m.tool) {
-      open(m.at, `${m.tool.name} ${m.tool.summary}`).calls.push({ ...m.tool, at: m.at });
+      const call = { ...m.tool, at: m.at };
+      open(m.at, `${m.tool.name} ${m.tool.summary}`).calls.push(call);
+      turn.steps.push({ call });
       turn.to = m.at;
       turn.ids.push(msgId(m));
       continue;
@@ -223,7 +233,9 @@ export function rowsOf(messages, { working = false, now = null, stopped = false,
       continue;
     }
     const mid = msgId(m);
-    open(m.at, text).notes.push({ text, at: m.at, id: m.id, mid });
+    const note = { text, at: m.at, id: m.id, mid };
+    open(m.at, text).notes.push(note);
+    turn.steps.push({ note });
     turn.to = m.at;
     turn.ids.push(mid);
   }
@@ -303,6 +315,9 @@ function prReadiness(row) {
   return `${pr.draft ? "Draft · " : ""}${checks} · ${review}`;
 }
 
+/** How high an image an answer names is drawn under it. */
+const PICTURE_H = 220;
+
 export default class Chat {
   init(_props, cx) {
     this.model = new AgentsModel("chat");
@@ -359,6 +374,8 @@ export default class Chat {
     // Files to send with the next prompt, as paths, and why the last image pasted was not attached ({why, detail}).
     this.files = [];
     this.pasteNote = null;
+    // The copies drawn of image files, by path: null while copying, {rel, w, h}, or false when the image is gone.
+    this.thumbs = new Map();
     // What was typed for each subject, kept when another one comes in front: {text, files}.
     this.drafts = new Map();
     // Each subject's last send, {state: "sending" | "failed" | "unconfirmed" | "queued", why?, note?}, and the queued
@@ -509,7 +526,10 @@ export default class Chat {
     if (front) {
       this.reviewed = null;
       this.follows(cx);
-    } else followInReview(null);
+    } else {
+      followInReview(null);
+      showWhere(null);
+    }
   }
 
   close() {
@@ -519,6 +539,7 @@ export default class Chat {
     this.model.stop();
     this.scroll?.release();
     followInReview(null);
+    showWhere(null);
   }
 
   /** Whether older messages come before the first one shown. */
@@ -723,10 +744,13 @@ export default class Chat {
   follows(_cx) {
     const handle = this.subjectHandle();
     const cwd = this.session()?.cwd || this.value?.session?.cwd || this.value?.agent?.cwd || null;
-    const said = `${handle} ${cwd}`;
+    // The repositories its agent works in, the latest first: Files, Changes and Review show the one it changed last.
+    const repos = this.value?.session?.repos ?? [];
+    const said = `${handle} ${cwd} ${repos.map((r) => r.path).join(" ")}`;
     if (!handle || said === this.reviewed || this.front === false) return;
     this.reviewed = said;
-    followInReview(handle, cwd);
+    showWhere(cwd ? { cwd, repos } : null);
+    followInReview(handle, repos[0]?.path ?? cwd);
   }
 
   /** The subject's handle, as the hub's actions take it: `app:t3`, or a driven session's key. */
@@ -814,10 +838,14 @@ export default class Chat {
     this.askMode(next, null, cx);
   }
 
-  /** The mode menu's items, keyed for this opening of it: a command naming no key, or an older one, picks nothing. */
-  modeItems() {
+  /**
+   * The mode menu's items, keyed for this opening of it: a command naming no key, or an older one, picks nothing. A
+   * terminal's offers the modes its ⇧⇥ goes through.
+   */
+  modeItems(terminal = false) {
     this.modeKey = oneTimeKey();
-    return Object.entries(MODES).filter(([, m]) => m.offered).map(([id, m]) => ({ label: m.label, icon: m.icon, command: `mode:${id}:${this.modeKey}` }));
+    const ids = terminal ? TERMINAL_MODES : Object.keys(MODES).filter((id) => MODES[id].offered);
+    return ids.map((id) => ({ label: MODES[id].label, icon: MODES[id].icon, command: `mode:${id}:${this.modeKey}` }));
   }
 
   /**
@@ -827,23 +855,43 @@ export default class Chat {
    */
   askMode(mode, key, cx) {
     const live = this.session();
+    // An agent in a terminal changes its mode by its own keys, typed there by the hub.
+    const row = live ? null : this.value?.session?.switch?.mode ? this.row() : null;
     const fromMenu = Boolean(key) && key === this.modeKey;
     this.modeKey = null;
-    if (live && (UNASKED.includes(mode) || (ASKS_LESS.includes(mode) && !fromMenu))) {
-      const first = live.title ?? live.messages?.find((m) => m.role === "user")?.text?.split("\n")[0] ?? "";
+    if (!live && !row) return cx.notify();
+    if (UNASKED.includes(mode) || (ASKS_LESS.includes(mode) && !fromMenu)) {
+      const first = live ? (live.title ?? live.messages?.find((m) => m.role === "user")?.text?.split("\n")[0] ?? "") : (row.title ?? "");
       const asked = first.length > 60 ? `${first.slice(0, 59).trimEnd()}…` : first;
-      this.confirm = { mode, key: live.key, title: asked || "This session", folder: String(live.cwd ?? "").split("/").pop() };
+      const cwd = live ? live.cwd : row.cwd;
+      this.confirm = { mode, key: live ? live.key : row.terminal, ...(live ? {} : { terminal: true }), title: asked || "This session", folder: String(cwd ?? "").split("/").pop() };
       this.cancelFocus.focus();
-    } else this.sessionAct("mode", { mode }, cx);
+    } else if (live) this.sessionAct("mode", { mode }, cx);
+    else this.terminalAct("mode", { mode }, cx, row.terminal);
     cx.notify();
   }
 
-  /** The confirm's answer: a yes sets the mode on the session it was asked for, and only that one. */
+  /** The confirm's answer: a yes sets the mode on the session or terminal it was asked for, and only that one. */
   confirmed(yes, cx) {
     const c = this.confirm;
     this.confirm = null;
-    if (yes && c) this.sessionAct("mode", { mode: c.mode, confirm: true }, cx, c.key);
+    if (yes && c?.terminal) this.terminalAct("mode", { mode: c.mode }, cx, c.key);
+    else if (yes && c) this.sessionAct("mode", { mode: c.mode, confirm: true }, cx, c.key);
     cx.notify();
+  }
+
+  /** One of the agents view's actions typed into a terminal agent (its mode, its focus view), its refusal said. */
+  terminalAct(action, arg, cx, terminal = this.row()?.terminal) {
+    if (!terminal) return;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await hub.act("agents", action, [{ terminal, ...arg }]);
+        if (r?.error) notify({ title: "Its terminal did not take it", body: String(r.error).replace(/^[a-z_]+: /, ""), level: "warning", timeout: 5000 });
+      } catch (e) {
+        notify({ title: "Its terminal did not take it", body: String(e?.message ?? e), level: "warning" });
+      }
+      cx.notify();
+    });
   }
 
   /**
@@ -1772,13 +1820,18 @@ export default class Chat {
   }
 
   said(row, k) {
+    // The images sent with it show as themselves above its words rather than as their paths.
+    const lines = String(row.text).split("\n");
+    const pics = lines.filter((l) => IMAGE_LINE.test(l) && this.thumbs.get(l) !== false);
+    const text = lines.filter((l) => !pics.includes(l)).join("\n").trim();
     return this.column(
       v_flex()
         .w_full()
         .py(10)
         .gap(4)
         .items_end()
-        .child(
+        .when(pics.length > 0, (e) => e.child(h_flex().flex_wrap().justify_end().gap(6).children(pics.map((p) => this.picture(p, 120, k)))))
+        .when(Boolean(text), (e) => e.child(
           v_flex()
             .max_w(READ_W * 0.78)
             .px(16)
@@ -1787,8 +1840,8 @@ export default class Chat {
             .bg(k.muted)
             .text_size(TEXT.base)
             .text_color(k.foreground)
-            .child(TextView.markdown(`chat-s${row.slot}`, row.text).selectable(true).text_size(TEXT.base)),
-        )
+            .child(TextView.markdown(`chat-s${row.slot}`, linkify(text)).selectable(true).text_size(TEXT.base).on_link_click((url) => this.openLink(url))),
+        ))
         // Sent to a session cockpit drives, not yet replayed by it.
         .when(Boolean(row.pending), (e) => e.child(h_flex().gap(5).items_center().text_size(TEXT.xs).text_color(k.dim).child(Spinner({ size: 10, color: k.dim })).child(div().child("Sending…")))),
     );
@@ -1796,9 +1849,36 @@ export default class Chat {
 
   answered(row, k) {
     const parts = segments(row.text).map((s, i) =>
-      s.code ? this.codeBox(`chat-s${row.slot}-c${i}`, s, k) : TextView.markdown(`chat-s${row.slot}-t${i}`, s.text).selectable(true).text_size(TEXT.base).on_link_click((url) => openUrl(url)),
+      s.code
+        ? this.codeBox(`chat-s${row.slot}-c${i}`, s, k)
+        : TextView.markdown(`chat-s${row.slot}-t${i}`, linkify(s.text)).selectable(true).text_size(TEXT.base).on_link_click((url) => this.openLink(url)),
     );
-    return this.column(v_flex().w_full().pb(10).gap(2).text_color(k.foreground).children(parts));
+    // The images it names show as themselves under its words, each opened full size with a click.
+    const pics = imagesIn(row.text, home()).filter((p) => this.thumbs.get(p) !== false);
+    const picture = (p, i) => this.picture(p, PICTURE_H, k).id(`chat-s${row.slot}-p${i}`).cursor_pointer().tooltip(p).on_click(() => openUrl(p));
+    return this.column(
+      v_flex()
+        .w_full()
+        .pb(10)
+        .gap(2)
+        .text_color(k.foreground)
+        .children(parts)
+        .when(pics.length > 0, (e) => e.child(h_flex().flex_wrap().gap(8).pt(6).children(pics.map(picture)))),
+    );
+  }
+
+  /**
+   * A link the conversation holds: a path opens in the side panel beside the chat (a folder or an image in the system's
+   * own app), anything else in the browser.
+   */
+  openLink(url) {
+    const path = pathOf(url);
+    if (!path) return openUrl(url);
+    const { file, line } = fileAndLine(expand(path, home()));
+    if (IMAGE_LINE.test(file)) return openUrl(file);
+    exec("test", ["-d", file])
+      .then((r) => (r?.code === 0 ? openUrl(file) : openCode(file, { line: line ?? undefined })))
+      .catch(() => openCode(file, { line: line ?? undefined }));
   }
 
   /**
@@ -1854,29 +1934,39 @@ export default class Chat {
       );
   }
 
-  /** Whether a turn's fold is open: everything it did is in view while it works, out of the way once it answers. */
+  /** Whether a turn's fold is shut: a running one then shows only what it does now, a finished one only how long it took. */
   folded(row) {
     // Kept by a message the row holds: the fold survives the row growing when earlier messages come.
     for (const id of row.ids ?? []) if (this.folds.has(id)) return this.folds.get(id);
-    return row.done;
+    return true;
   }
 
   /**
-   * What the agent did for one turn, as one line you can open. Closed it is only how long it took, with a rule under
-   * it; open it is every call it made and everything it said on the way.
+   * What the agent did for one turn, as one line you can open. While it works, under it, the step it is on as its
+   * terminal words it ("Reading the config"); open, it lists every call and everything it said on the way.
    */
   work(row, k) {
     const open = !this.folded(row);
+    const steps = row.steps ?? [...row.notes.map((note) => ({ note })), ...row.calls.map((call) => ({ call }))];
+    const toggle = (_e, cx) => {
+      for (const id of row.ids ?? []) this.folds.delete(id);
+      if (row.ids?.[0]) this.folds.set(row.ids[0], open);
+      cx.notify();
+    };
     const mark = (c) => (c.ok === false ? Icon("x", { size: 12, color: k.destructive }) : c.ok === true ? Icon("check", { size: 12, color: k.success }) : Spinner({ size: 11, color: k.mutedFg }));
-    const call = (c, i) =>
+    const call = (c) =>
       h_flex()
         .h(26)
         .gap(10)
         .items_center()
         .text_size(TEXT.sm)
         .child(div().flex_none().w(78).truncate().text_color(k.foreground).child(c.name))
-        .child(div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").text_size(TEXT.xs).text_color(k.mutedFg).child(c.summary || "—"))
-        .child(div().flex_none().child(mark(c, i)));
+        .child(
+          c.about
+            ? div().flex_1().min_w(0).truncate().text_color(k.mutedFg).child(c.about)
+            : div().flex_1().min_w(0).truncate().font_family("JetBrains Mono").text_size(TEXT.xs).text_color(k.mutedFg).child(c.summary || "—"),
+        )
+        .child(div().flex_none().child(mark(c)));
     const note = (n, i) =>
       div()
         .w_full()
@@ -1884,6 +1974,52 @@ export default class Chat {
         .text_size(TEXT.sm)
         .text_color(k.mutedFg)
         .child(TextView.markdown(`chat-s${row.slot}-n${i}`, n.text).selectable(true).text_size(TEXT.sm));
+    const step = (s, i) => (s.call ? call(s.call) : note(s.note, i));
+    // The step it is on as its terminal shows it, else the last thing its transcript holds: what for, then the call.
+    const shown = !row.done ? this.value?.session : null;
+    const latest = shown?.task ? { step: { label: shown.task, detail: shown.detail } } : steps.at(-1);
+    const line = (label, detail) =>
+      v_flex()
+        .w_full()
+        .min_w(0)
+        .child(div().w_full().truncate().text_size(TEXT.sm).text_color(k.foreground).child(label))
+        .when(Boolean(detail), (e) => e.child(div().w_full().truncate().font_family("JetBrains Mono").text_size(TEXT.xs).text_color(k.mutedFg).child(detail)));
+    const now = (s) =>
+      s.step
+        ? line(s.step.label, s.step.detail)
+        : s.call
+        ? h_flex()
+            .w_full()
+            .gap(10)
+            .items_start()
+            .child(
+              v_flex()
+                .flex_1()
+                .min_w(0)
+                .child(div().w_full().truncate().text_size(TEXT.sm).text_color(k.foreground).child(s.call.about || s.call.name))
+                .child(div().w_full().truncate().font_family("JetBrains Mono").text_size(TEXT.xs).text_color(k.mutedFg).child(`${s.call.about ? `${s.call.name} · ` : ""}${s.call.summary || "—"}`)),
+            )
+            .child(div().flex_none().pt(3).child(mark(s.call)))
+        : div().w_full().text_size(TEXT.sm).text_color(k.mutedFg).child(TextView.markdown(`chat-s${row.slot}-now`, s.note.text).selectable(true).text_size(TEXT.sm));
+    // The rest of the list, folded beside the last one.
+    const more = latest?.step ? steps.length : steps.length - 1;
+    const expander = h_flex()
+      .id(`work-more-${row.key}`)
+      .flex_none()
+      .h(22)
+      .px(6)
+      .gap(3)
+      .items_center()
+      .rounded(RADIUS.md)
+      .cursor_pointer()
+      .text_size(TEXT.xs)
+      .text_color(k.dim)
+      .hover((st) => st.bg(k.accent).text_color(k.foreground))
+      .tooltip("Everything it did this turn")
+      .on_click(toggle)
+      .child(div().child(`${more} more`))
+      .child(Icon("chevron-down", { size: 12, color: k.dim }));
+    const label = workedFor(row.done ? row.secs : secondsBetween(row.from, new Date().toISOString()), row.done);
     return this.column(
       v_flex()
         .w_full()
@@ -1897,17 +2033,23 @@ export default class Chat {
             .text_color(k.mutedFg)
             .hover((s) => s.text_color(k.foreground))
             .tooltip(open ? "Fold it away" : "What it did")
-            .on_click((_e, cx) => {
-              for (const id of row.ids ?? []) this.folds.delete(id);
-              if (row.ids?.[0]) this.folds.set(row.ids[0], open);
-              cx.notify();
-            })
+            .on_click(toggle)
             .when(!row.done, (e) => e.child(Spinner({ size: 13, color: k.mutedFg })))
-            .child(div().text_size(TEXT.base).child(workedFor(row.done ? row.secs : secondsBetween(row.from, new Date().toISOString()), row.done)))
+            .child(div().min_w(0).truncate().text_size(TEXT.base).child(label))
             .child(Icon(open ? "chevron-down" : "chevron-right", { size: 15, color: k.dim })),
         )
-        .when(open && (row.calls.length > 0 || row.notes.length > 0), (e) =>
-          e.child(v_flex().w_full().pt(6).children([...row.notes.map(note), ...row.calls.map(call)])),
+        .when(open && steps.length > 0, (e) => e.child(v_flex().w_full().pt(6).children(steps.map(step))))
+        .when(!open && !row.done && Boolean(latest), (e) =>
+          e.child(
+            h_flex()
+              .w_full()
+              .pt(6)
+              .pl(20)
+              .gap(8)
+              .items_start()
+              .child(div().flex_1().min_w(0).child(now(latest)))
+              .when(more > 0, (e) => e.child(expander)),
+          ),
         )
         // The rule sits close under the row and the answer stands well clear of it.
         .when(row.done, (e) => e.child(div().w_full().h(1).mt(10).mb(22).bg(k.border))),
@@ -2075,19 +2217,46 @@ export default class Chat {
     ];
   }
 
-  /** The files riding with the next prompt. */
+  /** Copies image files into the app's folder, the only place a picture draws from, once each. */
+  thumbsFor(paths, cx) {
+    for (const path of paths) {
+      if (!IMAGE_LINE.test(path) || this.thumbs.has(path)) continue;
+      this.thumbs.set(path, null);
+      cx.spawn(async (cx) => {
+        this.thumbs.set(path, (await thumbnail(path, appHome())) ?? false);
+        cx.notify();
+      });
+    }
+  }
+
+  /** An image `height` high, its width cropped past three times that; an empty frame holds its place while it is copied. */
+  picture(path, height, k) {
+    const t = this.thumbs.get(path);
+    const w = t ? Math.round((height * t.w) / t.h) : height;
+    return div()
+      .w(Math.min(w, height * 3))
+      .h(height)
+      .flex_none()
+      .rounded(RADIUS.md)
+      .overflow_hidden()
+      .border_1()
+      .border_color(k.border)
+      .bg(k.muted)
+      .when(Boolean(t), (e) => e.child(image(t.rel).w(w).h(height)));
+  }
+
+  /** The files riding with the next prompt: an image as a small picture of itself, any other file by its name. */
   fileChips(k) {
-    return this.files.map((path, i) =>
-      Chip(String(path).split("/").pop(), {
-        id: `chat-file-${i}`,
-        icon: "file-text",
-        tooltip: `${path} — click to take it off`,
-        onClick: (_e, cx) => {
-          this.files = this.files.filter((f) => f !== path);
-          cx.notify();
-        },
-      }),
-    );
+    return this.files.map((path, i) => {
+      const off = (_e, cx) => {
+        cx.stop_propagation();
+        this.files = this.files.filter((f) => f !== path);
+        cx.notify();
+      };
+      if (IMAGE_LINE.test(path) && this.thumbs.get(path) !== false)
+        return this.picture(path, 44, k).id(`chat-file-${i}`).cursor_pointer().tooltip(`${path} — click to take it off`).on_click(off);
+      return Chip(String(path).split("/").pop(), { id: `chat-file-${i}`, icon: "file-text", tooltip: `${path} — click to take it off`, onClick: off });
+    });
   }
 
   /**
@@ -2139,6 +2308,45 @@ export default class Chat {
             }),
           ),
       );
+  }
+
+  /**
+   * The mode an agent in a terminal is in, and its focus view, as its screen and transcript say: a menu that changes the
+   * mode by its own ⇧⇥ and a click that types its /focus, where the agent has them; else shown only.
+   */
+  shownModes(k) {
+    const ran = this.value?.session ?? {};
+    const can = ran.switch ?? {};
+    const out = [];
+    const mode = ran.mode ? (MODES[ran.mode] ?? { label: ran.mode, icon: "shield-check", loud: false }) : null;
+    if (mode && can.mode)
+      out.push(this.picker("chat-mode-shown", { label: mode.label, icon: mode.icon, color: mode.loud ? k.blocked : null, tooltip: "What it may do without asking", items: () => this.modeItems(true) }, k));
+    else if (mode) out.push(this.chip("chat-mode-shown", mode.icon, mode.label, "What it may do without asking — ⇧⇥ in its terminal changes it", mode.loud ? k.blocked : null, k));
+    if (typeof ran.focus === "boolean" && (ran.focus || can.focus)) {
+      const tip = ran.focus ? "Focus view: its terminal shows only its last words" : "Focus view is off: its terminal shows every step";
+      out.push(
+        this.chip("chat-focus-shown", ran.focus ? "scan-eye" : "eye-off", "Focus", can.focus ? `${tip} — click to turn it ${ran.focus ? "off" : "on"}` : tip, ran.focus ? null : k.dim, k, can.focus ? (cx) => this.terminalAct("focus_mode", {}, cx) : null),
+      );
+    }
+    return out;
+  }
+
+  /** A word in the bottom bar with its icon, that does something when clicked or only says something. */
+  chip(id, icon, label, tooltip, color, k, onClick = null) {
+    return h_flex()
+      .id(id)
+      .h(26)
+      .px(7)
+      .gap(5)
+      .flex_none()
+      .items_center()
+      .rounded(RADIUS.md)
+      .text_size(TEXT.sm)
+      .text_color(color ?? k.mutedFg)
+      .tooltip(tooltip)
+      .when(Boolean(onClick), (e) => e.cursor_pointer().hover((s) => s.bg(k.accent)).on_click((_e, cx) => (onClick(cx), cx.notify())))
+      .child(Icon(icon, { size: 14, color: color ?? k.mutedFg }))
+      .child(div().child(label));
   }
 
   /** A word in the bottom bar that opens a menu: the permission mode, the model. */
@@ -2311,6 +2519,7 @@ export default class Chat {
                   ),
                 ),
               )
+              .when(!live && Boolean(row), (e) => e.children(this.shownModes(k)))
               .when(!row && !live, (e) => e.children(this.starter.chips((id, o) => this.picker(id, o, k))))
               .when(Boolean(seat.cwd), (e) =>
                 e.child(
@@ -2355,8 +2564,8 @@ export default class Chat {
   render(cx) {
     const k = tokens();
     const live = this.session();
-    // The confirm was asked for one session: another one in front takes it away.
-    if (this.confirm && live?.key !== this.confirm.key) this.confirm = null;
+    // The confirm was asked for one session or terminal: another one in front takes it away.
+    if (this.confirm && (live?.key ?? this.row()?.terminal) !== this.confirm.key) this.confirm = null;
     const row = this.row();
     const working = live ? live.working === true : row?.status === "working";
     if (this.wantFiles) this.loadFiles(cx);
@@ -2370,6 +2579,8 @@ export default class Chat {
     const all = memo?.messages === messages && memo.length === messages.length && memo.shape === shape ? memo.rows : rowsOf(messages, { working, ...end });
     this.made = { messages, length: messages.length, shape, rows: all };
     const rows = this.drawn(all);
+    const named = (r) => (r.kind === "said" ? String(r.text).split("\n") : r.kind === "answered" ? imagesIn(r.text, home()) : []);
+    this.thumbsFor([...this.files, ...rows.flatMap(named)], cx);
     // A turn still running counts its own seconds, so the row is redrawn while nothing else moves: one redraw a second,
     // however often something else draws it. `ticking` is when it was armed: one that never fired is armed again.
     if (working && !(Date.now() - (this.ticking ?? 0) < 2000)) {
@@ -2504,11 +2715,27 @@ export default class Chat {
       .children(this.queuedRows(k))
       // A dismissal's Undo, above the card it came from: the chat keeps key hints out of it, as everywhere here.
       .when(Boolean(UndoRow("chat-undo", this.model)), (e) => e.child(h_flex().w_full().px(GUTTER).pt(8).justify_center().child(div().w_full().max_w(READ_W).child(UndoRow("chat-undo", this.model)))))
+      .when(Boolean(row?.question?.view), (e) => (this.planInPanel(row, cx), e))
       .when(Boolean(row?.question || row?.waits), (e) =>
         e.child(h_flex().w_full().px(GUTTER).pt(8).justify_center().child(div().w_full().max_w(READ_W).child(QuestionCard(`chat-card-${row.terminal}-${row.question?.ask ?? row.question?.text?.length ?? ""}`, row, this.model, { wide: true, focus: this.cardFocus })))),
       )
       .child(this.composer(k))
       .when(Boolean(this.confirm), (e) => e.child(this.fullAccess(k, this.confirm)));
+  }
+
+  /**
+   * A plan the agent asks about opens once in the side panel, where it reads whole and stays after it is carried out;
+   * the card above the box keeps it to one line.
+   */
+  planInPanel(row, cx) {
+    const view = row.question.view;
+    if (this.planOpened === view) return;
+    this.planOpened = view;
+    cx.timer.after(0, () => {
+      pendView(row, view);
+      openPanel("show");
+      run(`cockpit.show:go:${view}`);
+    });
   }
 
   /** At the top of the conversation when there is more before it: reads further back, the first row staying put. */

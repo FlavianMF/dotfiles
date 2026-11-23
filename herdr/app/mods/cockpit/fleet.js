@@ -2,6 +2,7 @@
 // view (question, recap, branch, PR, CI, changes, cost), each placed in a stage: whose move it is.
 
 import { agents, spaces, panes, run, notify } from "herdr";
+import * as herdr from "herdr";
 import * as hub from "./hub.js";
 import { showWork, pinChat, readInChat } from "./screens.js";
 
@@ -72,7 +73,7 @@ export function questionOf(row) {
   );
   const at = q.permission ? -1 : choices.findIndex((c) => c.n === q.cursor);
   const text = String(q.text ?? q.question ?? "").replace(/\n?>\s*$/, "").trim();
-  return { text, kind: q.kind ?? (choices.length ? "single" : "text"), choices, cursor: at, permission: Boolean(q.permission), ask: q.ask ?? null, asked: q.asked ?? null, preview: q.preview ?? "", cut: q.cut === true, unasked: Array.isArray(q.unasked) ? q.unasked : [], terminal_only: q.terminal_only || null };
+  return { text, kind: q.kind ?? (choices.length ? "single" : "text"), choices, cursor: at, permission: Boolean(q.permission), ask: q.ask ?? null, asked: q.asked ?? null, preview: q.preview ?? "", cut: q.cut === true, unasked: Array.isArray(q.unasked) ? q.unasked : [], terminal_only: q.terminal_only || null, markdown: q.markdown === true, view: q.view || null };
 }
 
 /**
@@ -192,6 +193,20 @@ export function needing(rows) {
   const asks = (r) => !r.dismissed && (r.stage === "needs_you" || Boolean(r.question));
   const failed = (r) => !asks(r) && !r.dismissed && (r.stage === "failed" || agentStatus(r.status) === "failed");
   return [...rows.filter(asks), ...rows.filter(failed)];
+}
+
+/** The Dock badge for this many agents that need you: their count, none at zero or when turned off. */
+export const badgeText = (n, on = true) => (on && n > 0 ? String(n) : null);
+
+/**
+ * Puts the count on the Herdr app's Dock icon when it changes, once for every copy that draws it; a Herdr older than
+ * 0.1.16 has no badge.
+ */
+export function showBadge(n, on = true) {
+  const text = badgeText(n, on);
+  if (globalThis.cockpitBadge === text) return;
+  globalThis.cockpitBadge = text;
+  herdr.setBadge?.(text);
 }
 
 /**

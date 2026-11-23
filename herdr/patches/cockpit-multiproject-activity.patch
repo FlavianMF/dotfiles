@@ -1,31 +1,31 @@
 --- a/mods/cockpit/activity.js
 +++ b/mods/cockpit/activity.js
-@@ -18,10 +18,14 @@
-   { name: "changes", icon: "git-commit", label: "Changes", key: "⌃⌘5" },
+@@ -21,10 +21,14 @@
    { name: "code", icon: "file-text", label: "The file opened last" },
    { name: BROWSER, icon: "globe", label: "The browser beside the agent" },
+   { name: WEB, icon: "globe", label: "The browser" },
 +  // ADAPTADO para dotfiles (layout multiproject): To-do e Prompts do over9k, no stack `panel-over9k`.
 +  { name: "todos", icon: "list-todo", label: "To-do", key: "", stack: "panel-over9k", child: "todos", panel: "panel-todo" },
 +  { name: "prompts", icon: "sparkles", label: "Prompts", key: "", stack: "panel-over9k", child: "prompts", panel: "panel-todo" },
  ];
  
- /** Whether an item has something to show here: the file once one was opened, the browser while the tab has one. */
+ /** Whether an item has something to show here: the file once one was opened, a browser while there is one. */
  function present(item, tree) {
 +  if (item.panel) return Boolean(findNode(tree, item.panel));
    if (item.name === "code") return Boolean(findNode(tree, "code") && shared(CODE_PANEL)?.file);
    if (item.name === BROWSER) return Boolean(findNode(tree, BROWSER) && browserIn(panes(), focused()?.tab));
-   return true;
-@@ -45,10 +49,14 @@
+   if (item.name === WEB) return Boolean(findNode(tree, WEB) && shared("cockpit.web.model")?.enabled);
+@@ -49,10 +53,14 @@
  
    render() {
      const k = tokens();
 -    const active = findNode(layout(), "panel-body")?.active;
      const button = (item) => {
--      const child = PANELS[item.name] ?? item.name;
+-      const child = panelChild(item.name);
 -      const on = active === child;
 +      const stack = item.stack ?? "panel-body";
-+      const child = item.child ?? PANELS[item.name] ?? item.name;
-+      // ADAPTADO: a faixa fica fora do `panel`; o botão ativo é o do stack dele, e só vale com o painel aberto.
++      const child = item.child ?? panelChild(item.name);
++      // ADAPTADO: faixa fica fora do `panel`; o botão ativo é o do stack dele, e só vale com o painel aberto.
 +      const target = item.panel ?? "panel";
 +      const other = target === "panel" ? "panel-todo" : "panel";
 +      const open = !findNode(layout(), target)?.hidden;
@@ -33,7 +33,7 @@
        const badge = shared(`badge.${item.name}`);
        const tone = badge?.tone ? k[badge.tone] ?? badge.tone : k.ring;
        return h_flex()
-@@ -62,7 +70,13 @@
+@@ -66,7 +74,13 @@
          .text_color(on ? k.foreground : k.mutedFg)
          .hover((s) => s.text_color(k.foreground))
          .tooltip(item.key ? `${item.label}  ${item.key}` : item.label)
@@ -48,7 +48,7 @@
          .when(on, (e) => e.child(div().absolute().left(0).top(10).bottom(10).w(2).rounded(1).bg(k.ring)))
          .child(h_flex().size(30).items_center().justify_center().rounded(RADIUS.md).when(on, (e) => e.bg(k.selected)).child(Icon(item.icon, { size: 17 })))
          .when(Boolean(badge?.count), (e) => e.child(CornerCount(badge.count, { tone, top: 4, right: 4 })));
-@@ -88,7 +102,10 @@
+@@ -92,7 +106,10 @@
            .text_color(k.mutedFg)
            .hover((s) => s.text_color(k.foreground))
            .tooltip("Close the panel  ⌘⌥B")

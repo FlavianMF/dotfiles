@@ -3,6 +3,13 @@
 
 import net from "net";
 import { exec, appHome, readTextFile, run, window as win } from "herdr";
+import * as herdr from "herdr";
+
+/** What `herdr-app check` gets in place of the hub: a check loads the mod for real, and must start or reach nothing. */
+const CHECKING = "herdr-app check is loading the mod: it starts and asks nothing";
+
+/** Whether `herdr-app check` loads the mod now; a Herdr older than 0.1.16 never says so. */
+export const checking = () => Boolean(herdr.checking?.());
 
 /** Closes a socket, already closed or not: a throw here would end the subscription that is tidying up. */
 const close = (socket) => {
@@ -66,6 +73,12 @@ export function within(cx, promise, ms, what) {
   });
   return Promise.race([promise, late]).finally(() => timer?.cancel());
 }
+
+/**
+ * How often a subscription promises the hub a line, in seconds. A copy of the mod that Herdr reloads away keeps its
+ * sockets open but runs no more: the hub ends a subscription that breaks the promise three times over.
+ */
+const KEEPALIVE_SECS = 30;
 
 /** Waits `ms` on the context's timer (mods have no setTimeout). */
 export const sleep = (cx, ms) => new Promise((resolve) => cx.timer.after(ms, () => resolve()));
@@ -158,6 +171,7 @@ async function stoppedOnPurpose(cx) {
  * purpose, or a remote runner's: a window never restarts those by itself.
  */
 export async function startHub({ explicit = false, cx = null } = {}) {
+  if (checking()) throw new Error(CHECKING);
   const s = (globalThis.cockpitHubStart ??= { starting: null, failed: null, at: 0 });
   if (!explicit) {
     // A runner's hub is found again (its port and token) but never started from a desk by itself.
@@ -374,6 +388,7 @@ async function connect(state, cx) {
 
 /** Runs the cockpit binary on the install's HOME, driving this Herdr window: { code, stdout, stderr }. */
 export async function cockpit(args) {
+  if (checking()) throw new Error(CHECKING);
   const { bin, home, env = {}, machine, host } = await install();
   const vars = Object.entries(env).filter(([k]) => !machine || k !== "HERDR_APP_HOME").map(([k, v]) => `${k}=${v}`);
   if (machine) {
@@ -405,6 +420,7 @@ export async function cockpit(args) {
  * are bounded on its timer; one sent and never answered throws with `unconfirmed` (see `isUnconfirmed`).
  */
 export async function request(op, fields = {}, cx = null) {
+  if (checking()) throw new Error(CHECKING);
   // A page opens from the window itself: macOS keeps the browser behind when a background process (the hub) asks.
   if (op === "act" && fields.action === "open_url" && typeof fields.args?.[0] === "string") {
     const url = fields.args[0];
@@ -622,6 +638,7 @@ function beatFor(cx, state, tick) {
  *   subscribe(cx, { views: ["todo"] }, (m, cx) => { this.model = m.value; cx.notify(); });
  */
 export function subscribe(cx, { views = [], docs = [], notify = false, focus = null }, onMessage, onState = () => {}) {
+  if (checking()) return { stopped: true, stop() {} };
   // `beat` moves while the copy lives (a copy the window dropped stops beating); `port` names the hub it is on;
   // `attempt` numbers the task following the hub, `moved` is when it last got anywhere, `answered` whether the hub ever
   // answered it (live or an error).
@@ -662,7 +679,8 @@ export function subscribe(cx, { views = [], docs = [], notify = false, focus = n
           if (!current()) break;
           state.socket = socket;
           state.port = port;
-          await socket.write(JSON.stringify({ op: "subscribe", token, views, docs, notify }) + "\n");
+          await socket.write(JSON.stringify({ op: "subscribe", token, views, docs, notify, keepalive: KEEPALIVE_SECS }) + "\n");
+          let wrote = Date.now();
           state.connecting = false;
           state.answered = true;
           reached();
@@ -685,6 +703,11 @@ export function subscribe(cx, { views = [], docs = [], notify = false, focus = n
               deadline?.cancel();
             }
             if (line === null || !current()) break;
+            // The hub writes at least every 10 s, so answering a line keeps the promise of one every KEEPALIVE_SECS.
+            if (Date.now() - wrote >= (KEEPALIVE_SECS - 5) * 1000) {
+              await socket.write("\n");
+              wrote = Date.now();
+            }
             if (!line.trim()) continue;
             const message = JSON.parse(line);
             if (message.error) throw new Error(message.error);
