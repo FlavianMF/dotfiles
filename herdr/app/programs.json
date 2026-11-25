@@ -1,0 +1,15 @@
+{
+  "programs": {
+    "claude": {
+      "run": ["claude-active"]
+    },
+    "claude-work": {
+      "name": "Claude (work)",
+      "icon": "icons/claude.svg",
+      "tint": false,
+      "tile": "#1c1d21",
+      "color": "#ffffff",
+      "run": ["claude-work"]
+    }
+  }
+}

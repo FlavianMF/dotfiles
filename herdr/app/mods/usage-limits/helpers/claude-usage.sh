@@ -5,31 +5,70 @@ WAIT_ROUNDS=75
 REQUEST='{"type":"control_request","request_id":"herdr-usage-limits","request":{"subtype":"get_usage","skip_behaviors":true}}'
 
 CLAUDE=$(command -v "${HERDR_USAGE_CLAUDE_BIN:-claude}" 2>/dev/null) || exit "$NOT_INSTALLED"
+DEFAULT_DIR="${CLAUDE_DEFAULT_DIR:-$HOME/.claude}"
+PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
 
-dir=$(mktemp -d "${TMPDIR:-/tmp}/herdr-claude-usage.XXXXXX") || exit "$NO_REPLY"
-out="$dir/out"
+query_profile() {
+  profile=$1
+  cfg_dir=$2
+  dir=$(mktemp -d "${TMPDIR:-/tmp}/herdr-claude-usage.XXXXXX") || return 1
+  out="$dir/out"
 
-ask_with_the_request_in_a_regular_file() {
   printf '%s\n' "$REQUEST" >"$dir/in"
-  "$CLAUDE" -p --safe-mode --no-session-persistence \
-    --input-format stream-json --output-format stream-json --verbose \
-    <"$dir/in" >"$out" 2>/dev/null &
+  if [ -n "$cfg_dir" ]; then
+    CLAUDE_CONFIG_DIR="$cfg_dir" "$CLAUDE" -p --safe-mode --no-session-persistence \
+      --input-format stream-json --output-format stream-json --verbose \
+      <"$dir/in" >"$out" 2>/dev/null &
+  else
+    env -u CLAUDE_CONFIG_DIR "$CLAUDE" -p --safe-mode --no-session-persistence \
+      --input-format stream-json --output-format stream-json --verbose \
+      <"$dir/in" >"$out" 2>/dev/null &
+  fi
+  pid=$!
+
+  i=0
+  while [ "$i" -lt "$WAIT_ROUNDS" ]; do
+    if grep -q '"control_response"' "$out" 2>/dev/null; then break; fi
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.2
+    i=$((i + 1))
+  done
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+
+  line=$(grep -m1 '"control_response"' "$out" 2>/dev/null || true)
+  rm -rf "$dir"
+  [ -n "$line" ] || return 1
+  printf '{"profile":"%s","reply":%s}\n' "$profile" "$line"
+  return 0
 }
 
-ask_with_the_request_in_a_regular_file
-pid=$!
+queried=0
+emitted=0
 
-i=0
-while [ "$i" -lt "$WAIT_ROUNDS" ]; do
-  if grep -q '"control_response"' "$out" 2>/dev/null; then break; fi
-  kill -0 "$pid" 2>/dev/null || break
-  sleep 0.2
-  i=$((i + 1))
-done
-kill "$pid" 2>/dev/null
-wait "$pid" 2>/dev/null
+if [ -f "$DEFAULT_DIR/.credentials.json" ] || [ ! -d "$PROFILES_DIR" ]; then
+  queried=1
+  if query_profile "default" ""; then
+    emitted=$((emitted + 1))
+  fi
+fi
 
-status=$NO_REPLY
-if grep -m1 '"control_response"' "$out"; then status=0; fi
-rm -rf "$dir"
-exit "$status"
+if [ -d "$PROFILES_DIR" ]; then
+  for p in "$PROFILES_DIR"/*; do
+    [ -d "$p" ] || continue
+    [ -f "$p/.credentials.json" ] || continue
+    queried=1
+    if query_profile "$(basename "$p")" "$p"; then
+      emitted=$((emitted + 1))
+    fi
+  done
+fi
+
+if [ "$queried" -eq 0 ]; then
+  if query_profile "default" ""; then
+    emitted=$((emitted + 1))
+  fi
+fi
+
+[ "$emitted" -gt 0 ] && exit 0
+exit "$NO_REPLY"

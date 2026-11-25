@@ -140,6 +140,14 @@ herdr server stop                     # Gracefully stop the Herdr background ser
 
 When running *inside* a Herdr pane (`HERDR_ENV=1`), agents can interact with the Herdr CLI directly without opening nested client loops.
 
+## Multi-Account Claude Code
+
+- **Shared launcher (`bin/claude-profile`):** Links to `~/.local/bin/claude-profile`, `~/.local/bin/claude-active`, and per-profile shims `~/.local/bin/claude-<profile>`. Resolves `claude-<profile>` argv0, `@<profile>`, `-a <profile>`, `CLAUDE_CONFIG_DIR`, or `~/.claude-active`, runs ECC/plugin/skill auto-setup, and invokes `claude`.
+- **Zsh management (`zsh/claude-accounts.zsh`):** Use `cswitch new <name>`, `cswitch sync [name]`, `cswitch <name|default>`, `cstatus`, and `cquota`. Profiles link shared config (`CLAUDE.md`, `settings.json`, `statusline.sh`, `skills`, `hooks`, `agents`, `rules`, `commands`, `plugins`) while isolating credentials and sessions.
+- **Herdr App (`herdr/app/programs.json`):** Maps `claude` to `claude-active` and adds `claude-work` for concurrent multi-account tabs.
+- **Cockpit (`~/.config/cockpit/config.json`):** Set `agents.commands.claude.bin` to `"claude-active"` so Cockpit follows `cswitch` immediately.
+- **Telemetry & Quotas:** `over9k/claude-info.py`, `usage-limits/helpers/session.sh`, and `cache-hit` read each process's `CLAUDE_CONFIG_DIR` from `/proc/<pid>/environ`, and `usage-limits/helpers/claude-usage.sh` reports 5h/7d bars for every authenticated profile.
+
 ## Herdr app: layouts `over9k` e `cockpit`
 
 Dois layouts vendorizados de terceiros, ao lado do `traycer`. O `ctrl-shift-l` cicla entre todos. O `ctrl-alt-shift-escape` volta ao `main`. Instale com `make herdr-app-install`.

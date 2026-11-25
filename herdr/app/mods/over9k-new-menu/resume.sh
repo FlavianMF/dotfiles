@@ -9,7 +9,7 @@
 # servers.json: {"http://127.0.0.1:8081": {"start": "<command>", "stop": "<command>"}}
 # (address = the provider's baseUrl without /v1; a plain string means start only).
 # Everything optional: without Pi's list, jq or curl, agents start on their own model.
-agent=$1 id=$2 model=$3 provider=$4 asked=$4 first=${5:-}
+agent=$1 id=$2 model=$3 provider=$4 asked=$4 first=${5:-} profile=${6:-}
 here=$(dirname "$(readlink -f "$0" 2>/dev/null || printf %s "$0")")
 models="$HOME/.pi/agent/models.json"     # Pi's model list (providers: baseUrl, apiKey, models)
 codex_config="$HOME/.codex/config.toml"  # Codex's [model_providers.<name>] base_url
@@ -76,8 +76,14 @@ case "$agent" in
       [ -n "$ctx" ] && export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$ctx"
       unset ANTHROPIC_API_KEY
     fi
-    [ -n "$id" ] && exec claude --resume "$id"
-    exec claude ${first:+"$first"} ;;
+    runner="claude-active"
+    command -v "$runner" >/dev/null 2>&1 || runner="claude"
+    if [ -n "$profile" ] && command -v claude-profile >/dev/null 2>&1; then
+      [ -n "$id" ] && exec claude-profile "@$profile" --resume "$id"
+      exec claude-profile "@$profile" ${first:+"$first"}
+    fi
+    [ -n "$id" ] && exec "$runner" --resume "$id"
+    exec "$runner" ${first:+"$first"} ;;
   codex)
     # Its own provider for that server, else the one the session named.
     cp=""; [ -n "$base" ] && cp=$(codex_provider "$base")

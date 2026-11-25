@@ -26,13 +26,19 @@ const SESSIONS = {
   // one it made up), else its summary, else the first message. One that clear +
   // recap (over9k) started without a /rename takes the name of the one
   // it continues; that one gets a seventh field, "cleared".
-  claude: `if [ -n "$1" ]; then set -- "$HOME/.claude/projects/$(printf %s "$1" | sed 's/[^a-zA-Z0-9]/-/g')"/*.jsonl
-else set -- "$HOME"/.claude/projects/*/*.jsonl; fi
+  claude: `if [ -n "$1" ]; then
+  proj=$(printf %s "$1" | sed 's/[^a-zA-Z0-9]/-/g')
+  set -- "$HOME/.claude/projects/$proj"/*.jsonl "$HOME/.claude-profiles/"*/projects/"$proj"/*.jsonl
+else
+  set -- "$HOME"/.claude/projects/*/*.jsonl "$HOME"/.claude-profiles/*/projects/*/*.jsonl
+fi
 files=$(ls -t "$@" 2>/dev/null | head -n 40)
 cleared=$(printf '%s\\n' "$files" | while read -r f; do [ -n "$f" ] && grep -h -o "previous conversation's transcript at [^ ]*\\.jsonl" "$f" 2>/dev/null; done | sed 's/.* at //')
 named() { q='"'; grep -o "$q$2$q:$q[^$q]*$q" "$1" 2>/dev/null | tail -n 1 | cut -d "$q" -f 4; }
 printf '%s\\n' "$files" | while read -r f; do
   [ -n "$f" ] || continue
+  prof="default"
+  case "$f" in "$HOME/.claude-profiles/"*) prof=$(printf '%s' "${f#"$HOME/.claude-profiles/"}" | cut -d/ -f1) ;; esac
   c=$(grep -m 1 -o '"cwd":"[^"]*"' "$f" | cut -d '"' -f 4)
   t=$(named "$f" customTitle)
   from=$(grep -m 1 -o "previous conversation's transcript at [^ ]*\\.jsonl" "$f" | sed 's/.* at //')
@@ -43,7 +49,7 @@ printf '%s\\n' "$files" | while read -r f; do
   [ -n "$t" ] || t=$(grep -m 30 '"type":"user"' "$f" | jq -r 'select(.isMeta != true) | .message.content | if type == "string" then . else (map(select(.type == "text") | .text) | join(" ")) end' 2>/dev/null | grep -v '^\\s*<' | grep -v '^\\s*$' | head -n 1 | cut -c1-90)
   m=$(grep -o '"model":"[^"<]*"' "$f" | tail -n 1 | cut -d '"' -f 4)
   x=""; printf '%s\\n' "$cleared" | grep -qxF "$f" && x=cleared
-  printf '%s\\t%s\\t%s\\t%s\\t%s\\t\\t%s\\n' "$(basename "$f" .jsonl)" "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")" "$t" "$c" "$m" "$x"
+  printf '%s\\t%s\\t%s\\t%s\\t%s\\t\\t%s\\t%s\\n' "$(basename "$f" .jsonl)" "$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")" "$t" "$c" "$m" "$x" "$prof"
 done`,
   // Codex keeps its threads in a database; only ones a person started (not
   // its reviewers or sub-agents), not archived.
@@ -122,7 +128,7 @@ const ago = (secs) => {
 
 const FOLDERS = `{
   find "$HOME" -maxdepth 3 \\( -path "$HOME/.*" -o -name node_modules \\) -prune -o -name .git -print 2>/dev/null | sed 's#/[^/]*$##'
-  for d in "$HOME"/.claude/projects/*/; do
+  for d in "$HOME"/.claude/projects/*/ "$HOME"/.claude-profiles/*/projects/*/; do
     f=$(ls -t "$d"*.jsonl 2>/dev/null | head -n 1); [ -n "$f" ] || continue
     grep -m 1 -o '"cwd":"[^"]*"' "$f" | cut -d '"' -f 4
   done
@@ -165,7 +171,7 @@ const SUBFOLDERS = 'case "$1" in "~") d=$HOME ;; "~/"*) d="$HOME/${1#"~/"}" ;; *
 
 // Resuming on another computer: the agent's own command (models and their
 // servers are this computer's).
-const RESUME_THERE = { claude: (id) => ["claude", "--resume", id], codex: (id) => ["codex", "resume", id], pi: (id) => ["pi", "--session", id], antigravity: (id) => ["agy", "--conversation", id] };
+const RESUME_THERE = { claude: (id, profile) => [profile ? "claude-profile" : "claude-active", ...(profile ? [`@${profile}`] : []), "--resume", id], codex: (id) => ["codex", "resume", id], pi: (id) => ["pi", "--session", id], antigravity: (id) => ["agy", "--conversation", id] };
 
 function shortcut(name) {
   const k = keys().find(b => b.section === "global" && b.action === name);
@@ -242,12 +248,12 @@ export default class NewMenu extends View {
       for (const [key, script] of Object.entries(SESSIONS)) cx.spawn(async cx => {
         const r = await exec("sh", ["-c", script, "sh", this.folder.replace(/\/+$/, "")], there).catch(() => null);
         const list = (r?.stdout ?? "").split("\n").filter(Boolean).map(l => {
-          const [id, when, title, cwd, model, provider, cleared] = l.split("\t");
+          const [id, when, title, cwd, model, provider, cleared, profile] = l.split("\t");
           // Clear + recap renames the old one "[Cleared] <name>"; one found
           // continued elsewhere gets the same prefix.
           const plain = (title ?? "").replace(/^\[cleared\] /i, "").replace(/ \(cleared\)$/, "") || "Untitled session";
           const was = cleared === "cleared" || plain !== (title || "Untitled session");
-          return { id, when: +when, title: was ? `[Cleared] ${plain}` : plain, cwd: (cwd || this.folder).replace(/\/+$/, ""), model, provider };
+          return { id, when: +when, title: was ? `[Cleared] ${plain}` : plain, cwd: (cwd || this.folder).replace(/\/+$/, ""), model, provider, profile: profile || "" };
         });
         // Only ones that can be resumed where they ran: not in a folder that's
         // gone (old test runs in /tmp) or an agent's scratch folder.
@@ -271,7 +277,7 @@ export default class NewMenu extends View {
   // would hide a later /rename (the sidebar shows a tab's name first).
   resume(key, x) {
     const m = this.machine;
-    const argv = m ? RESUME_THERE[key](x.id) : ["sh", RESUMER, key, x.id, x.model ?? "", x.provider ?? ""];
+    const argv = m ? RESUME_THERE[key](x.id, x.profile) : ["sh", RESUMER, key, x.id, x.model ?? "", x.provider ?? "", "", x.profile ?? ""];
     const there = spaces().find(s => (s.machine ?? null) === m && s.folder.replace(/\/+$/, "") === x.cwd);
     const names = (m ? shared("projects.on")?.[m]?.names : shared("projects.names")) ?? {};
     if (there) {
@@ -553,6 +559,6 @@ export default class NewMenu extends View {
       .child(this.back(`Resume a ${a.name} session`))
       .child(v_flex().id(`sessions-${a.key}`).flex_none().h(Math.min(list.length, 16) * 31).overflow_y_scrollbar()
         .children(list.map((x) => this.row(`resume-${a.key}-${x.id}`, badged(icon(), x.model, t.popover), x.title, () => this.resume(a.key, x),
-          [computer && (x.cwd === h ? "~" : x.cwd.split("/").pop()), !ownModel(a.key, x) && x.model, ago(x.when)].filter(Boolean).join(" \u00b7 ")))));
+          [computer && (x.cwd === h ? "~" : x.cwd.split("/").pop()), x.profile && x.profile !== "default" && `@${x.profile}`, !ownModel(a.key, x) && x.model, ago(x.when)].filter(Boolean).join(" \u00b7 ")))));
   }
 }

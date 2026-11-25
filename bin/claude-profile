@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Shared multi-account Claude Code launcher for interactive shells, Herdr App, and Cockpit.
+# Resolves the target profile from argv0 (claude-<profile>), @profile / -a profile,
+# CLAUDE_CONFIG_DIR, or ~/.claude-active, runs project ECC/plugin/skill auto-setup,
+# and invokes the real claude binary.
+set -euo pipefail
+
+SELF_PATH="${BASH_SOURCE[0]}"
+SELF_NAME="$(basename "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$SELF_PATH")")" && pwd)"
+DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
+ACTIVE_LINK="${CLAUDE_ACTIVE_LINK:-$HOME/.claude-active}"
+DEFAULT_DIR="${CLAUDE_DEFAULT_DIR:-$HOME/.claude}"
+
+find_real_claude() {
+    if [[ -n "${CLAUDE_REAL_BIN:-}" ]]; then
+        printf '%s\n' "$CLAUDE_REAL_BIN"
+        return 0
+    fi
+    local self_real cand cand_real
+    self_real="$(readlink -f "$SELF_PATH" 2>/dev/null || printf '%s' "$SELF_PATH")"
+    while IFS= read -r cand; do
+        [[ -n "$cand" ]] || continue
+        cand_real="$(readlink -f "$cand" 2>/dev/null || printf '%s' "$cand")"
+        if [[ "$cand_real" != "$self_real" ]]; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done < <(type -ap claude 2>/dev/null || true)
+    return 1
+}
+
+profile=""
+explicit=0
+
+if [[ "$SELF_NAME" == claude-* && "$SELF_NAME" != "claude-profile" && "$SELF_NAME" != "claude-active" ]]; then
+    profile="${SELF_NAME#claude-}"
+    explicit=1
+elif [[ "${1:-}" =~ ^@[a-zA-Z0-9_-]+$ ]]; then
+    profile="${1#@}"
+    explicit=1
+    shift
+elif [[ "${1:-}" == "-a" || "${1:-}" == "--account" ]]; then
+    if [[ $# -lt 2 || -z "${2:-}" ]]; then
+        echo "[claude-profile] Missing profile name after $1" >&2
+        exit 1
+    fi
+    profile="${2#@}"
+    explicit=1
+    shift 2
+fi
+
+if [[ -z "$profile" ]]; then
+    if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+        if [[ "$CLAUDE_CONFIG_DIR" == "$DEFAULT_DIR" || "$(basename "$CLAUDE_CONFIG_DIR")" == ".claude" ]]; then
+            profile="default"
+        else
+            profile="$(basename "$CLAUDE_CONFIG_DIR")"
+        fi
+    elif [[ -L "$ACTIVE_LINK" && -d "$ACTIVE_LINK" ]]; then
+        local_target="$(readlink -f "$ACTIVE_LINK" 2>/dev/null || true)"
+        if [[ -n "$local_target" ]]; then
+            if [[ "$local_target" == "$DEFAULT_DIR" || "$(basename "$local_target")" == ".claude" ]]; then
+                profile="default"
+            else
+                profile="$(basename "$local_target")"
+            fi
+        fi
+    fi
+fi
+[[ -z "$profile" ]] && profile="default"
+
+if [[ "$profile" == "default" ]]; then
+    unset CLAUDE_CONFIG_DIR
+else
+    target_dir="$PROFILES_DIR/$profile"
+    if [[ ! -d "$target_dir" ]]; then
+        echo "[claude-profile] Profile '$profile' not found ($target_dir)" >&2
+        echo "Create it with: cswitch new $profile" >&2
+        exit 1
+    fi
+    export CLAUDE_CONFIG_DIR="$target_dir"
+fi
+
+is_session=1
+case "${1:-}" in
+    mcp|plugin|config|update|doctor|install|migrate-installer|setup-token|agents|auth|--version|-v|--help|-h)
+        is_session=0
+        ;;
+esac
+
+if [[ $is_session -eq 1 ]]; then
+    ecc_script="$DOTFILES_DIR/claude/ecc-project.sh"
+    if [[ "${ECC_AUTO:-1}" != 0 && -x "$ecc_script" ]]; then
+        timeout 5 "$ecc_script" auto "$PWD" >&2 || true
+    fi
+    plugins_script="$DOTFILES_DIR/claude/plugins-project.sh"
+    if [[ "${PLUGINS_AUTO:-1}" != 0 && -x "$plugins_script" ]]; then
+        timeout 5 "$plugins_script" auto "$PWD" >&2 || true
+    fi
+    skills_script="$DOTFILES_DIR/claude/skills-project.sh"
+    if [[ "${SKILLS_AUTO:-1}" != 0 && -x "$skills_script" ]]; then
+        timeout 5 "$skills_script" auto "$PWD" >&2 || true
+    fi
+fi
+
+REAL_CLAUDE="$(find_real_claude || true)"
+if [[ -z "$REAL_CLAUDE" ]]; then
+    echo "[claude-profile] Real 'claude' binary not found in PATH" >&2
+    exit 127
+fi
+
+is_headless=0
+for arg in "$@"; do
+    case "$arg" in
+        -p|--print|--version|-v|--help|-h) is_headless=1; break ;;
+    esac
+done
+
+if [[ $is_session -eq 1 && $is_headless -eq 0 && -t 2 && ( $explicit -eq 1 || "$profile" != "default" ) ]]; then
+    echo -e "\033[1;35m● Claude Code Account:\033[0m \033[1;37m@$profile\033[0m" >&2
+    printf '\033]0;claude [@%s]\007' "$profile" >&2
+    set +e
+    "$REAL_CLAUDE" "$@"
+    res=$?
+    printf '\033]0;%s\007' "${USER:-user}@${HOST:-local}:${PWD/#$HOME/~}" >&2
+    exit "$res"
+fi
+
+exec "$REAL_CLAUDE" "$@"

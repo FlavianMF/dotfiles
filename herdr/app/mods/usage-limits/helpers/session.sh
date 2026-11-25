@@ -15,8 +15,19 @@ home_where_claude_keeps_its_files() {
   printf '%s' "$home"
 }
 
+proc_claude_config_dir() {
+  if [ -r "/proc/$1/environ" ]; then
+    tr '\0' '\n' < "/proc/$1/environ" 2>/dev/null | sed -n 's/^CLAUDE_CONFIG_DIR=//p' | head -n1
+  fi
+}
+
 claude() {
-  dir=${CLAUDE_CONFIG_DIR:-$(home_where_claude_keeps_its_files)/.claude}
+  dir=$(proc_claude_config_dir "$pid")
+  [ -n "$dir" ] || dir=${CLAUDE_CONFIG_DIR:-}
+  if [ -z "$dir" ] && [ -L "$HOME/.claude-active" ] && [ -d "$HOME/.claude-active" ]; then
+    dir=$(readlink -f "$HOME/.claude-active" 2>/dev/null || printf '')
+  fi
+  [ -n "$dir" ] || dir="$(home_where_claude_keeps_its_files)/.claude"
   [ -f "$dir/sessions/$pid.json" ] || exit "$NO_READING"
   id=$(sed -n 's/.*"sessionId":"\([^"]*\)".*/\1/p' "$dir/sessions/$pid.json")
   case "$id" in '' | *[!0-9a-zA-Z-]*) exit "$NO_READING" ;; esac
