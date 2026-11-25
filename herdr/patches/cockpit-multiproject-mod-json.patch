@@ -1,0 +1,5 @@
+--- a/mods/cockpit/mod.json	2026-11-25 09:53:27.360880933 -0300
++++ b/mods/cockpit/mod.json	2026-11-25 09:53:27.366231240 -0300
+@@ -1 +1 @@
+-{ "place": "none", "title": "Cockpit", "focusable": true, "link_handlers": [{ "kind": "url", "pattern": "(?i)^https?://" }] }
++{ "place": "none", "title": "Cockpit", "focusable": true, "link_handlers": [{ "kind": "url", "pattern": "(?i)^https?://" }, { "kind": "file", "pattern": "(?i)\\.(md|markdown|mdx)$" }] }

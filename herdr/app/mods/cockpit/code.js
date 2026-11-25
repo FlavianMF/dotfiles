@@ -9,9 +9,11 @@
 
 import { div } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState, InputState, TextView, h_resizable, resizable_panel } from "gpui-base";
-import { exec, readTextFile, writeTextFile, watchFolder, theme, settings, props, run, panes, home, shared, setShared, appHome, focused, layout, window as win } from "herdr";
+import { exec, readTextFile, writeTextFile, watchFolder, theme, settings, props, run, panes, home, shared, setShared, appHome, focused, layout } from "herdr";
 import * as hub from "./hub.js";
 import { openFileInEditor } from "./editor.js";
+// ADAPTADO para dotfiles: usa open-code.js, props.machine (local/WSL) e ctrl-shift-v no Windows.
+import { splitCodePane, findBesidePane, SHOWN } from "./open-code.js";
 import { take } from "./person.js";
 import { tokens, TEXT, Icon, Button, Kbd, TextField, Toaster } from "./ui.js";
 import { layoutName, CHAT_SUBJECT } from "./screens.js";
@@ -79,35 +81,17 @@ export const CODE_PANEL = "cockpit.code.panel";
  * Opens a file beside a terminal's pane (the focused one when none is given); in the reading layout, in the side panel
  * beside the chat, which its Close gives back to what it showed before.
  */
-export async function openCode(file, { terminal, line } = {}) {
-  const all = panes();
-  // Beside the given agent, else beside the terminal of the tab in view (the editor itself may have the focus).
-  const here = focused()?.tab ?? null;
-  const beside = terminal ? all.find((p) => p.terminal === terminal) : (all.find((p) => p.focused && p.terminal) ?? all.find((p) => p.tab === here && p.terminal));
+export async function openCode(file, { terminal, line, pane, machine } = {}) {
+  const { beside } = findBesidePane({ terminal, pane, machine });
   if (layoutName() === "cockpit-chat") {
     const showing = findNode(layout(), "panel-body")?.active ?? null;
     const back = showing === "code" ? (shared(CODE_PANEL)?.back ?? null) : { open: panelOpen(), child: showing };
-    setShared(CODE_PANEL, { file, line: line ?? null, terminal: terminal ?? beside?.terminal ?? null, at: Date.now(), back });
+    setShared(CODE_PANEL, { file, line: line ?? null, terminal: beside?.terminal ?? terminal ?? null, at: Date.now(), back });
     openPanel("code");
     return;
   }
-  const tab = beside?.tab ?? here;
-  // One editor per tab: the file replaces the one it showed.
-  const open = tab ? (shared(SHOWN) ?? {})[tab] : null;
-  if (open && all.some((p) => p.pane === open)) run("pane.close", { pane: open });
-  const args = { direction: "right", ...(beside ? { pane: beside.pane } : {}), mod: "cockpit", props: { app: "code", file, line, terminal: terminal ?? beside?.terminal, tab } };
-  // ADAPTADO para dotfiles: no Windows chama herdr-app.exe diretamente sem `env`.
-  const r = await (
-    win()?.platform === "windows"
-      ? exec("herdr-app.exe", ["do", "pane.split", JSON.stringify(args)])
-      : exec("env", [`HERDR_APP_HOME=${appHome()}`, `${home()}/.local/bin/herdr-app`, "do", "pane.split", JSON.stringify(args)])
-  ).catch(() => null);
-  const made = r?.code === 0 ? JSON.parse(r.stdout || "{}").pane : null;
-  if (!made) run("pane.split", args);
-  else if (tab) setShared(SHOWN, { ...(shared(SHOWN) ?? {}), [tab]: made });
+  await splitCodePane({ file, terminal, line, pane, machine });
 }
-
-const SHOWN = "cockpit.code.panes";
 
 export default class Code {
   init(p) {
@@ -116,11 +100,13 @@ export default class Code {
     this.terminal = given.terminal ?? null;
     this.line = given.line ?? null;
     this.tab = given.tab ?? null;
+    this.hasMachineProp = "machine" in given;
+    this.machine = given.machine ?? null;
     // The side panel's copy shows whichever file was opened last, and loads the next one when that changes.
     this.panel = given.panel === true;
     this.shownAt = null;
     // Markdown opens as its preview where the room is a side panel's, else beside its source.
-    this.mdMode = this.panel ? "preview" : "split";
+    this.mdMode = given.mdMode ?? (this.panel ? "preview" : "split");
     this.toasts = new Toaster();
     this.ask = InputState.new({ placeholder: "What should change? Start with 12-18: to point at lines" });
     this.loaded = false;
@@ -136,8 +122,8 @@ export default class Code {
     if (!this.file) return;
     cx.spawn(async (cx) => {
       const info = await hub.install().catch(() => ({}));
-      this.machine = info.machine ?? null;
-      this.remoteHome = info.home ?? null;
+      if (!this.hasMachineProp) this.machine = info.machine ?? null;
+      this.remoteHome = this.machine ? (info.home ?? null) : null;
       const opt = this.machine ? { on: this.machine } : undefined;
       const text = await readTextFile(this.file, opt).catch(() => null);
       if (text === null) this.error = "This file can't be read as text, or is gone.";
@@ -177,7 +163,7 @@ export default class Code {
     if (this.watching === key) return;
     this.watching = key;
     const dir = this.file.replace(/\/[^/]*$/, "");
-    const machine = this.machine ?? hub.remoteMachine();
+    const machine = this.hasMachineProp ? this.machine : (this.machine ?? hub.remoteMachine());
     cx.spawn(async (cx) => {
       try {
         while (this.watching === key) {
@@ -206,7 +192,7 @@ export default class Code {
     if (!this.code || this.readonly || !this.dirty || this.saving) return;
     const text = this.code.value();
     this.saving = true;
-    const machine = this.machine ?? hub.remoteMachine();
+    const machine = this.hasMachineProp ? this.machine : (this.machine ?? hub.remoteMachine());
     cx.spawn(async (cx) => {
       try {
         if (machine) await writeRemoteTextFile(this.file, text, this.original, machine);
@@ -231,7 +217,7 @@ export default class Code {
     const [from, to, text] = m ? [Number(m[1]), Number(m[2] ?? m[1]), m[3]] : [this.line ?? 1, null, raw];
     const lines = (this.code?.value() ?? "").split("\n");
     const code = m ? lines.slice(from - 1, to).join("\n") : "";
-    const machine = this.machine ?? hub.remoteMachine();
+    const machine = this.hasMachineProp ? this.machine : (this.machine ?? hub.remoteMachine());
     cx.spawn(async (cx) => {
       const root = await exec("git", ["-C", this.file.replace(/\/[^/]*$/, ""), "rev-parse", "--show-toplevel"], machine ? { on: machine } : undefined).catch(() => null);
       const top = root?.code === 0 ? root.stdout.trim() : "";
@@ -265,7 +251,7 @@ export default class Code {
   key(e, cx) {
     const k = e.keystroke;
     if (k === "cmd-s" || k === "ctrl-s") return this.save(cx), true;
-    if (k === "cmd-shift-v") return (this.mdMode = MD_NEXT[this.mdMode]), cx.notify(), true;
+    if (k === "cmd-shift-v" || k === "ctrl-shift-v") return (this.mdMode = MD_NEXT[this.mdMode]), cx.notify(), true;
     if (this.asking && k === "enter") return this.sendAsk(cx), true;
     if (this.asking && k === "escape") return (this.asking = false), cx.notify(), true;
     return false;

@@ -27,7 +27,20 @@ status=0
 work="$(mktemp -d)"
 trap 'find "$work" -mindepth 1 -delete 2>/dev/null; rmdir "$work" 2>/dev/null || true' EXIT
 
-for f in activity sidebar hub fleet status show code editor agentsui recap home agent-head start ui commands chat-top; do
+# Arquivo extra criado pelo dotfiles (não existe no upstream).
+src_extra="$here/app/mods/cockpit/open-code.js"
+dst_extra="$mod/open-code.js"
+if [[ -f "$src_extra" ]]; then
+    if [[ -f "$dst_extra" ]] && cmp -s "$src_extra" "$dst_extra"; then
+        say "igual:   $dst_extra"
+    else
+        [[ -f "$dst_extra" ]] && cp -p "$dst_extra" "$dst_extra.bak.$stamp"
+        cp "$src_extra" "$dst_extra.new" && mv "$dst_extra.new" "$dst_extra"
+        say "copia:   $dst_extra"
+    fi
+fi
+
+for f in activity sidebar hub fleet status show code editor agentsui recap home agent-head start ui commands chat-top link; do
     file="$mod/$f.js"
     patch_file="$here/patches/cockpit-multiproject-$f.patch"
     [[ -f "$file" ]] || continue
@@ -46,4 +59,24 @@ for f in activity sidebar hub fleet status show code editor agentsui recap home 
     cp "$work/$f/mods/cockpit/$f.js" "$file.new" && mv "$file.new" "$file"
     say "patch:   $file"
 done
+
+mod_json="$mod/mod.json"
+mod_patch="$here/patches/cockpit-multiproject-mod-json.patch"
+if [[ -f "$mod_json" && -f "$mod_patch" ]]; then
+    if grep -q 'md|markdown|mdx' "$mod_json"; then
+        say "igual:   $mod_json"
+    else
+        mkdir -p "$work/mod-json/mods/cockpit"
+        cp "$mod_json" "$work/mod-json/mods/cockpit/mod.json"
+        if ! (cd "$work/mod-json" && patch -p1 --forward -s < "$mod_patch") >/dev/null 2>&1; then
+            echo "cockpit-patch: o patch de mod.json não aplica (o upstream mudou). Refaça o patch e gere $mod_patch de novo." >&2
+            status=2
+        else
+            cp -p "$mod_json" "$mod_json.bak.$stamp"
+            cp "$work/mod-json/mods/cockpit/mod.json" "$mod_json.new" && mv "$mod_json.new" "$mod_json"
+            say "patch:   $mod_json"
+        fi
+    fi
+fi
+
 exit "$status"
