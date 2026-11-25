@@ -811,6 +811,17 @@ create_config_link "$REPO_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
 create_config_link "$REPO_DIR/claude/statusline.sh" "$HOME/.claude/statusline.sh"
 create_config_link "$REPO_DIR/claude/hooks" "$HOME/.claude/hooks"
 create_config_link "$REPO_DIR/claude/agents/git-ops.md" "$HOME/.claude/agents/git-ops.md"
+create_config_link "$REPO_DIR/bin/claude-profile" "$HOME/.local/bin/claude-profile"
+create_config_link "$REPO_DIR/bin/claude-profile" "$HOME/.local/bin/claude-active"
+if [[ -d "$HOME/.claude-profiles" ]]; then
+    for _profile_dir in "$HOME/.claude-profiles"/*; do
+        [[ -d "$_profile_dir" ]] || continue
+        _profile_name="$(basename "$_profile_dir")"
+        [[ "$_profile_name" == "default" || "$_profile_name" == "active" || "$_profile_name" == "profile" ]] && continue
+        create_config_link "$REPO_DIR/bin/claude-profile" "$HOME/.local/bin/claude-$_profile_name"
+    done
+    unset _profile_dir _profile_name
+fi
 
 # second-brain-sync skill lives in the obsidian_vault repo itself, not here
 # (keeps the skill's source versioned alongside the vault it manages). It is

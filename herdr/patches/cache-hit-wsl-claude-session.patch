@@ -1,15 +1,21 @@
 diff --git a/scripts/herdr-app-shim.sh b/scripts/herdr-app-shim.sh
-index fcf00dd..f4675bd 100755
+index fcf00dd..89a1c31 100755
 --- a/scripts/herdr-app-shim.sh
 +++ b/scripts/herdr-app-shim.sh
-@@ -51,6 +51,14 @@ hc_info() {
+@@ -51,6 +51,18 @@ hc_info() {
      info=$(jq -c --argjson fg "$fg" --argjson sess "$sess" '.foreground = {pid: $fg.pid, name: $fg.name,
        argv: ($fg.argv // [$fg.name]), cwd: ($sess.cwd // $fg.cwd // null)} | .claude_session = ($sess.sessionId // "")' <<<"$info")
    fi
-+  # WSL/Linux: o hc informa o pid do claude; a sessão vem de ~/.claude/sessions/<pid>.json.
-+  # Sem isto, dois claude na mesma pasta não resolvem a sessão (heurística por cwd).
++  # WSL/Linux: o hc informa o pid do claude; a sessão vem de $CLAUDE_CONFIG_DIR/sessions/<pid>.json.
++  # Sem isto, dois claude na mesma pasta ou em contas diferentes não resolvem a sessão.
 +  pid=$(jq -r 'select(.foreground.name == "claude") | .foreground.pid // empty' <<<"$info")
-+  root=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
++  root=""
++  if [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/environ" ]]; then
++    root=$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | sed -n 's/^CLAUDE_CONFIG_DIR=//p' | head -n1)
++  fi
++  [[ -z "$root" ]] && root=${CLAUDE_CONFIG_DIR:-}
++  [[ -z "$root" && -L "$HOME/.claude-active" && -d "$HOME/.claude-active" ]] && root=$(readlink -f "$HOME/.claude-active" 2>/dev/null)
++  [[ -z "$root" ]] && root="$HOME/.claude"
 +  if [[ "$pid" =~ ^[0-9]+$ && -f "$root/sessions/$pid.json" ]]; then
 +    sess=$(jq -r '.sessionId // empty' "$root/sessions/$pid.json" 2>/dev/null)
 +    [[ -n "$sess" ]] && info=$(jq -c --arg s "$sess" '.claude_session = $s' <<<"$info")

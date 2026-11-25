@@ -27,39 +27,52 @@ def alive(pid):
         return False
 
 
-def terminal_of(pid):
-    # Linux: the process's environment; macOS: ps shows it for your own processes.
+def env_of(pid):
+    out = {}
     try:
         with open(f"/proc/{pid}/environ", "rb") as f:
             for kv in f.read().split(b"\0"):
-                if kv.startswith(b"HC_TERMINAL_ID="):
-                    return kv.split(b"=", 1)[1].decode()
-        return None
+                if b"=" in kv:
+                    k, v = kv.split(b"=", 1)
+                    out[k.decode(errors="ignore")] = v.decode(errors="ignore")
+        return out
     except FileNotFoundError:
         pass
     except OSError:
-        return None
+        return out
     try:
-        out = subprocess.run(["ps", "-wwE", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=3).stdout
-        m = re.search(r"(?:^|\s)HC_TERMINAL_ID=(\S+)", out)
-        return m.group(1) if m else None
+        ps_out = subprocess.run(["ps", "-wwE", "-p", str(pid), "-o", "command="], capture_output=True, text=True, timeout=3).stdout
+        for key in ("HC_TERMINAL_ID", "CLAUDE_CONFIG_DIR"):
+            m = re.search(rf"(?:^|\s){key}=(\S+)", ps_out)
+            if m:
+                out[key] = m.group(1)
     except Exception:
-        return None
+        pass
+    return out
 
 
-def transcript_of(session, cwd):
+def terminal_of(pid):
+    return env_of(pid).get("HC_TERMINAL_ID")
+
+
+def config_dir_of(pid):
+    return env_of(pid).get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
+
+
+def transcript_of(session, cwd, config_dir=None):
     if not session:
         return None
+    root = config_dir or os.path.join(HOME, ".claude")
     if cwd:
-        p = os.path.join(HOME, ".claude", "projects", re.sub(r"[^A-Za-z0-9]", "-", cwd), f"{session}.jsonl")
+        p = os.path.join(root, "projects", re.sub(r"[^A-Za-z0-9]", "-", cwd), f"{session}.jsonl")
         if os.path.isfile(p):
             return p
-    found = glob.glob(os.path.join(HOME, ".claude", "projects", "*", f"{session}.jsonl"))
+    found = glob.glob(os.path.join(root, "projects", "*", f"{session}.jsonl"))
     if found:
         return found[0]
     # A new conversation (just after /clear) has no file until its first message:
     # its path still says which one it is.
-    return os.path.join(HOME, ".claude", "projects", re.sub(r"[^A-Za-z0-9]", "-", cwd), f"{session}.jsonl") if cwd else None
+    return os.path.join(root, "projects", re.sub(r"[^A-Za-z0-9]", "-", cwd), f"{session}.jsonl") if cwd else None
 
 
 def seconds(ts):
@@ -148,7 +161,10 @@ def read(path):
 def main():
     os.makedirs(OUT, exist_ok=True)
     found = {}
-    for f in glob.glob(os.path.join(HOME, ".claude", "sessions", "*.json")):
+    session_files = glob.glob(os.path.join(HOME, ".claude", "sessions", "*.json")) + glob.glob(
+        os.path.join(HOME, ".claude-profiles", "*", "sessions", "*.json")
+    )
+    for f in session_files:
         try:
             s = json.load(open(f))
             pid = int(s.get("pid"))
@@ -156,10 +172,15 @@ def main():
             continue
         if not alive(pid):
             continue
-        term = terminal_of(pid)
+        env = env_of(pid)
+        term = env.get("HC_TERMINAL_ID")
         if not term or not re.fullmatch(r"[A-Za-z0-9_.-]+", term):
             continue
-        path = transcript_of(s.get("sessionId"), s.get("cwd"))
+        session_root = os.path.dirname(os.path.dirname(f))
+        cfg_dir = env.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude")
+        if os.path.realpath(session_root) != os.path.realpath(cfg_dir) and term in found:
+            continue
+        path = transcript_of(s.get("sessionId"), s.get("cwd"), session_root)
         if not path:
             continue
         try:
@@ -185,7 +206,8 @@ def main():
         if os.path.basename(dest)[:-5] in found or time.time() - os.path.getmtime(dest) <= 60:
             continue
         try:
-            mine = "/.claude/projects/" in (json.load(open(dest)).get("transcript") or "").replace(os.sep, "/")
+            tr = (json.load(open(dest)).get("transcript") or "").replace(os.sep, "/")
+            mine = "/.claude/projects/" in tr or "/.claude-profiles/" in tr
         except Exception:
             mine = False
         if mine:

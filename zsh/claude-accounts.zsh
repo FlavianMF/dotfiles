@@ -1,8 +1,9 @@
 # Multi-account management for Claude Code CLI
-# Supports effortless profile switching, inline account execution (@profile / -a profile),
-# visual statusline badges, and optional integration with cswap (claude-swap) for rate-limit tracking.
+# Supports profile switching, inline account execution (@profile / -a profile),
+# visual statusline badges, and shared launchers for Herdr App and Cockpit.
 
 CLAUDE_PROFILES_DIR="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
+CLAUDE_DEFAULT_DIR="${CLAUDE_DEFAULT_DIR:-$HOME/.claude}"
 mkdir -p "$CLAUDE_PROFILES_DIR" 2>/dev/null
 
 # Load persistent active profile if ~/.claude-active exists
@@ -10,24 +11,62 @@ if [[ -z "$CLAUDE_CONFIG_DIR" && -L "$HOME/.claude-active" && -d "$HOME/.claude-
     export CLAUDE_CONFIG_DIR="$(readlink -f "$HOME/.claude-active")"
 fi
 
+_claude_active_profile() {
+    if [[ -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+        local name="$(basename "$CLAUDE_CONFIG_DIR")"
+        [[ "$CLAUDE_CONFIG_DIR" == "$CLAUDE_DEFAULT_DIR" || "$name" == ".claude" ]] && echo "default" || echo "$name"
+    elif [[ -L "$HOME/.claude-active" ]]; then
+        local target="$(readlink -f "$HOME/.claude-active" 2>/dev/null)"
+        local name="$(basename "$target")"
+        [[ "$target" == "$CLAUDE_DEFAULT_DIR" || "$name" == ".claude" ]] && echo "default" || echo "$name"
+    else
+        echo "default"
+    fi
+}
+
+_claude_sync_profile() {
+    local target_dir="$1"
+    local default_dir="${CLAUDE_DEFAULT_DIR:-$HOME/.claude}"
+    local dotfiles_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
+    local launcher="$dotfiles_dir/bin/claude-profile"
+    local profile_name="$(basename "$target_dir")"
+    local stamp="$(date +%Y%m%d-%H%M%S)"
+
+    mkdir -p "$target_dir"
+
+    local item
+    for item in CLAUDE.md statusline.sh skills hooks agents rules commands plugins; do
+        if [[ -e "$default_dir/$item" || -L "$default_dir/$item" ]]; then
+            ln -sfn "$default_dir/$item" "$target_dir/$item"
+        fi
+    done
+
+    if [[ -e "$default_dir/settings.json" || -L "$default_dir/settings.json" ]]; then
+        if [[ -f "$target_dir/settings.json" && ! -L "$target_dir/settings.json" ]]; then
+            mv "$target_dir/settings.json" "$target_dir/settings.json.bak.$stamp"
+        fi
+        ln -sfn "$default_dir/settings.json" "$target_dir/settings.json"
+    fi
+
+    if [[ -x "$launcher" ]]; then
+        mkdir -p "$HOME/.local/bin"
+        ln -sfn "$launcher" "$HOME/.local/bin/claude-profile"
+        ln -sfn "$launcher" "$HOME/.local/bin/claude-active"
+        if [[ "$profile_name" != "default" && "$profile_name" != "active" && "$profile_name" != "profile" ]]; then
+            ln -sfn "$launcher" "$HOME/.local/bin/claude-$profile_name"
+        fi
+    fi
+}
+
 cswitch() {
     local cmd="${1:-}"
     local profiles_dir="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
     mkdir -p "$profiles_dir" 2>/dev/null
 
-    local current_active=""
-    if [[ -n "$CLAUDE_CONFIG_DIR" ]]; then
-        current_active="$(basename "$CLAUDE_CONFIG_DIR")"
-        [[ "$CLAUDE_CONFIG_DIR" == "$HOME/.claude" ]] && current_active="default"
-    elif [[ -L "$HOME/.claude-active" ]]; then
-        current_active="$(basename "$(readlink -f "$HOME/.claude-active")")"
-    else
-        current_active="default"
-    fi
+    local current_active="$(_claude_active_profile)"
 
     case "$cmd" in
         "")
-            # Interactive selection if no argument is passed
             local available=("default")
             if [[ -d "$profiles_dir" ]]; then
                 for p in "$profiles_dir"/*(N/); do
@@ -57,19 +96,23 @@ cswitch() {
 
         ls|list)
             echo "Available Claude profiles:"
+            local def_auth="logged out"
+            [[ -f "${CLAUDE_DEFAULT_DIR:-$HOME/.claude}/.credentials.json" ]] && def_auth="signed in"
             if [[ "$current_active" == "default" ]]; then
-                echo -e "  * \033[1;32mdefault\033[0m (~/.claude)"
+                echo -e "  * \033[1;32mdefault\033[0m (~/.claude) [$def_auth]"
             else
-                echo "    default (~/.claude)"
+                echo "    default (~/.claude) [$def_auth]"
             fi
 
             if [[ -d "$profiles_dir" ]]; then
                 for p in "$profiles_dir"/*(N/); do
                     local name="$(basename "$p")"
+                    local auth="logged out"
+                    [[ -f "$p/.credentials.json" ]] && auth="signed in"
                     if [[ "$name" == "$current_active" ]]; then
-                        echo -e "  * \033[1;35m@$name\033[0m ($p)"
+                        echo -e "  * \033[1;35m@$name\033[0m ($p) [$auth]"
                     else
-                        echo "    @$name ($p)"
+                        echo "    @$name ($p) [$auth]"
                     fi
                 done
             fi
@@ -81,43 +124,61 @@ cswitch() {
             echo -e "Switched to Claude [\033[1;32mdefault\033[0m] (~/.claude)"
             ;;
 
+        sync)
+            local target="${2:-}"
+            target="${target#@}"
+            if [[ -n "$target" ]]; then
+                local target_dir="$profiles_dir/$target"
+                if [[ ! -d "$target_dir" ]]; then
+                    echo "Profile '$target' not found ($target_dir)" >&2
+                    return 1
+                fi
+                _claude_sync_profile "$target_dir"
+                echo "Synced profile '@$target' ($target_dir)"
+            else
+                local synced=0
+                for p in "$profiles_dir"/*(N/); do
+                    _claude_sync_profile "$p"
+                    echo "Synced profile '@$(basename "$p")' ($p)"
+                    synced=$((synced + 1))
+                done
+                [[ $synced -eq 0 ]] && echo "No profiles found in $profiles_dir"
+            fi
+            ;;
+
         new|add)
             local name="${2:-}"
             if [[ -z "$name" ]]; then
-                read -rp "New profile name: " name
+                read -r "name?New profile name: "
             fi
-            # Strip any leading '@'
             name="${name#@}"
-            if [[ -z "$name" ]]; then
-                echo "Aborted: profile name cannot be empty" >&2
+            if [[ -z "$name" || "$name" == "default" || "$name" == "active" || "$name" == "profile" ]]; then
+                echo "Aborted: invalid profile name '$name'" >&2
                 return 1
             fi
 
             local target_dir="$profiles_dir/$name"
             if [[ -d "$target_dir" ]]; then
                 echo "Profile '$name' already exists at $target_dir"
+                _claude_sync_profile "$target_dir"
             else
-                mkdir -p "$target_dir"
-                # Symlink shared skills, CLAUDE.md, and copy settings from ~/.claude if available
-                [[ -d "$HOME/.claude/skills" ]] && ln -sfn "$HOME/.claude/skills" "$target_dir/skills"
-                [[ -f "$HOME/.claude/CLAUDE.md" ]] && ln -sfn "$HOME/.claude/CLAUDE.md" "$target_dir/CLAUDE.md"
-                [[ -f "$HOME/.claude/settings.json" ]] && cp "$HOME/.claude/settings.json" "$target_dir/settings.json"
+                _claude_sync_profile "$target_dir"
                 echo "Created profile '$name' at $target_dir"
             fi
 
-            echo "Activating '$name' and running 'claude login'..."
+            echo "Activating '$name' and running 'claude auth login'..."
             cswitch "$name"
-            CLAUDE_CONFIG_DIR="$target_dir" claude login
+            CLAUDE_CONFIG_DIR="$target_dir" command claude auth login
             ;;
 
         *)
             local profile_arg="${cmd#@}"
-            local target_dir="$profiles_dir/$profile_arg"
             if [[ "$profile_arg" == "default" ]]; then
                 cswitch default
                 return 0
             fi
 
+            local target_dir="$profiles_dir/$profile_arg"
             if [[ ! -d "$target_dir" ]]; then
                 echo "Profile '$profile_arg' does not exist."
                 echo "Create it with: cswitch new $profile_arg"
@@ -127,20 +188,74 @@ cswitch() {
             export CLAUDE_CONFIG_DIR="$target_dir"
             ln -sfn "$target_dir" "$HOME/.claude-active"
             echo -e "Switched active profile to: \033[1;35m@$profile_arg\033[0m ($target_dir)"
-
-            # If cswap is available and knows this profile, keep it in sync
-            if command -v cswap >/dev/null 2>&1; then
-                cswap switch "$profile_arg" 2>/dev/null || true
-            fi
             ;;
     esac
+}
+
+cstatus() {
+    local profiles_dir="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}"
+    local default_dir="${CLAUDE_DEFAULT_DIR:-$HOME/.claude}"
+    local active="$(_claude_active_profile)"
+
+    _print_profile_status() {
+        local name="$1" dir="$2"
+        local mark=" "
+        [[ "$name" == "$active" ]] && mark="*"
+        local auth="logged out"
+        [[ -f "$dir/.credentials.json" ]] && auth="signed in"
+        local email=""
+        if [[ -f "$dir/.claude.json" ]] && command -v jq >/dev/null 2>&1; then
+            email="$(jq -r '.oauthAccount.emailAddress // empty' "$dir/.claude.json" 2>/dev/null)"
+        fi
+        printf '  %s %-12s %-12s %s\n' "$mark" "@$name" "[$auth]" "${email:-(no email)}"
+    }
+
+    echo "Claude Code accounts:"
+    _print_profile_status "default" "$default_dir"
+    if [[ -d "$profiles_dir" ]]; then
+        for p in "$profiles_dir"/*(N/); do
+            _print_profile_status "$(basename "$p")" "$p"
+        done
+    fi
+}
+
+cquota() {
+    local dotfiles_dir="${DOTFILES_DIR:-$HOME/dotfiles}"
+    local helper="$dotfiles_dir/herdr/app/mods/usage-limits/helpers/claude-usage.sh"
+    if [[ ! -x "$helper" ]]; then
+        echo "Quota helper not found: $helper" >&2
+        return 1
+    fi
+    local raw
+    raw="$(bash "$helper" 2>/dev/null || true)"
+    if [[ -z "$raw" ]]; then
+        echo "No Claude usage data returned." >&2
+        return 1
+    fi
+    if command -v jq >/dev/null 2>&1; then
+        printf '%s\n' "$raw" | jq -r '
+            if .profile then
+                .profile as $p |
+                (.reply.response.response.rate_limits // {}) as $rl |
+                ($rl.limits // []) as $l |
+                if ($l | length) > 0 then
+                    "@\($p): " + ($l | map("\(.kind)=\(.percent)%") | join(", "))
+                elif ($rl.five_hour or $rl.seven_day) then
+                    "@\($p): 5h=\($rl.five_hour.utilization // "?")%, 7d=\($rl.seven_day.utilization // "?")%"
+                else
+                    "@\($p): no subscription limits"
+                end
+            else
+                empty
+            end'
+    else
+        printf '%s\n' "$raw"
+    fi
 }
 
 # Alias shortcuts
 alias cprofile="cswitch"
 alias csw="cswitch"
-alias cquota="cswap list 2>/dev/null || echo 'cswap is not installed. Install via: uv tool install claude-swap'"
-alias cauto="cswap auto 2>/dev/null || echo 'cswap is not installed. Install via: uv tool install claude-swap'"
 
 # Shortcut to run a one-off command under a specific profile without changing active shell profile
 crun() {
@@ -151,6 +266,10 @@ crun() {
         return 1
     fi
     shift
+    if [[ "$profile" == "default" ]]; then
+        (unset CLAUDE_CONFIG_DIR; claude "$@")
+        return $?
+    fi
     local dir="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}/$profile"
     if [[ ! -d "$dir" ]]; then
         echo "Profile '$profile' not found in $dir" >&2
@@ -159,54 +278,15 @@ crun() {
     CLAUDE_CONFIG_DIR="$dir" claude "$@"
 }
 
-# Enhance claude wrapper to support @profile and -a/--account inline
-# Intercepts before ecc-auto or standard claude
+# Delegate claude() to bin/claude-profile when installed so zsh, Herdr App, and Cockpit behave identically.
 if [[ "$(whence -w claude 2>/dev/null)" == *"function"* ]]; then
     functions[_claude_pre_accounts]=$functions[claude]
     claude() {
-        local target_profile=""
-        if [[ "${1:-}" =~ ^@[a-zA-Z0-9_-]+$ ]]; then
-            target_profile="${1#@}"
-            shift
-        elif [[ "${1:-}" == "-a" || "${1:-}" == "--account" ]]; then
-            target_profile="${2#@}"
-            shift 2
+        local launcher="${DOTFILES_DIR:-$HOME/dotfiles}/bin/claude-profile"
+        if [[ -x "$launcher" ]]; then
+            "$launcher" "$@"
+            return $?
         fi
-
-        if [[ -n "$target_profile" ]]; then
-            local dir="${CLAUDE_PROFILES_DIR:-$HOME/.claude-profiles}/$target_profile"
-            if [[ ! -d "$dir" ]]; then
-                echo -e "\033[1;31m[claude-accounts] Profile '$target_profile' not found ($dir)\033[0m" >&2
-                echo "Create it with: cswitch new $target_profile" >&2
-                return 1
-            fi
-            echo -e "\033[1;35m● Claude Code Account:\033[0m \033[1;37m@$target_profile\033[0m" >&2
-            printf '\033]0;claude [@%s]\007' "$target_profile"
-            CLAUDE_CONFIG_DIR="$dir" _claude_pre_accounts "$@"
-            local res=$?
-            printf '\033]0;%s\007' "${USER:-user}@${HOST:-local}:${PWD/#$HOME/~}"
-            return $res
-        fi
-
-        # If a global profile is active via ~/.claude-active or CLAUDE_CONFIG_DIR
-        local active=""
-        if [[ -n "$CLAUDE_CONFIG_DIR" ]]; then
-            active="$(basename "$CLAUDE_CONFIG_DIR")"
-            [[ "$active" == ".claude" ]] && active="default"
-        elif [[ -L "$HOME/.claude-active" ]]; then
-            active="$(basename "$(readlink -f "$HOME/.claude-active" 2>/dev/null)")"
-        fi
-
-        if [[ -n "$active" && "$active" != "default" ]]; then
-            echo -e "\033[1;35m● Claude Code Account:\033[0m \033[1;37m@$active\033[0m" >&2
-            printf '\033]0;claude [@%s]\007' "$active"
-        fi
-
         _claude_pre_accounts "$@"
-        local res=$?
-        if [[ -n "$active" && "$active" != "default" ]]; then
-            printf '\033]0;%s\007' "${USER:-user}@${HOST:-local}:${PWD/#$HOME/~}"
-        fi
-        return $res
     }
 fi
