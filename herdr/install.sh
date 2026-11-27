@@ -183,6 +183,12 @@ else
             echo "Created link: $TARGET_SCRIPTS -> $SRC_SCRIPTS"
         fi
     fi
+
+    # Link hc-cache-hit helper script into ~/.local/bin
+    if [[ -f "$ROOT/scripts/hc-cache-hit.sh" ]]; then
+        mkdir -p "$BIN_DIR"
+        ln -sfn "$ROOT/scripts/hc-cache-hit.sh" "$BIN_DIR/hc-cache-hit"
+    fi
 fi
 
 # Setup Agent Integrations if available and running for real

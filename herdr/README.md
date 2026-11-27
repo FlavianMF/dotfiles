@@ -136,6 +136,7 @@ herdr agent list                      # List agents and their current states
 herdr agent explain <target> --json   # Inspect why an agent is classified with a state
 herdr server reload-config            # Reload ~/.config/herdr/config.toml
 herdr server stop                     # Gracefully stop the Herdr background server
+hc-cache-hit [--watch|--pick|--json]  # View cache-hit telemetry for hc / herdr-app agents
 ```
 
 When running *inside* a Herdr pane (`HERDR_ENV=1`), agents can interact with the Herdr CLI directly without opening nested client loops.

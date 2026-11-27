@@ -104,6 +104,16 @@ position = "bottom-center"
 rows = [
     ["state_icon", "workspace"],
     ["agent", "terminal_title_stripped"],
+    [
+        { token = "$cache", fg = "#a6adc8", dim = true, rules = [
+            { starts_with = "⏰", bold = true, dim = false, fg = "#f38ba8" },
+            { starts_with = "⚠️", bold = true, dim = false, fg = "#fab387" },
+            { starts_with = "↻~", bold = false, dim = false, fg = "#cba6f7" },
+            { starts_with = "~", bold = false, dim = false, fg = "#cba6f7" },
+            { starts_with = "♨️", bold = false, dim = false, fg = "#cba6f7" },
+        ] },
+        { token = "$cache_remaining_mins", fg = "#a6adc8", bold = false, dim = true },
+    ],
 ]
 
 [update]

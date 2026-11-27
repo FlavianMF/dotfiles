@@ -1,0 +1,30 @@
+diff --git a/lib/core.sh b/lib/core.sh
+--- a/lib/core.sh
++++ b/lib/core.sh
+@@ -226,9 +226,15 @@ report_pane() {
+     cmd+=(--clear-token "cache_deadline")
+   fi
+   if [[ -n "$remaining_secs" && "$remaining_secs" =~ ^[0-9]+$ && "$remaining_secs" -gt 0 ]]; then
+-    cmd+=(--token "cache_remaining_secs=$remaining_secs")
++    local remaining_mins
++    if (( remaining_secs < 60 )); then
++      remaining_mins="<1m"
++    else
++      remaining_mins="$((remaining_secs / 60))m"
++    fi
++    cmd+=(--token "cache_remaining_secs=$remaining_secs" --token "cache_remaining_mins=$remaining_mins")
+   else
+-    cmd+=(--clear-token "cache_remaining_secs")
++    cmd+=(--clear-token "cache_remaining_secs" --clear-token "cache_remaining_mins")
+   fi
+   if [[ -n "$pct_num" && "$pct_num" =~ ^[0-9]+$ ]]; then
+     cmd+=(--token "cache_pct_num=$pct_num")
+@@ -266,7 +272,7 @@ clear_pane() {
+   "$HERDR_BIN" pane report-metadata "$1" --source "$SOURCE" --agent "${2:-codex}" \
+     --clear-token cache --clear-token cache_status --clear-token cache_pct \
+     --clear-token cache_tokens --clear-token cache_state --clear-token cache_details \
+-    --clear-token cache_deadline --clear-token cache_remaining_secs --clear-token cache_pct_num \
++    --clear-token cache_deadline --clear-token cache_remaining_secs --clear-token cache_remaining_mins --clear-token cache_pct_num \
+     --clear-display-agent \
+     --ttl-ms 15000 >/dev/null 2>&1 || true
+ }
