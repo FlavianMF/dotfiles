@@ -40,6 +40,8 @@ The configuration in `herdr/config.toml` uses the same bindings as your `tmux/.t
 | :--- | :--- | :--- |
 | **Prefix key** | `Ctrl+Space` (or `Ctrl+B`) | `set -g prefix C-Space` |
 | **Reload config** | `prefix` + `r` | `bind r source-file ~/.tmux.conf` |
+| **Prev / Next workspace** | `prefix` + `Up` / `Down` (or `Ctrl/Alt+Shift+Up/Down`) | `switch-client -p` / `-n` |
+| **Switch workspace** | `prefix` + `Shift+1..9` (or `Alt+1..9`) | `switch-client -t` |
 | **New tab (window)** | `prefix` + `c` | `bind c new-window` |
 | **Next / Prev tab** | `prefix` + `n` / `prefix` + `p` (or `Ctrl/Alt+Shift+Right/Left`) | `bind -r n` / `bind -r p` |
 | **Switch tab** | `prefix` + `1..9` | `select-window -t 1..9` |

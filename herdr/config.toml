@@ -24,6 +24,12 @@ extra_prefixes = ["ctrl+b"]
 # Tmux-compatible reload config (tmux: bind r source-file ~/.tmux.conf)
 reload_config = "prefix+r"
 
+# Workspace management (defaults: prefix+w workspace_picker, prefix+g goto)
+# Includes Alt+Shift+Up/Down and Ctrl+Shift+Up/Down for repeatable workspace switching without prefix
+previous_workspace = ["prefix+up", "alt+shift+up", "ctrl+shift+up"]
+next_workspace = ["prefix+down", "alt+shift+down", "ctrl+shift+down"]
+switch_workspace = ["prefix+shift+1..9", "alt+1..9"]
+
 # Window / Tab management (tmux: c, n, p, 1..9, &)
 # Includes Alt+Shift+Left/Right and Ctrl+Shift+Left/Right for repeatable tab switching without prefix
 new_tab = "prefix+c"
